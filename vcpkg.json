@@ -1,0 +1,22 @@
+{
+  "name": "qtrans",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "llama-cpp",
+    {
+      "name": "curl",
+      "features": [
+        "ssl"
+      ]
+    },
+    {
+      "name": "qtbase",
+      "default-features": false,
+      "features": [
+        "gui",
+        "widgets",
+        "png"
+      ]
+    }
+  ]
+}

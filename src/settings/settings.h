@@ -1,0 +1,22 @@
+#pragma once
+
+#include "core/app_paths.h"
+#include "settings/model_catalog.h"
+
+#include <string>
+
+struct AppSettings {
+    std::string models_dir;
+    std::string model_id = default_model()->id;
+
+    void load(const AppPaths & paths);
+    void save(const AppPaths & paths) const;
+    void ensureStorage(const AppPaths & paths) const;
+
+    const ModelCatalogEntry * selectedModel() const;
+    std::string effectiveModelsDir(const AppPaths & paths) const;
+    std::string effectiveModelPath(const AppPaths & paths) const;
+
+    void setEffectiveModelsDir(const AppPaths & paths, const std::string & dir);
+    void setSelectedModelId(const std::string & id);
+};
