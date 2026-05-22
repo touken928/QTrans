@@ -13,6 +13,9 @@ jobs:
     name: macOS arm64
     runs-on: macos-14
     timeout-minutes: 180
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,29 +23,39 @@ jobs:
       - name: Install build tools
         run: brew install ninja pkg-config autoconf autoconf-archive automake libtool
 
-      - name: Cache vcpkg
+      - name: Cache vcpkg downloads
         uses: actions/cache@v4
+        id: cache-vcpkg-downloads
+        with:
+          path: ${{ github.workspace }}/vcpkg/downloads
+          key: vcpkg-downloads-macos-arm64-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/**') }}
+          restore-keys: |
+            vcpkg-downloads-macos-arm64-
+
+      - name: Cache vcpkg binaries
+        uses: actions/cache@v4
+        id: cache-vcpkg-binaries
         with:
           path: |
-            ${{ github.workspace }}/vcpkg/downloads
-            ${{ github.workspace }}/vcpkg/builtpackages
+            ${{ github.workspace }}/.vcpkg-cache
             ${{ github.workspace }}/build/vcpkg_installed
-          key: vcpkg-macos-arm64-static-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'CMakePresets.json', 'overlay/**') }}
-          restore-keys: |
-            vcpkg-macos-arm64-static-
+          key: vcpkg-binaries-macos-arm64-static-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'CMakePresets.json', 'overlay/**') }}
 
       - name: Setup vcpkg
         shell: bash
         run: |
+          BASELINE="$(grep -o '"baseline": "[^"]*"' vcpkg-configuration.json | head -1 | cut -d'"' -f4)"
           if [ ! -d vcpkg/.git ]; then
-            git clone --depth 1 https://github.com/microsoft/vcpkg.git vcpkg
+            git clone https://github.com/microsoft/vcpkg.git vcpkg
           fi
+          git -C vcpkg fetch --depth 1 origin "${BASELINE}"
+          git -C vcpkg checkout "${BASELINE}"
           ./vcpkg/bootstrap-vcpkg.sh
+          echo "downloads cache hit: ${{ steps.cache-vcpkg-downloads.outputs.cache-hit }}"
+          echo "binaries cache hit: ${{ steps.cache-vcpkg-binaries.outputs.cache-hit }}"
 
       - name: Configure and build
         shell: bash
-        env:
-          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
         run: |
           cmake --preset macos-arm64-static
           cmake --build --preset macos-arm64-static --parallel "$(sysctl -n hw.ncpu)"
@@ -98,6 +111,9 @@ jobs:
     name: Windows x64 MinGW
     runs-on: windows-latest
     timeout-minutes: 180
+    env:
+      VCPKG_ROOT: C:/vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
     defaults:
       run:
         shell: msys2 {0}
@@ -128,27 +144,37 @@ jobs:
           which cmake
           ninja --version
 
-      - name: Cache vcpkg
+      - name: Cache vcpkg downloads
         uses: actions/cache@v4
+        id: cache-vcpkg-downloads
+        with:
+          path: C:/vcpkg/downloads
+          key: vcpkg-downloads-windows-x64-mingw-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/**') }}
+          restore-keys: |
+            vcpkg-downloads-windows-x64-mingw-
+
+      - name: Cache vcpkg binaries
+        uses: actions/cache@v4
+        id: cache-vcpkg-binaries
         with:
           path: |
-            C:/vcpkg/downloads
-            C:/vcpkg/builtpackages
+            ${{ github.workspace }}/.vcpkg-cache
             build/vcpkg_installed
-          key: vcpkg-windows-x64-mingw-static-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'CMakePresets.json', 'overlay/**') }}
-          restore-keys: |
-            vcpkg-windows-x64-mingw-static-
+          key: vcpkg-binaries-windows-x64-mingw-static-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'CMakePresets.json', 'overlay/**') }}
 
       - name: Setup vcpkg
         run: |
+          BASELINE="$(grep -o '"baseline": "[^"]*"' vcpkg-configuration.json | head -1 | cut -d'"' -f4)"
           if [ ! -d /c/vcpkg/.git ]; then
-            git clone --depth 1 https://github.com/microsoft/vcpkg.git /c/vcpkg
+            git clone https://github.com/microsoft/vcpkg.git /c/vcpkg
           fi
+          git -C /c/vcpkg fetch --depth 1 origin "${BASELINE}"
+          git -C /c/vcpkg checkout "${BASELINE}"
           /c/vcpkg/bootstrap-vcpkg.sh
+          echo "downloads cache hit: ${{ steps.cache-vcpkg-downloads.outputs.cache-hit }}"
+          echo "binaries cache hit: ${{ steps.cache-vcpkg-binaries.outputs.cache-hit }}"
 
       - name: Configure and build
-        env:
-          VCPKG_ROOT: /c/vcpkg
         run: |
           cmake --preset windows-x64-mingw-static
           cmake --build --preset windows-x64-mingw-static --parallel "$(nproc)"
