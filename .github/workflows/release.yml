@@ -41,6 +41,9 @@ jobs:
             ${{ github.workspace }}/build/vcpkg_installed
           key: vcpkg-binaries-macos-arm64-static-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'CMakePresets.json', 'overlay/**') }}
 
+      - name: Prepare vcpkg binary cache
+        run: mkdir -p "${VCPKG_DEFAULT_BINARY_CACHE}"
+
       - name: Setup vcpkg
         shell: bash
         run: |
@@ -134,6 +137,9 @@ jobs:
             ${{ github.workspace }}/.vcpkg-cache
             build/vcpkg_installed
           key: vcpkg-binaries-windows-x64-mingw-static-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'CMakePresets.json', 'overlay/**') }}
+
+      - name: Prepare vcpkg binary cache
+        run: mkdir -p "${VCPKG_DEFAULT_BINARY_CACHE}"
 
       - name: Setup vcpkg
         run: |
