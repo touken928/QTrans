@@ -29,10 +29,18 @@ file(WRITE "${LLAMA_CONFIG}" "${LLAMA_CONFIG_CONTENTS}")
 
 string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "dynamic" BUILD_SHARED_LIBS)
 
+# MinGW static releases should not depend on libgomp-1.dll at runtime.
+if(VCPKG_TARGET_TRIPLET MATCHES "mingw")
+    set(GGML_OPENMP OFF)
+else()
+    set(GGML_OPENMP ON)
+endif()
+
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS
         -DBUILD_SHARED_LIBS=${BUILD_SHARED_LIBS}
+        -DGGML_OPENMP=${GGML_OPENMP}
         -DGGML_CCACHE=OFF
         -DGGML_VULKAN=OFF
         -DGGML_METAL=OFF

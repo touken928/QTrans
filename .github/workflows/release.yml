@@ -136,7 +136,7 @@ jobs:
           path: |
             ${{ github.workspace }}/.vcpkg-cache
             build/vcpkg_installed
-          key: vcpkg-binaries-windows-x64-mingw-static-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'CMakePresets.json', 'overlay/**') }}
+          key: vcpkg-binaries-windows-x64-mingw-static-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'CMakePresets.json', 'overlay/**') }}-no-openmp
 
       - name: Prepare vcpkg binary cache
         run: mkdir -p "${VCPKG_DEFAULT_BINARY_CACHE}"

@@ -68,7 +68,20 @@ elseif(APPLE)
 endif()
 
 if(MINGW)
-    target_link_options(QTrans PRIVATE -static -static-libgcc -static-libstdc++)
+    target_link_options(qtrans_core PUBLIC
+        -static-libgcc
+        -static-libstdc++
+        -static-libgomp
+    )
+    target_link_options(QTrans PRIVATE
+        -static
+        -static-libgcc
+        -static-libstdc++
+        -static-libgomp
+        -Wl,-Bstatic
+        -lwinpthread
+        -Wl,-Bdynamic
+    )
 endif()
 
 if(MSVC)
