@@ -55,6 +55,22 @@ add_executable(QTrans
 
 target_link_libraries(QTrans PRIVATE qtrans_core Qt6::Widgets)
 
+if(WIN32)
+    qt_import_plugins(QTrans
+        INCLUDE BY_TYPE platforms Qt6::QWindowsIntegrationPlugin
+        INCLUDE BY_TYPE platformthemes Qt6::QModernWindowsStylePlugin
+    )
+elseif(APPLE)
+    qt_import_plugins(QTrans
+        INCLUDE BY_TYPE platforms Qt6::QCocoaIntegrationPlugin
+        INCLUDE BY_TYPE platformthemes Qt6::QMacStylePlugin
+    )
+endif()
+
+if(MINGW)
+    target_link_options(QTrans PRIVATE -static -static-libgcc -static-libstdc++)
+endif()
+
 if(MSVC)
     target_compile_options(QTrans PRIVATE /utf-8)
     target_compile_options(qtrans_core PRIVATE /utf-8)

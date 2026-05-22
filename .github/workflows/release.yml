@@ -8,9 +8,6 @@ on:
 permissions:
   contents: write
 
-env:
-  BUILD_TYPE: Release
-
 jobs:
   build-macos-arm64:
     name: macOS arm64
@@ -30,9 +27,9 @@ jobs:
             ${{ github.workspace }}/vcpkg/downloads
             ${{ github.workspace }}/vcpkg/builtpackages
             ${{ github.workspace }}/build/vcpkg_installed
-          key: vcpkg-macos-arm64-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/**') }}
+          key: vcpkg-macos-arm64-static-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'CMakePresets.json', 'overlay/**') }}
           restore-keys: |
-            vcpkg-macos-arm64-
+            vcpkg-macos-arm64-static-
 
       - name: Setup vcpkg
         shell: bash
@@ -47,12 +44,8 @@ jobs:
         env:
           VCPKG_ROOT: ${{ github.workspace }}/vcpkg
         run: |
-          cmake -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
-            -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" \
-            -DVCPKG_TARGET_TRIPLET=arm64-osx \
-            -DVCPKG_INSTALL_OPTIONS="--clean-after-build"
-          cmake --build build --config "${BUILD_TYPE}" -j "$(sysctl -n hw.ncpu)"
+          cmake --preset macos-arm64-static
+          cmake --build --preset macos-arm64-static --parallel "$(sysctl -n hw.ncpu)"
 
       - name: Package
         shell: bash
@@ -87,9 +80,10 @@ jobs:
           </plist>
           PLIST
           sed -i '' "s/VERSION_PLACEHOLDER/${VERSION}/g" "${APP_DIR}/Contents/Info.plist"
-          MACDEPLOYQT="build/vcpkg_installed/arm64-osx/tools/Qt6/bin/macdeployqt"
-          if [ -x "${MACDEPLOYQT}" ]; then
-            "${MACDEPLOYQT}" "${APP_DIR}" -always-overwrite
+          if otool -L "${APP_DIR}/Contents/MacOS/QTrans" | grep -E '@rpath|/vcpkg/'; then
+            echo "Unexpected dynamic third-party libraries in static macOS build"
+            otool -L "${APP_DIR}/Contents/MacOS/QTrans"
+            exit 1
           fi
           (cd dist && ditto -c -k --sequesterResource --keepParent QTrans.app "../QTrans-${VERSION}-macos-arm64.zip")
 
@@ -141,9 +135,9 @@ jobs:
             C:/vcpkg/downloads
             C:/vcpkg/builtpackages
             build/vcpkg_installed
-          key: vcpkg-windows-x64-mingw-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/**') }}
+          key: vcpkg-windows-x64-mingw-static-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'CMakePresets.json', 'overlay/**') }}
           restore-keys: |
-            vcpkg-windows-x64-mingw-
+            vcpkg-windows-x64-mingw-static-
 
       - name: Setup vcpkg
         run: |
@@ -155,24 +149,20 @@ jobs:
       - name: Configure and build
         env:
           VCPKG_ROOT: /c/vcpkg
-          VCPKG_DEFAULT_TRIPLET: x64-mingw-dynamic
-          VCPKG_DEFAULT_HOST_TRIPLET: x64-mingw-dynamic
         run: |
-          cmake -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
-            -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" \
-            -DVCPKG_TARGET_TRIPLET=x64-mingw-dynamic \
-            -DVCPKG_INSTALL_OPTIONS="--clean-after-build"
-          cmake --build build --config "${BUILD_TYPE}" -j "$(nproc)"
+          cmake --preset windows-x64-mingw-static
+          cmake --build --preset windows-x64-mingw-static --parallel "$(nproc)"
 
       - name: Package
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           mkdir -p dist
           cp build/QTrans.exe dist/
-          WINDEPLOYQT="build/vcpkg_installed/x64-mingw-dynamic/tools/Qt6/bin/windeployqt.exe"
-          if [ -f "${WINDEPLOYQT}" ]; then
-            "${WINDEPLOYQT}" dist/QTrans.exe --verbose 0
+          shopt -s nullglob
+          dlls=(dist/*.dll)
+          if (( ${#dlls[@]} > 0 )); then
+            echo "Unexpected DLLs in static Windows build: ${dlls[*]}"
+            exit 1
           fi
           (cd dist && zip -r "../QTrans-${VERSION}-windows-x64-mingw.zip" .)
 

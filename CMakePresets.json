@@ -1,0 +1,104 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+      }
+    },
+    {
+      "name": "default",
+      "hidden": true,
+      "inherits": [
+        "dev-macos-arm64",
+        "dev-windows-x64-mingw"
+      ]
+    },
+    {
+      "name": "macos-arm64-static",
+      "displayName": "macOS arm64 static (Release)",
+      "description": "Static release build for macOS arm64 using vcpkg triplet arm64-osx.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "VCPKG_TARGET_TRIPLET": "arm64-osx",
+        "VCPKG_INSTALL_OPTIONS": "--clean-after-build"
+      }
+    },
+    {
+      "name": "windows-x64-mingw-static",
+      "displayName": "Windows x64 MinGW static (Release)",
+      "description": "Static release build for Windows x64 using vcpkg triplet x64-mingw-static.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "VCPKG_TARGET_TRIPLET": "x64-mingw-static",
+        "VCPKG_INSTALL_OPTIONS": "--clean-after-build"
+      },
+      "environment": {
+        "VCPKG_DEFAULT_TRIPLET": "x64-mingw-static",
+        "VCPKG_DEFAULT_HOST_TRIPLET": "x64-mingw-static"
+      }
+    },
+    {
+      "name": "dev-macos-arm64",
+      "displayName": "macOS arm64 (Debug)",
+      "description": "Local debug build for macOS arm64.",
+      "inherits": "base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "VCPKG_TARGET_TRIPLET": "arm64-osx"
+      }
+    },
+    {
+      "name": "dev-windows-x64-mingw",
+      "displayName": "Windows x64 MinGW (Debug)",
+      "description": "Local debug build for Windows x64 MinGW.",
+      "inherits": "base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "VCPKG_TARGET_TRIPLET": "x64-mingw-static"
+      },
+      "environment": {
+        "VCPKG_DEFAULT_TRIPLET": "x64-mingw-static",
+        "VCPKG_DEFAULT_HOST_TRIPLET": "x64-mingw-static"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "macos-arm64-static",
+      "displayName": "macOS arm64 static (Release)",
+      "configurePreset": "macos-arm64-static"
+    },
+    {
+      "name": "windows-x64-mingw-static",
+      "displayName": "Windows x64 MinGW static (Release)",
+      "configurePreset": "windows-x64-mingw-static"
+    },
+    {
+      "name": "dev",
+      "displayName": "Local development (Debug)",
+      "configurePreset": "default"
+    }
+  ]
+}
