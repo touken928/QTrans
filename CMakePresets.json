@@ -30,8 +30,14 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "VCPKG_TARGET_TRIPLET": "arm64-osx",
+        "VCPKG_TARGET_TRIPLET": "arm64-osx-release",
+        "VCPKG_HOST_TRIPLET": "arm64-osx-release",
+        "VCPKG_BUILD_TYPE": "release",
         "VCPKG_INSTALL_OPTIONS": "--clean-after-build"
+      },
+      "environment": {
+        "VCPKG_DEFAULT_TRIPLET": "arm64-osx-release",
+        "VCPKG_DEFAULT_HOST_TRIPLET": "arm64-osx-release"
       }
     },
     {
@@ -41,12 +47,14 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "VCPKG_TARGET_TRIPLET": "x64-mingw-static",
+        "VCPKG_TARGET_TRIPLET": "x64-mingw-static-release",
+        "VCPKG_HOST_TRIPLET": "x64-mingw-static-release",
+        "VCPKG_BUILD_TYPE": "release",
         "VCPKG_INSTALL_OPTIONS": "--clean-after-build"
       },
       "environment": {
-        "VCPKG_DEFAULT_TRIPLET": "x64-mingw-static",
-        "VCPKG_DEFAULT_HOST_TRIPLET": "x64-mingw-static"
+        "VCPKG_DEFAULT_TRIPLET": "x64-mingw-static-release",
+        "VCPKG_DEFAULT_HOST_TRIPLET": "x64-mingw-static-release"
       }
     },
     {
@@ -61,7 +69,8 @@
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "VCPKG_TARGET_TRIPLET": "arm64-osx"
+        "VCPKG_TARGET_TRIPLET": "arm64-osx",
+        "VCPKG_BUILD_TYPE": "debug"
       }
     },
     {
@@ -76,7 +85,8 @@
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "VCPKG_TARGET_TRIPLET": "x64-mingw-static"
+        "VCPKG_TARGET_TRIPLET": "x64-mingw-static",
+        "VCPKG_BUILD_TYPE": "debug"
       },
       "environment": {
         "VCPKG_DEFAULT_TRIPLET": "x64-mingw-static",
