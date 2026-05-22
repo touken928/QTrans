@@ -68,16 +68,15 @@ elseif(APPLE)
 endif()
 
 if(MINGW)
+    # llama-cpp MinGW builds disable OpenMP in overlay/llama-cpp; -static-libgomp is unsupported by MSYS2 g++.
     target_link_options(qtrans_core PUBLIC
         -static-libgcc
         -static-libstdc++
-        -static-libgomp
     )
     target_link_options(QTrans PRIVATE
         -static
         -static-libgcc
         -static-libstdc++
-        -static-libgomp
         -Wl,-Bstatic
         -lwinpthread
         -Wl,-Bdynamic
