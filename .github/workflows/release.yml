@@ -64,47 +64,21 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          APP_DIR="dist/QTrans.app"
-          mkdir -p "${APP_DIR}/Contents/MacOS"
-          cp "build/QTrans" "${APP_DIR}/Contents/MacOS/QTrans"
-          chmod +x "${APP_DIR}/Contents/MacOS/QTrans"
-          cat > "${APP_DIR}/Contents/Info.plist" <<'PLIST'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleExecutable</key>
-            <string>QTrans</string>
-            <key>CFBundleIdentifier</key>
-            <string>app.qtrans</string>
-            <key>CFBundleName</key>
-            <string>QTrans</string>
-            <key>CFBundlePackageType</key>
-            <string>APPL</string>
-            <key>CFBundleShortVersionString</key>
-            <string>VERSION_PLACEHOLDER</string>
-            <key>CFBundleVersion</key>
-            <string>VERSION_PLACEHOLDER</string>
-            <key>LSMinimumSystemVersion</key>
-            <string>12.0</string>
-            <key>NSHighResolutionCapable</key>
-            <true/>
-          </dict>
-          </plist>
-          PLIST
-          sed -i '' "s/VERSION_PLACEHOLDER/${VERSION}/g" "${APP_DIR}/Contents/Info.plist"
-          if otool -L "${APP_DIR}/Contents/MacOS/QTrans" | grep -E '@rpath|/vcpkg/'; then
+          OUTPUT="dist/QTrans-${VERSION}-macos-arm64"
+          mkdir -p dist
+          cp "build/QTrans" "${OUTPUT}"
+          chmod +x "${OUTPUT}"
+          if otool -L "${OUTPUT}" | grep -E '@rpath|/vcpkg/'; then
             echo "Unexpected dynamic third-party libraries in static macOS build"
-            otool -L "${APP_DIR}/Contents/MacOS/QTrans"
+            otool -L "${OUTPUT}"
             exit 1
           fi
-          (cd dist && ditto -c -k --sequesterResource --keepParent QTrans.app "../QTrans-${VERSION}-macos-arm64.zip")
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: qtrans-macos-arm64
-          path: QTrans-*-macos-arm64.zip
+          path: dist/QTrans-*-macos-arm64
           if-no-files-found: error
 
   build-windows-x64-mingw:
@@ -132,7 +106,6 @@ jobs:
             mingw-w64-x86_64-ninja
             git
             pkgconf
-            zip
 
       - name: Verify build tools
         run: |
@@ -182,21 +155,21 @@ jobs:
       - name: Package
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          OUTPUT="dist/QTrans-${VERSION}-windows-x64.exe"
           mkdir -p dist
-          cp build/QTrans.exe dist/
+          cp build/QTrans.exe "${OUTPUT}"
           shopt -s nullglob
           dlls=(dist/*.dll)
           if (( ${#dlls[@]} > 0 )); then
             echo "Unexpected DLLs in static Windows build: ${dlls[*]}"
             exit 1
           fi
-          (cd dist && zip -r "../QTrans-${VERSION}-windows-x64-mingw.zip" .)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: qtrans-windows-x64-mingw
-          path: QTrans-*-windows-x64-mingw.zip
+          path: dist/QTrans-*-windows-x64.exe
           if-no-files-found: error
 
   release:

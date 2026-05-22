@@ -5,15 +5,15 @@
 namespace {
 
 constexpr TranslationLanguage kLanguages[] = {
-    {"zh", "Chinese", "Chinese"},
-    {"ja", "Japanese", "Japanese"},
-    {"ko", "Korean", "Korean"},
-    {"en", "English", "English"},
-    {"fr", "French", "French"},
-    {"de", "German", "German"},
-    {"es", "Spanish", "Spanish"},
-    {"ar", "Arabic", "Arabic"},
-    {"ru", "Russian", "Russian"},
+    {"zh", "Chinese", "中文", "Chinese"},
+    {"ja", "Japanese", "日语", "Japanese"},
+    {"ko", "Korean", "韩语", "Korean"},
+    {"en", "English", "英语", "English"},
+    {"fr", "French", "法语", "French"},
+    {"de", "German", "德语", "German"},
+    {"es", "Spanish", "西班牙语", "Spanish"},
+    {"ar", "Arabic", "阿拉伯语", "Arabic"},
+    {"ru", "Russian", "俄语", "Russian"},
 };
 
 bool equals_ignore_case(const char * a, const char * b) {
@@ -50,6 +50,14 @@ const TranslationLanguage * find_translation_language_by_model_name(const std::s
         }
     }
     return nullptr;
+}
+
+std::string translation_chinese_name(const std::string & model_name) {
+    const TranslationLanguage * language = find_translation_language_by_model_name(model_name);
+    if (language != nullptr) {
+        return language->chinese_name;
+    }
+    return model_name;
 }
 
 bool is_chinese_language_name(const std::string & model_name) {

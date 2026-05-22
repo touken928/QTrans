@@ -132,10 +132,11 @@ std::string Hymt15::translate(
 }
 
 std::string Hymt15::build_user_prompt(const std::string & text, const std::string & target_language) {
-    // ZH=>XX: Chinese instruction template; XX=>XX (including en=>zh): English template.
+    // ZH=>XX: Chinese instruction template with Chinese target language names.
+    // XX=>XX (including XX=>ZH): English template with English target language names.
     // https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF#prompts
     if (contains_chinese(text) && !is_chinese_target(target_language)) {
-        return "将以下文本翻译为" + target_language +
+        return "将以下文本翻译为" + translation_chinese_name(target_language) +
                "，注意只需要输出翻译后的结果，不要额外解释：\n\n" +
                text;
     }
