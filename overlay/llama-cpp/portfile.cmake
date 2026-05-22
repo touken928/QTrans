@@ -43,6 +43,7 @@ vcpkg_cmake_configure(
         -DLLAMA_BUILD_EXAMPLES=OFF
         -DLLAMA_BUILD_TOOLS=OFF
         -DLLAMA_BUILD_SERVER=OFF
+        -DLLAMA_BUILD_COMMON=OFF
         -DVCPKG_LOCK_FIND_PACKAGE_Git=OFF
 )
 
