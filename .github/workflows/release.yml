@@ -20,6 +20,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install build tools
+        run: brew install ninja pkg-config
+
       - name: Cache vcpkg
         uses: actions/cache@v4
         with:
@@ -44,7 +47,7 @@ jobs:
         env:
           VCPKG_ROOT: ${{ github.workspace }}/vcpkg
         run: |
-          cmake -B build \
+          cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
             -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" \
             -DVCPKG_TARGET_TRIPLET=arm64-osx \
@@ -120,6 +123,16 @@ jobs:
             git
             pkgconf
             zip
+
+      - name: Verify build tools
+        run: |
+          pacman -S --noconfirm --needed \
+            mingw-w64-x86_64-toolchain \
+            mingw-w64-x86_64-cmake \
+            mingw-w64-x86_64-ninja
+          which ninja
+          which cmake
+          ninja --version
 
       - name: Cache vcpkg
         uses: actions/cache@v4
