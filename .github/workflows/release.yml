@@ -16,8 +16,8 @@ jobs:
     env:
       CMAKE_PRESET: macos-arm64-static
       DIST_SUFFIX: macos-arm64
-      VCPKG_EXE: ${{ github.workspace }}/vcpkg/vcpkg
-      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+      VCPKG_EXE: /Users/runner/vcpkg/vcpkg
+      VCPKG_ROOT: /Users/runner/vcpkg
       VCPKG_TRIPLET: arm64-osx-release
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
       VCPKG_INSTALL_ROOT: ${{ github.workspace }}/build/vcpkg_installed
@@ -61,7 +61,18 @@ jobs:
 
           BASELINE="$(grep -o '"baseline": "[^"]*"' vcpkg-configuration.json | head -1 | cut -d'"' -f4)"
           if [ ! -d "${VCPKG_ROOT}/.git" ]; then
+            downloads_backup=""
+            if [ -d "${VCPKG_ROOT}/downloads" ]; then
+              downloads_backup="$(mktemp -d)"
+              mv "${VCPKG_ROOT}/downloads" "${downloads_backup}/downloads"
+            fi
+            rm -rf "${VCPKG_ROOT}"
             git clone https://github.com/microsoft/vcpkg.git "${VCPKG_ROOT}"
+            if [ -n "${downloads_backup}" ] && [ -d "${downloads_backup}/downloads" ]; then
+              rm -rf "${VCPKG_ROOT}/downloads"
+              mv "${downloads_backup}/downloads" "${VCPKG_ROOT}/downloads"
+              rmdir "${downloads_backup}" 2>/dev/null || true
+            fi
           fi
 
           git -C "${VCPKG_ROOT}" fetch --depth 1 origin "${BASELINE}"
@@ -193,13 +204,24 @@ jobs:
           mkdir -p "${VCPKG_DEFAULT_BINARY_CACHE}"
 
           BASELINE="$(grep -o '"baseline": "[^"]*"' vcpkg-configuration.json | head -1 | cut -d'"' -f4)"
-          if [ ! -d /c/vcpkg/.git ]; then
-            git clone https://github.com/microsoft/vcpkg.git /c/vcpkg
+          if [ ! -d "${VCPKG_ROOT}/.git" ]; then
+            downloads_backup=""
+            if [ -d "${VCPKG_ROOT}/downloads" ]; then
+              downloads_backup="$(mktemp -d)"
+              mv "${VCPKG_ROOT}/downloads" "${downloads_backup}/downloads"
+            fi
+            rm -rf "${VCPKG_ROOT}"
+            git clone https://github.com/microsoft/vcpkg.git "${VCPKG_ROOT}"
+            if [ -n "${downloads_backup}" ] && [ -d "${downloads_backup}/downloads" ]; then
+              rm -rf "${VCPKG_ROOT}/downloads"
+              mv "${downloads_backup}/downloads" "${VCPKG_ROOT}/downloads"
+              rmdir "${downloads_backup}" 2>/dev/null || true
+            fi
           fi
 
-          git -C /c/vcpkg fetch --depth 1 origin "${BASELINE}"
-          git -C /c/vcpkg checkout "${BASELINE}"
-          /c/vcpkg/bootstrap-vcpkg.sh
+          git -C "${VCPKG_ROOT}" fetch --depth 1 origin "${BASELINE}"
+          git -C "${VCPKG_ROOT}" checkout "${BASELINE}"
+          "${VCPKG_ROOT}/bootstrap-vcpkg.sh"
 
           echo "downloads cache hit: ${{ steps.cache-vcpkg-downloads.outputs.cache-hit }}"
           echo "binary artifacts cache hit: ${{ steps.cache-vcpkg-blobs.outputs.cache-hit }}"
