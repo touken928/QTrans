@@ -1,11 +1,32 @@
 #include "models/translation_model.h"
 
+#include <cstdio>
 #include <stdexcept>
 #include <utility>
 
+namespace {
+
+FILE * open_memory_buffer_as_file(std::vector<std::uint8_t> & buffer) {
 #if defined(_WIN32)
-#include <io.h>
+    FILE * file = std::tmpfile();
+    if (file == nullptr) {
+        return nullptr;
+    }
+
+    const size_t written = std::fwrite(buffer.data(), 1, buffer.size(), file);
+    if (written != buffer.size()) {
+        std::fclose(file);
+        return nullptr;
+    }
+
+    std::rewind(file);
+    return file;
+#else
+    return fmemopen(buffer.data(), buffer.size(), "rb");
 #endif
+}
+
+} // namespace
 
 LlamaModelFromMemory::~LlamaModelFromMemory() {
     if (model != nullptr) {
@@ -48,14 +69,7 @@ LlamaModelFromMemory load_llama_model_from_memory(
     LlamaModelFromMemory holder{};
     holder.buffer = data;
 
-#if defined(_WIN32)
-    holder.file = _memopen(
-        reinterpret_cast<char *>(holder.buffer.data()),
-        static_cast<int>(holder.buffer.size()),
-        "rb");
-#else
-    holder.file = fmemopen(holder.buffer.data(), holder.buffer.size(), "rb");
-#endif
+    holder.file = open_memory_buffer_as_file(holder.buffer);
     if (holder.file == nullptr) {
         throw std::runtime_error("failed to open gguf memory buffer");
     }
