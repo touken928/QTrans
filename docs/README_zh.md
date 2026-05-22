@@ -1,27 +1,31 @@
 <p align="center">
-  <img src="resources/logo.png" width="250" alt="QTrans">
+  <img src="../resources/logo.png" width="250" alt="QTrans">
 </p>
 
 <p align="center">
-  <strong>基于 <a href="https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF">Hy-MT1.5</a> 与 llama.cpp 的本地桌面翻译应用：Qt 6 图形界面、本地 CPU 推理、首次使用可下载模型，支持九种语言互译与回译。</strong>
+  <strong>在本机运行 <a href="https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF">Hy-MT1.5</a> 的 LLM 翻译软件，可自动下载模型并在 CPU 上完成推理。</strong>
 </p>
 
 <p align="center">
-  <a href="README.md">English</a>
+  <a href="../README.md">English</a>
 </p>
 
 <p align="center">
   <a href="https://en.cppreference.com/w/cpp/17"><img src="https://img.shields.io/badge/c++-17-blue.svg?style=for-the-badge&logo=c%2B%2B" alt="C++17"></a>
   <a href="https://cmake.org/"><img src="https://img.shields.io/badge/cmake-3.21+-064F8C.svg?style=for-the-badge&logo=cmake" alt="CMake 3.21+"></a>
-  <a href="https://www.qt.io/"><img src="https://img.shields.io/badge/Qt-6-41CD52.svg?style=for-the-badge&logo=qt" alt="Qt 6"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg?style=for-the-badge" alt="GPL-3.0"></a>
+  <a href="../LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg?style=for-the-badge" alt="GPL-3.0"></a>
 </p>
 
 ## 功能
 
-- Qt 6 图形界面：翻译、回译、模型管理
-- 本地 CPU 推理；首次使用时可下载模型
-- 支持中文、日语、韩语、英语、法语、德语、西班牙语、阿拉伯语、俄语
+- 翻译与回译
+- 内置模型下载与管理
+
+## 截图
+
+<p align="center">
+  <img src="assets/screenshot.png" width="860" alt="QTrans screenshot">
+</p>
 
 ## 下载
 
@@ -57,4 +61,4 @@ Release 预设：`macos-arm64-static`、`windows-x64-mingw-static`。
 
 ## 许可证
 
-[GPL-3.0](LICENSE)
+[GPL-3.0](../LICENSE)

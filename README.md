@@ -1,27 +1,31 @@
 <p align="center">
-  <img src="resources/logo.png" width="160" alt="QTrans">
+  <img src="resources/logo.png" width="250" alt="QTrans">
 </p>
 
 <p align="center">
-  <strong>Local desktop translator powered by <a href="https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF">Hy-MT1.5</a> and llama.cpp: Qt 6 GUI, on-device CPU inference, model download on first use, translate and back-translate across nine languages.</strong>
+  <strong>An LLM translator that runs <a href="https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF">Hy-MT1.5</a> locally, downloads the model automatically, and performs inference on the CPU.</strong>
 </p>
 
 <p align="center">
-  <a href="README_zh.md">中文说明</a>
+  <a href="docs/README_zh.md">中文说明</a>
 </p>
 
 <p align="center">
   <a href="https://en.cppreference.com/w/cpp/17"><img src="https://img.shields.io/badge/c++-17-blue.svg?style=for-the-badge&logo=c%2B%2B" alt="C++17"></a>
   <a href="https://cmake.org/"><img src="https://img.shields.io/badge/cmake-3.21+-064F8C.svg?style=for-the-badge&logo=cmake" alt="CMake 3.21+"></a>
-  <a href="https://www.qt.io/"><img src="https://img.shields.io/badge/Qt-6-41CD52.svg?style=for-the-badge&logo=qt" alt="Qt 6"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg?style=for-the-badge" alt="GPL-3.0"></a>
 </p>
 
 ## Features
 
-- Qt 6 GUI with translate, back-translate, and model management
-- On-device inference (CPU); models download on first use
-- Languages: Chinese, Japanese, Korean, English, French, German, Spanish, Arabic, Russian
+- Translate and back-translate
+- Built-in model download and management
+
+## Screenshot
+
+<p align="center">
+  <img src="docs/assets/screenshot.png" width="860" alt="QTrans screenshot">
+</p>
 
 ## Download
 
