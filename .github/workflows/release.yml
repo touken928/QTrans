@@ -188,16 +188,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
-          key: vcpkg-blobs-windows-x64-mingw-release-only-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
-          restore-keys: |
-            vcpkg-blobs-windows-x64-mingw-release-only-
+          # No restore-keys: avoid reusing pre-GGML_OPENMP=OFF llama-cpp binary blobs (libgomp-1.dll).
+          key: vcpkg-blobs-windows-x64-mingw-ggml-openmp-off-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
 
       - name: Cache vcpkg_installed
         id: cache-vcpkg-installed
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_INSTALL_ROOT }}
-          key: vcpkg-installed-windows-x64-mingw-release-only-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
+          key: vcpkg-installed-windows-x64-mingw-ggml-openmp-off-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
 
       - name: Setup vcpkg
         run: |
@@ -264,11 +263,7 @@ jobs:
             exit 1
           fi
 
-          objdump -p build/QTrans.exe | tee /tmp/qtrans-imports.txt
-          if grep -E 'libstdc\+\+-6\.dll|libgcc_s_seh-1\.dll|libwinpthread-1\.dll|libgomp-1\.dll' /tmp/qtrans-imports.txt; then
-            echo "Unexpected MinGW runtime DLL imports in QTrans.exe"
-            exit 1
-          fi
+          bash scripts/verify-windows-pe-imports.sh build/QTrans.exe
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
