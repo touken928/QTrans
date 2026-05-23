@@ -45,7 +45,9 @@ public:
         const TranslatePipelinePayload & payload,
         TaskPriority priority = TaskPriority::Interactive);
 
+    // Thread-safe: may be called while process_next() is blocked in inference.
     bool cancel(TaskId id);
+    bool cancel_running();
     TaskState task_state(TaskId id) const;
     bool is_model_loaded() const;
 

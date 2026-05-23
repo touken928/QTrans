@@ -137,7 +137,11 @@ void TaskService::unloadModel() {
 void TaskService::cancelTask(quint64 task_id) {
     TaskId id{};
     id.value = task_id;
-    cancel(id);
+    if (id.is_valid()) {
+        cancel(id);
+        return;
+    }
+    orchestrator_.cancel_running();
 }
 
 void TaskService::translateInteractive(

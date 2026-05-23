@@ -170,6 +170,15 @@ bool TaskOrchestrator::cancel(TaskId id) {
     return false;
 }
 
+bool TaskOrchestrator::cancel_running() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (processing_ && running_cancel_token_ != nullptr) {
+        running_cancel_token_->cancel();
+        return true;
+    }
+    return false;
+}
+
 TaskState TaskOrchestrator::task_state(TaskId id) const {
     return queue_.state_of(id);
 }

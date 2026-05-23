@@ -67,6 +67,16 @@ TranslatePage::TranslatePage(QWidget * parent)
 
     translate_button_ = new QPushButton(QStringLiteral("Translate"), this);
     translate_button_->setObjectName(QStringLiteral("translateButton"));
+    {
+        QPushButton width_probe(QStringLiteral("Stop"), this);
+        width_probe.setObjectName(translate_button_->objectName());
+        width_probe.setFont(translate_button_->font());
+        const int action_width = qMax(
+            translate_button_->sizeHint().width(),
+            width_probe.sizeHint().width())
+            + 16;
+        translate_button_->setFixedWidth(action_width);
+    }
     toolbar->addWidget(translate_button_);
     toolbar->addStretch(1);
     root->addLayout(toolbar);

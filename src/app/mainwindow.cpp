@@ -245,17 +245,13 @@ void MainWindow::onTranslateTaskStarted(quint64 task_id) {
 }
 
 void MainWindow::onCancelRequested() {
-    if (active_translate_task_id_ == 0) {
-        return;
-    }
-
-    TaskId task_id{};
-    task_id.value = active_translate_task_id_;
+    // DirectConnection: worker thread is blocked inside inference, so a queued
+    // cancel would never run until generation finishes.
     QMetaObject::invokeMethod(
         task_service_,
         "cancelTask",
-        Qt::QueuedConnection,
-        Q_ARG(quint64, task_id.value));
+        Qt::DirectConnection,
+        Q_ARG(quint64, active_translate_task_id_));
 }
 
 bool MainWindow::isActiveTranslateTask(quint64 task_id) const {
