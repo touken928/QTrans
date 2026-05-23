@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>在本机运行 <a href="https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF">Hy-MT1.5</a> 的 LLM 翻译软件，可自动下载模型并在 CPU 上完成推理。</strong>
+  <strong>在本机运行 <a href="https://huggingface.co/AngelSlim/Hy-MT2-1.8B-1.25Bit-GGUF">Hy-MT</a> 翻译模型的 LLM 软件，可自动下载权重并在 CPU 上完成推理。</strong>
 </p>
 
 <p align="center">
@@ -32,7 +32,8 @@
 预编译二进制可在 [Releases](https://github.com/touken928/QTrans/releases) 页面获取：
 
 - macOS arm64：`QTrans-<版本>-macos-arm64`
-- Windows x64：`QTrans-<版本>-windows-x64.exe`
+
+Windows 发布构建已暂时从 CI 中移除；如需可自行用 `windows-x64-mingw-static` 预设本地编译。
 
 下载对应平台的文件，在 macOS 上如需请先赋予可执行权限，然后运行。首次使用请打开 **Model** 页面下载模型，再点击 **Load**。
 

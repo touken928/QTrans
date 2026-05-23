@@ -6,6 +6,13 @@ namespace {
 
 const ModelCatalogEntry k_models[] = {
     {
+        "hymt2-125bit",
+        "Hy-MT2-1.8B (1.25Bit)",
+        "Hy-MT2-1.8B-1.25Bit.gguf",
+        "AngelSlim/Hy-MT2-1.8B-1.25Bit-GGUF/Hy-MT2-1.8B-1.25Bit.gguf",
+        2,
+    },
+    {
         "hymt15-stq1",
         "Hy-MT1.5-1.8B (STQ1_0)",
         "Hy-MT1.5-1.8B-STQ1_0.gguf",

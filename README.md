@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>An LLM translator that runs <a href="https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF">Hy-MT1.5</a> locally, downloads the model automatically, and performs inference on the CPU.</strong>
+  <strong>An LLM translator that runs <a href="https://huggingface.co/AngelSlim/Hy-MT2-1.8B-1.25Bit-GGUF">Hy-MT</a> models locally, downloads weights automatically, and performs inference on the CPU.</strong>
 </p>
 
 <p align="center">
@@ -32,7 +32,8 @@
 Prebuilt binaries are available on the [Releases](https://github.com/touken928/QTrans/releases) page:
 
 - macOS arm64: `QTrans-<version>-macos-arm64`
-- Windows x64: `QTrans-<version>-windows-x64.exe`
+
+Windows release builds are temporarily paused in CI; build locally with the `windows-x64-mingw-static` preset if needed.
 
 Download the file for your platform, make it executable on macOS if needed, then run it. On first launch, open **Model**, download the model, and click **Load**.
 

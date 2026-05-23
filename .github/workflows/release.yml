@@ -12,14 +12,10 @@ jobs:
   macos:
     uses: ./.github/workflows/release-macos.yml
 
-  windows:
-    uses: ./.github/workflows/release-windows.yml
-
   release:
     name: Publish GitHub Release
     needs:
       - macos
-      - windows
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts

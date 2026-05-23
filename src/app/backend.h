@@ -47,7 +47,7 @@ private:
 
     mutable std::mutex mutex_;
     std::string model_path_;
-    std::string remote_spec_ = "AngelSlim/Hy-MT1.5-1.8B-1.25bit-GGUF/Hy-MT1.5-1.8B-STQ1_0.gguf";
+    std::string remote_spec_ = "AngelSlim/Hy-MT2-1.8B-1.25Bit-GGUF/Hy-MT2-1.8B-1.25Bit.gguf";
     int download_hub_ = 2;
     TranslationModelConfig model_config_{};
     std::unique_ptr<TranslationModel> model_;

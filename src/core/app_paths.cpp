@@ -6,7 +6,7 @@
 namespace {
 
 constexpr const char kPortableMarker[] = ".portable";
-constexpr const char kDefaultModelFile[] = "Hy-MT1.5-1.8B-STQ1_0.gguf";
+constexpr const char kDefaultModelFile[] = "Hy-MT2-1.8B-1.25Bit.gguf";
 
 std::filesystem::path homeDirectory() {
     if (const char * home = std::getenv("HOME"); home != nullptr && home[0] != '\0') {
