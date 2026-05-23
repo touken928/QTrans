@@ -1,7 +1,7 @@
 #include "app/ui/model_page.h"
 
 #include "app/widget_utils.h"
-#include "settings/model_catalog.h"
+#include "model/model_catalog.h"
 
 #include <QComboBox>
 #include <QFormLayout>

@@ -17,6 +17,7 @@ public:
     explicit TranslatePage(QWidget * parent = nullptr);
 
     void setBusy(bool busy);
+    void setTranslating(bool translating);
     void setModelLoaded(bool loaded);
     void setStatus(const QString & status);
     void resetTarget();
@@ -32,6 +33,7 @@ signals:
         const QString & target_language,
         const QString & source_language,
         bool back_translate);
+    void cancelRequested();
 
 private slots:
     void onTranslate();
@@ -61,5 +63,6 @@ private:
     QLabel * status_label_ = nullptr;
 
     bool busy_ = false;
+    bool translating_ = false;
     bool model_loaded_ = false;
 };

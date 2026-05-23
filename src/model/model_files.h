@@ -1,7 +1,7 @@
 #pragma once
 
-#include "download/download.h"
-#include "models/translation_model.h"
+#include "network/download.h"
+#include "translation/translation_model.h"
 
 #include <string>
 #include <vector>

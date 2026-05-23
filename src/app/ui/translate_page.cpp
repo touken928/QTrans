@@ -1,7 +1,7 @@
 #include "app/ui/translate_page.h"
 
 #include "app/widget_utils.h"
-#include "core/translation_languages.h"
+#include "translation/translation_languages.h"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -140,7 +140,14 @@ TranslatePage::TranslatePage(QWidget * parent)
 
 void TranslatePage::setBusy(bool busy) {
     busy_ = busy;
-    source_edit_->setReadOnly(busy);
+    source_edit_->setReadOnly(busy || translating_);
+    updateActions();
+}
+
+void TranslatePage::setTranslating(bool translating) {
+    translating_ = translating;
+    translate_button_->setText(translating ? QStringLiteral("Stop") : QStringLiteral("Translate"));
+    source_edit_->setReadOnly(busy_ || translating_);
     updateActions();
 }
 
@@ -197,6 +204,11 @@ void TranslatePage::setBackTranslateVisible(bool visible) {
 }
 
 void TranslatePage::onTranslate() {
+    if (translating_) {
+        emit cancelRequested();
+        return;
+    }
+
     if (!model_loaded_) {
         setStatus(QStringLiteral("Load a model first"));
         return;
@@ -245,11 +257,15 @@ QString TranslatePage::sourceLanguageName() const {
 }
 
 void TranslatePage::updateActions() {
-    translate_button_->setEnabled(!busy_ && model_loaded_);
-    swap_button_->setEnabled(!busy_);
-    clear_button_->setEnabled(!busy_);
-    copy_button_->setEnabled(!busy_);
-    source_lang_combo_->setEnabled(!busy_);
-    target_lang_combo_->setEnabled(!busy_);
-    back_translate_checkbox_->setEnabled(!busy_);
+    if (translating_) {
+        translate_button_->setEnabled(true);
+    } else {
+        translate_button_->setEnabled(!busy_ && model_loaded_);
+    }
+    swap_button_->setEnabled(!busy_ && !translating_);
+    clear_button_->setEnabled(!busy_ && !translating_);
+    copy_button_->setEnabled(!busy_ && !translating_);
+    source_lang_combo_->setEnabled(!busy_ && !translating_);
+    target_lang_combo_->setEnabled(!busy_ && !translating_);
+    back_translate_checkbox_->setEnabled(!busy_ && !translating_);
 }

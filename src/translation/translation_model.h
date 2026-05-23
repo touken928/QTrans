@@ -5,8 +5,14 @@
 #include <cstdint>
 #include <cstdio>
 #include <functional>
+#include <stdexcept>
 #include <string>
 #include <vector>
+
+struct TranslationCancelled : public std::runtime_error {
+    TranslationCancelled()
+        : std::runtime_error("translation cancelled") {}
+};
 
 struct TranslationModelConfig {
     int n_ctx = 4096;
@@ -46,7 +52,8 @@ public:
     virtual std::string translate(
         const std::string & text,
         const std::string & target_language,
-        const std::function<void(const std::string &)> & on_token = nullptr) = 0;
+        const std::function<void(const std::string &)> & on_token = nullptr,
+        const std::function<bool()> & should_cancel = nullptr) = 0;
 
     bool is_loaded() const { return loaded_; }
 

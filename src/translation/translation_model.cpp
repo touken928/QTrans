@@ -1,4 +1,4 @@
-#include "models/translation_model.h"
+#include "translation/translation_model.h"
 
 #include <cstdio>
 #include <stdexcept>

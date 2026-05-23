@@ -1,15 +1,15 @@
 #include "app/mainwindow.h"
 
-#include "app/backend.h"
 #include "app/modal_overlay.h"
+#include "app/task_service.h"
 #include "app/ui/app_theme.h"
 #include "app/ui/download_progress_panel.h"
 #include "app/ui/model_missing_panel.h"
 #include "app/ui/model_page.h"
 #include "app/ui/sidebar_widget.h"
 #include "app/ui/translate_page.h"
-#include "download/download.h"
-#include "settings/model_catalog.h"
+#include "network/download.h"
+#include "model/model_catalog.h"
 
 #include <QCoreApplication>
 #include <QHBoxLayout>
@@ -18,9 +18,9 @@
 #include <QStackedWidget>
 #include <QThread>
 
-MainWindow::MainWindow(Backend * backend, QThread * worker_thread, QWidget * parent)
+MainWindow::MainWindow(TaskService * task_service, QThread * worker_thread, QWidget * parent)
     : QMainWindow(parent)
-    , backend_(backend)
+    , task_service_(task_service)
     , worker_thread_(worker_thread)
     , paths_(AppPaths::detect(QCoreApplication::applicationDirPath().toStdString())) {
     setWindowTitle(QStringLiteral("QTrans"));
@@ -30,7 +30,7 @@ MainWindow::MainWindow(Backend * backend, QThread * worker_thread, QWidget * par
     paths_.ensureDirectories();
     settings_.load(paths_);
     settings_.ensureStorage(paths_);
-    syncSettingsToBackend();
+    syncSettingsToTaskService();
 
     central_root_ = new QWidget(this);
     central_root_->setObjectName(QStringLiteral("centralRoot"));
@@ -62,17 +62,19 @@ MainWindow::MainWindow(Backend * backend, QThread * worker_thread, QWidget * par
     connect(model_page_, &ModelPage::unloadModelRequested, this, &MainWindow::onUnloadModelFromPage);
     connect(model_page_, &ModelPage::modelEdited, this, &MainWindow::applySettingsFromPage);
     connect(translate_page_, &TranslatePage::translateRequested, this, &MainWindow::onTranslateRequested);
+    connect(translate_page_, &TranslatePage::cancelRequested, this, &MainWindow::onCancelRequested);
 
-    connect(backend_, &Backend::statusChanged, this, &MainWindow::onStatusChanged);
-    connect(backend_, &Backend::modelLoadFinished, this, &MainWindow::onModelLoadFinished);
-    connect(backend_, &Backend::modelUnloadFinished, this, &MainWindow::onModelUnloadFinished);
-    connect(backend_, &Backend::downloadProgress, this, &MainWindow::onDownloadProgress);
-    connect(backend_, &Backend::downloadFinished, this, &MainWindow::onDownloadFinished);
-    connect(backend_, &Backend::targetReset, this, &MainWindow::onTargetReset);
-    connect(backend_, &Backend::targetAppended, this, &MainWindow::onTargetAppended);
-    connect(backend_, &Backend::backTranslateReset, this, &MainWindow::onBackTranslateReset);
-    connect(backend_, &Backend::backTranslateAppended, this, &MainWindow::onBackTranslateAppended);
-    connect(backend_, &Backend::translationFinished, this, &MainWindow::onTranslationFinished);
+    connect(task_service_, &TaskService::statusChanged, this, &MainWindow::onStatusChanged);
+    connect(task_service_, &TaskService::modelLoadFinished, this, &MainWindow::onModelLoadFinished);
+    connect(task_service_, &TaskService::modelUnloadFinished, this, &MainWindow::onModelUnloadFinished);
+    connect(task_service_, &TaskService::downloadProgress, this, &MainWindow::onDownloadProgress);
+    connect(task_service_, &TaskService::downloadFinished, this, &MainWindow::onDownloadFinished);
+    connect(task_service_, &TaskService::targetReset, this, &MainWindow::onTargetReset);
+    connect(task_service_, &TaskService::targetAppended, this, &MainWindow::onTargetAppended);
+    connect(task_service_, &TaskService::backTranslateReset, this, &MainWindow::onBackTranslateReset);
+    connect(task_service_, &TaskService::backTranslateAppended, this, &MainWindow::onBackTranslateAppended);
+    connect(task_service_, &TaskService::translationFinished, this, &MainWindow::onTranslationFinished);
+    connect(task_service_, &TaskService::translateTaskStarted, this, &MainWindow::onTranslateTaskStarted);
 }
 
 MainWindow::~MainWindow() {
@@ -112,18 +114,18 @@ void MainWindow::refreshModelPage() {
 
 void MainWindow::applySettingsFromPage() {
     model_page_->applyTo(settings_);
-    syncSettingsToBackend();
+    syncSettingsToTaskService();
 }
 
 QString MainWindow::currentModelPath() const {
     return QString::fromStdString(settings_.effectiveModelPath(paths_));
 }
 
-void MainWindow::syncSettingsToBackend() {
+void MainWindow::syncSettingsToTaskService() {
     const ModelCatalogEntry * model = settings_.selectedModel();
-    backend_->setModelPath(currentModelPath());
-    backend_->setRemoteSpec(QString::fromStdString(model->remote_spec));
-    backend_->setDownloadHub(model->download_hub);
+    task_service_->setModelPath(currentModelPath());
+    task_service_->setRemoteSpec(QString::fromStdString(model->remote_spec));
+    task_service_->setDownloadHub(model->download_hub);
 }
 
 void MainWindow::saveSettings() {
@@ -138,7 +140,7 @@ void MainWindow::onSaveModelSettings() {
     applySettingsFromPage();
     settings_.ensureStorage(paths_);
     saveSettings();
-    syncSettingsToBackend();
+    syncSettingsToTaskService();
     refreshModelPage();
     translate_page_->setStatus(QStringLiteral("Model settings saved"));
 }
@@ -147,7 +149,7 @@ void MainWindow::onLoadModelFromPage() {
     applySettingsFromPage();
     settings_.ensureStorage(paths_);
     saveSettings();
-    syncSettingsToBackend();
+    syncSettingsToTaskService();
     refreshModelPage();
 
     if (download_file_exists(settings_.effectiveModelPath(paths_))) {
@@ -163,7 +165,7 @@ void MainWindow::onUnloadModelFromPage() {
         return;
     }
 
-    QMetaObject::invokeMethod(backend_, "unloadModel", Qt::QueuedConnection);
+    QMetaObject::invokeMethod(task_service_, "unloadModel", Qt::QueuedConnection);
 }
 
 void MainWindow::setUiBusy(bool busy) {
@@ -211,12 +213,12 @@ void MainWindow::showDownloadDialog() {
 void MainWindow::startDownloadAndLoad() {
     awaiting_download_load_ = true;
     showDownloadDialog();
-    QMetaObject::invokeMethod(backend_, "downloadModel", Qt::QueuedConnection);
+    QMetaObject::invokeMethod(task_service_, "downloadModel", Qt::QueuedConnection);
 }
 
 void MainWindow::startLoadModel() {
-    syncSettingsToBackend();
-    QMetaObject::invokeMethod(backend_, "loadModel", Qt::QueuedConnection);
+    syncSettingsToTaskService();
+    QMetaObject::invokeMethod(task_service_, "loadModel", Qt::QueuedConnection);
 }
 
 void MainWindow::onTranslateRequested(
@@ -224,40 +226,50 @@ void MainWindow::onTranslateRequested(
     const QString & target_language,
     const QString & source_language,
     bool back_translate) {
-    pending_back_translate_ = back_translate;
-    pending_back_language_ = source_language;
-    pending_forward_translation_.clear();
+    active_translate_task_id_ = 0;
 
     QMetaObject::invokeMethod(
-        backend_,
-        "translate",
+        task_service_,
+        "translateInteractive",
         Qt::QueuedConnection,
         Q_ARG(QString, source),
         Q_ARG(QString, target_language),
-        Q_ARG(bool, false),
-        Q_ARG(bool, false));
+        Q_ARG(QString, source_language),
+        Q_ARG(bool, back_translate));
+
+    translate_page_->setTranslating(true);
 }
 
-void MainWindow::onTranslationFinished() {
-    if (!pending_back_translate_) {
+void MainWindow::onTranslateTaskStarted(quint64 task_id) {
+    active_translate_task_id_ = task_id;
+}
+
+void MainWindow::onCancelRequested() {
+    if (active_translate_task_id_ == 0) {
         return;
     }
 
-    pending_forward_translation_ = translate_page_->targetText().trimmed();
-    pending_back_translate_ = false;
-
-    if (pending_forward_translation_.isEmpty() || pending_back_language_.isEmpty()) {
-        return;
-    }
-
+    TaskId task_id{};
+    task_id.value = active_translate_task_id_;
     QMetaObject::invokeMethod(
-        backend_,
-        "translate",
+        task_service_,
+        "cancelTask",
         Qt::QueuedConnection,
-        Q_ARG(QString, pending_forward_translation_),
-        Q_ARG(QString, pending_back_language_),
-        Q_ARG(bool, true),
-        Q_ARG(bool, true));
+        Q_ARG(quint64, task_id.value));
+}
+
+bool MainWindow::isActiveTranslateTask(quint64 task_id) const {
+    return active_translate_task_id_ != 0 && active_translate_task_id_ == task_id;
+}
+
+void MainWindow::onTranslationFinished(quint64 task_id, int state) {
+    Q_UNUSED(state);
+    if (!isActiveTranslateTask(task_id)) {
+        return;
+    }
+
+    active_translate_task_id_ = 0;
+    translate_page_->setTranslating(false);
 }
 
 void MainWindow::onStatusChanged(const QString & message, bool busy) {
@@ -312,18 +324,30 @@ void MainWindow::onDownloadFinished(bool success) {
     }
 }
 
-void MainWindow::onTargetReset() {
+void MainWindow::onTargetReset(quint64 task_id) {
+    if (!isActiveTranslateTask(task_id)) {
+        return;
+    }
     translate_page_->resetTarget();
 }
 
-void MainWindow::onTargetAppended(const QString & piece) {
+void MainWindow::onTargetAppended(quint64 task_id, const QString & piece) {
+    if (!isActiveTranslateTask(task_id)) {
+        return;
+    }
     translate_page_->appendTarget(piece);
 }
 
-void MainWindow::onBackTranslateReset() {
+void MainWindow::onBackTranslateReset(quint64 task_id) {
+    if (!isActiveTranslateTask(task_id)) {
+        return;
+    }
     translate_page_->resetBackTranslate();
 }
 
-void MainWindow::onBackTranslateAppended(const QString & piece) {
+void MainWindow::onBackTranslateAppended(quint64 task_id, const QString & piece) {
+    if (!isActiveTranslateTask(task_id)) {
+        return;
+    }
     translate_page_->appendBackTranslate(piece);
 }

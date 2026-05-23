@@ -1,7 +1,7 @@
 #pragma once
 
-#include "core/app_paths.h"
-#include "settings/settings.h"
+#include "storage/app_paths.h"
+#include "storage/settings.h"
 
 #include <QWidget>
 

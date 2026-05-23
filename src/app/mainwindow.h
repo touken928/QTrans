@@ -1,15 +1,15 @@
 #pragma once
 
-#include "core/app_paths.h"
-#include "settings/settings.h"
+#include "storage/app_paths.h"
+#include "storage/settings.h"
 
 #include <QMainWindow>
 
-class Backend;
 class DownloadProgressPanel;
 class ModalOverlay;
 class ModelPage;
 class SidebarWidget;
+class TaskService;
 class TranslatePage;
 class QStackedWidget;
 class QThread;
@@ -18,7 +18,7 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
-    explicit MainWindow(Backend * backend, QThread * worker_thread, QWidget * parent = nullptr);
+    explicit MainWindow(TaskService * task_service, QThread * worker_thread, QWidget * parent = nullptr);
     ~MainWindow() override;
 
 protected:
@@ -34,26 +34,29 @@ private slots:
         const QString & target_language,
         const QString & source_language,
         bool back_translate);
-    void onTranslationFinished();
+    void onCancelRequested();
+    void onTranslateTaskStarted(quint64 task_id);
+    void onTranslationFinished(quint64 task_id, int state);
     void onStatusChanged(const QString & message, bool busy);
     void onModelLoadFinished(bool success);
     void onModelUnloadFinished();
     void onDownloadProgress(qint64 downloaded, qint64 total, double speed_bps, double eta_seconds);
     void onDownloadFinished(bool success);
-    void onTargetReset();
-    void onTargetAppended(const QString & piece);
-    void onBackTranslateReset();
-    void onBackTranslateAppended(const QString & piece);
+    void onTargetReset(quint64 task_id);
+    void onTargetAppended(quint64 task_id, const QString & piece);
+    void onBackTranslateReset(quint64 task_id);
+    void onBackTranslateAppended(quint64 task_id, const QString & piece);
 
 private:
     void performStartupCheck();
-    void syncSettingsToBackend();
+    void syncSettingsToTaskService();
     void saveSettings();
     void setUiBusy(bool busy);
     void switchPage(int index);
     void refreshModelPage();
     void applySettingsFromPage();
     QString currentModelPath() const;
+    bool isActiveTranslateTask(quint64 task_id) const;
 
     void showModelMissingDialog();
     void showDownloadDialog();
@@ -61,7 +64,7 @@ private:
     void startDownloadAndLoad();
     void startLoadModel();
 
-    Backend * backend_ = nullptr;
+    TaskService * task_service_ = nullptr;
     QThread * worker_thread_ = nullptr;
     AppPaths paths_;
     AppSettings settings_;
@@ -78,7 +81,5 @@ private:
     bool model_loaded_ = false;
     bool busy_ = false;
     bool awaiting_download_load_ = false;
-    bool pending_back_translate_ = false;
-    QString pending_back_language_;
-    QString pending_forward_translation_;
+    quint64 active_translate_task_id_ = 0;
 };

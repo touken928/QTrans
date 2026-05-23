@@ -1,7 +1,7 @@
 #pragma once
 
-#include "core/app_paths.h"
-#include "settings/model_catalog.h"
+#include "storage/app_paths.h"
+#include "model/model_catalog.h"
 
 #include <string>
 

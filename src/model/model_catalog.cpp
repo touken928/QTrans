@@ -1,4 +1,4 @@
-#include "settings/model_catalog.h"
+#include "model/model_catalog.h"
 
 #include <filesystem>
 

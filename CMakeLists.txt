@@ -12,26 +12,29 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-add_library(qtrans_core STATIC
-    src/core/app_paths.cpp
-    src/core/model_ops.cpp
-    src/core/translation_languages.cpp
-    src/download/download.cpp
-    src/settings/model_catalog.cpp
-    src/settings/settings.cpp
-    src/models/translation_model.cpp
-    src/models/hymt15.cpp
+add_library(qtrans_engine STATIC
+    src/storage/app_paths.cpp
+    src/storage/settings.cpp
+    src/model/model_catalog.cpp
+    src/model/model_files.cpp
+    src/network/download.cpp
+    src/translation/translation_languages.cpp
+    src/translation/translation_model.cpp
+    src/translation/hymt.cpp
+    src/translation/inference_engine.cpp
+    src/task/task_queue.cpp
+    src/task/task_orchestrator.cpp
 )
 
-target_include_directories(qtrans_core PUBLIC src)
-target_link_libraries(qtrans_core PUBLIC llama CURL::libcurl)
+target_include_directories(qtrans_engine PUBLIC src)
+target_link_libraries(qtrans_engine PUBLIC llama CURL::libcurl)
 
 add_executable(QTrans
     src/app/main.cpp
     src/app/mainwindow.cpp
     src/app/mainwindow.h
-    src/app/backend.cpp
-    src/app/backend.h
+    src/app/task_service.cpp
+    src/app/task_service.h
     src/app/modal_overlay.cpp
     src/app/modal_overlay.h
     src/app/ui/app_theme.cpp
@@ -53,7 +56,7 @@ add_executable(QTrans
     resources/qtrans.qrc
 )
 
-target_link_libraries(QTrans PRIVATE qtrans_core Qt6::Widgets)
+target_link_libraries(QTrans PRIVATE qtrans_engine Qt6::Widgets)
 
 if(WIN32)
     qt_import_plugins(QTrans
@@ -83,7 +86,7 @@ endif()
 
 if(MSVC)
     target_compile_options(QTrans PRIVATE /utf-8)
-    target_compile_options(qtrans_core PRIVATE /utf-8)
+    target_compile_options(qtrans_engine PRIVATE /utf-8)
 endif()
 
 if(WIN32)

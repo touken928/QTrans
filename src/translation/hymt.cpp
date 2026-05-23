@@ -1,6 +1,6 @@
-#include "models/hymt15.h"
+#include "translation/hymt.h"
 
-#include "core/translation_languages.h"
+#include "translation/translation_languages.h"
 #include "llama.h"
 
 #include <cstdio>
@@ -56,9 +56,17 @@ llama_sampler * create_sampler(const TranslationModelConfig & config) {
     return chain;
 }
 
+bool abort_callback(void * data) {
+    if (data == nullptr) {
+        return false;
+    }
+    const auto * should_cancel = static_cast<const std::function<bool()> *>(data);
+    return (*should_cancel)();
+}
+
 } // namespace
 
-Hymt15::~Hymt15() {
+Hymt::~Hymt() {
     if (sampler_ != nullptr) {
         llama_sampler_free(sampler_);
         sampler_ = nullptr;
@@ -71,7 +79,7 @@ Hymt15::~Hymt15() {
     set_loaded(false);
 }
 
-void Hymt15::ensure_backend() {
+void Hymt::ensure_backend() {
     static bool initialized = false;
     if (!initialized) {
         set_log_callback();
@@ -81,7 +89,7 @@ void Hymt15::ensure_backend() {
     }
 }
 
-void Hymt15::load(const std::vector<std::uint8_t> & data, const TranslationModelConfig & config) {
+void Hymt::load(const std::vector<std::uint8_t> & data, const TranslationModelConfig & config) {
     if (data.empty()) {
         throw std::invalid_argument("model data is empty");
     }
@@ -119,19 +127,24 @@ void Hymt15::load(const std::vector<std::uint8_t> & data, const TranslationModel
     set_loaded(true);
 }
 
-std::string Hymt15::translate(
+std::string Hymt::translate(
     const std::string & text,
     const std::string & target_language,
-    const std::function<void(const std::string &)> & on_token) {
+    const std::function<void(const std::string &)> & on_token,
+    const std::function<bool()> & should_cancel) {
     if (!is_loaded()) {
         throw std::runtime_error("model is not loaded");
     }
 
+    if (should_cancel && should_cancel()) {
+        throw TranslationCancelled();
+    }
+
     const std::string user_prompt = build_user_prompt(text, target_language);
-    return generate(format_chat_prompt(user_prompt), on_token);
+    return generate(format_chat_prompt(user_prompt), on_token, should_cancel);
 }
 
-std::string Hymt15::build_user_prompt(const std::string & text, const std::string & target_language) {
+std::string Hymt::build_user_prompt(const std::string & text, const std::string & target_language) {
     // ZH=>XX: Chinese instruction template with Chinese target language names.
     // XX=>XX (including XX=>ZH): English template with English target language names.
     // https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF#prompts
@@ -146,14 +159,18 @@ std::string Hymt15::build_user_prompt(const std::string & text, const std::strin
            text;
 }
 
-std::string Hymt15::format_chat_prompt(const std::string & user_prompt) {
+std::string Hymt::format_chat_prompt(const std::string & user_prompt) {
     // Official ollama TEMPLATE: https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF#use-with-ollama
     return std::string(k_hy_bos) + k_hy_user + user_prompt + k_hy_assistant;
 }
 
-std::string Hymt15::generate(
+std::string Hymt::generate(
     const std::string & prompt,
-    const std::function<void(const std::string &)> & on_token) {
+    const std::function<void(const std::string &)> & on_token,
+    const std::function<bool()> & should_cancel) {
+    std::function<bool()> cancel_fn = should_cancel ? should_cancel : []() { return false; };
+    llama_set_abort_callback(ctx_, abort_callback, &cancel_fn);
+
     llama_memory_clear(llama_get_memory(ctx_), true);
     llama_sampler_reset(sampler_);
 
@@ -187,7 +204,15 @@ std::string Hymt15::generate(
     std::string response;
 
     for (int i = 0; i < config_.max_tokens; ++i) {
-        if (llama_decode(ctx_, batch) != 0) {
+        if (cancel_fn()) {
+            throw TranslationCancelled();
+        }
+
+        const int decode_status = llama_decode(ctx_, batch);
+        if (decode_status != 0) {
+            if (cancel_fn()) {
+                throw TranslationCancelled();
+            }
             throw std::runtime_error("llama_decode failed");
         }
 
@@ -206,8 +231,12 @@ std::string Hymt15::generate(
         if (on_token) {
             on_token(std::string(piece, static_cast<size_t>(piece_len)));
         }
+        if (cancel_fn()) {
+            throw TranslationCancelled();
+        }
         batch = llama_batch_get_one(const_cast<llama_token *>(&token), 1);
     }
 
+    llama_set_abort_callback(ctx_, nullptr, nullptr);
     return response;
 }
