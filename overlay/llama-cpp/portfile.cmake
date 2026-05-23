@@ -36,9 +36,22 @@ if(VCPKG_TARGET_TRIPLET MATCHES "mingw")
         -DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=ON
         -DOpenMP_C_FOUND=FALSE
         -DOpenMP_CXX_FOUND=FALSE
+        -DGGML_OPENMP_ENABLED=OFF
         -DCMAKE_C_FLAGS=-fno-openmp
         -DCMAKE_CXX_FLAGS=-fno-openmp
     )
+
+    # ggml-config.cmake.in always contains an OpenMP block guarded by
+    # GGML_OPENMP_ENABLED; drop it so consumers never see find_dependency(OpenMP).
+    set(GGML_CONFIG_IN "${SOURCE_PATH}/ggml/cmake/ggml-config.cmake.in")
+    if(EXISTS "${GGML_CONFIG_IN}")
+        file(READ "${GGML_CONFIG_IN}" GGML_CONFIG_IN_CONTENTS)
+        string(REGEX REPLACE
+            "[ \t]*if \\(GGML_OPENMP_ENABLED\\)\r?\n[ \t]*find_dependency\\(OpenMP\\)\r?\n[ \t]*list\\(APPEND GGML_CPU_INTERFACE_LINK_LIBRARIES OpenMP::OpenMP_C OpenMP::OpenMP_CXX\\)\r?\n[ \t]*endif\\(\\)\r?\n?"
+            ""
+            GGML_CONFIG_IN_CONTENTS "${GGML_CONFIG_IN_CONTENTS}")
+        file(WRITE "${GGML_CONFIG_IN}" "${GGML_CONFIG_IN_CONTENTS}")
+    endif()
 else()
     set(GGML_OPENMP ON)
     set(GGML_OPENMP_OPTIONS)
@@ -80,9 +93,13 @@ if(VCPKG_TARGET_TRIPLET MATCHES "mingw")
     )
         if(EXISTS "${CONFIG_FILE}")
             file(READ "${CONFIG_FILE}" CONFIG_CONTENTS)
-            string(REGEX REPLACE "find_dependency\\(OpenMP[^\\n]*\\)\\n?" "" CONFIG_CONTENTS "${CONFIG_CONTENTS}")
-            string(REGEX REPLACE "[^\\n]*OpenMP::OpenMP_[^\\n]*\\n?" "" CONFIG_CONTENTS "${CONFIG_CONTENTS}")
-            string(REGEX REPLACE "[^\\n]*[Gg]omp[^\\n]*\\n?" "" CONFIG_CONTENTS "${CONFIG_CONTENTS}")
+            string(REPLACE "\r\n" "\n" CONFIG_CONTENTS "${CONFIG_CONTENTS}")
+            string(REGEX REPLACE
+                "[ \t]*if \\(GGML_OPENMP_ENABLED\\)\n[ \t]*find_dependency\\(OpenMP\\)\n[ \t]*list\\(APPEND GGML_CPU_INTERFACE_LINK_LIBRARIES OpenMP::OpenMP_C OpenMP::OpenMP_CXX\\)\n[ \t]*endif\\(\\)\n?"
+                ""
+                CONFIG_CONTENTS "${CONFIG_CONTENTS}")
+            string(REGEX REPLACE "find_dependency\\(OpenMP\\)\n?" "" CONFIG_CONTENTS "${CONFIG_CONTENTS}")
+            string(REGEX REPLACE "[^\n]*OpenMP::OpenMP_[^\n]*\n?" "" CONFIG_CONTENTS "${CONFIG_CONTENTS}")
             file(WRITE "${CONFIG_FILE}" "${CONFIG_CONTENTS}")
         endif()
     endforeach()
@@ -90,8 +107,8 @@ if(VCPKG_TARGET_TRIPLET MATCHES "mingw")
     set(GGML_CONFIG "${CURRENT_PACKAGES_DIR}/lib/cmake/ggml/ggml-config.cmake")
     if(EXISTS "${GGML_CONFIG}")
         file(READ "${GGML_CONFIG}" GGML_CONFIG_CONTENTS)
-        if(GGML_CONFIG_CONTENTS MATCHES "OpenMP|gomp|GOMP")
-            message(FATAL_ERROR "ggml-config.cmake still references OpenMP for MinGW builds")
+        if(GGML_CONFIG_CONTENTS MATCHES "GGML_OPENMP_ENABLED \"ON\"|GGML_OPENMP \"ON\"|find_dependency\\(OpenMP\\)")
+            message(FATAL_ERROR "ggml-config.cmake still enables OpenMP for MinGW builds")
         endif()
     endif()
 endif()

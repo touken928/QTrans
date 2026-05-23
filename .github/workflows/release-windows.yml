@@ -62,14 +62,14 @@ jobs:
         with:
           path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
           # No restore-keys: avoid reusing pre-GGML_OPENMP=OFF llama-cpp binary blobs (libgomp-1.dll).
-          key: vcpkg-blobs-windows-x64-mingw-ggml-openmp-off-v2-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
+          key: vcpkg-blobs-windows-x64-mingw-ggml-openmp-off-v3-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
 
       - name: Cache vcpkg_installed
         id: cache-vcpkg-installed
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_INSTALL_ROOT }}
-          key: vcpkg-installed-windows-x64-mingw-ggml-openmp-off-v2-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
+          key: vcpkg-installed-windows-x64-mingw-ggml-openmp-off-v3-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
 
       - name: Setup vcpkg
         run: |
@@ -139,15 +139,30 @@ jobs:
             rm -f "${inst}/lib/libllama."* "${inst}/lib/libggml."*
           }
 
+          llama_openmp_is_enabled() {
+            local cfg="$1"
+            [ -f "${cfg}" ] || return 1
+            # ggml-config.cmake always mentions OpenMP inside a disabled if-block; only fail when enabled.
+            if grep -qE 'set\(GGML_OPENMP_ENABLED "ON"\)|set\(GGML_OPENMP "ON"\)' "${cfg}"; then
+              echo "OpenMP is enabled in ${cfg}"
+              grep -nE 'GGML_OPENMP_ENABLED|GGML_OPENMP |find_dependency\(OpenMP\)' "${cfg}" || true
+              return 0
+            fi
+            if grep -qE '^[[:space:]]*find_dependency\(OpenMP\)' "${cfg}"; then
+              echo "Unconditional OpenMP dependency in ${cfg}"
+              grep -n 'find_dependency(OpenMP)' "${cfg}" || true
+              return 0
+            fi
+            return 1
+          }
+
           llama_configs_have_openmp() {
             local cfg
             for cfg in \
               "${VCPKG_INSTALL_ROOT}/${VCPKG_TRIPLET}/lib/cmake/ggml/ggml-config.cmake" \
               "${VCPKG_INSTALL_ROOT}/${VCPKG_TRIPLET}/lib/cmake/llama/llama-config.cmake"
             do
-              if [ -f "${cfg}" ] && grep -qE 'OpenMP|libgomp|OpenMP::' "${cfg}"; then
-                echo "OpenMP references found in ${cfg}"
-                grep -nE 'OpenMP|libgomp|OpenMP::' "${cfg}" || true
+              if llama_openmp_is_enabled "${cfg}"; then
                 return 0
               fi
             done
@@ -156,6 +171,7 @@ jobs:
 
           if llama_configs_have_openmp; then
             echo "Purging cached llama-cpp install and rebuilding without binary cache"
+            find "${VCPKG_DEFAULT_BINARY_CACHE}" -maxdepth 3 -iname '*llama-cpp*' -print -delete 2>/dev/null || true
             purge_llama_cpp_from_installed
             "${VCPKG_EXE}" install \
               --triplet "${VCPKG_TRIPLET}" \
