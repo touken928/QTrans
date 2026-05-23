@@ -1,0 +1,127 @@
+name: Release macOS
+
+on:
+  workflow_call:
+
+jobs:
+  build-macos-arm64:
+    name: macOS arm64
+    runs-on: macos-14
+    timeout-minutes: 180
+    env:
+      CMAKE_PRESET: macos-arm64-static
+      DIST_SUFFIX: macos-arm64
+      VCPKG_EXE: /Users/runner/vcpkg/vcpkg
+      VCPKG_ROOT: /Users/runner/vcpkg
+      VCPKG_TRIPLET: arm64-osx-release
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
+      VCPKG_INSTALL_ROOT: ${{ github.workspace }}/build/vcpkg_installed
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: brew install ninja pkg-config autoconf autoconf-archive automake libtool
+
+      - name: Cache vcpkg downloads
+        id: cache-vcpkg-downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_ROOT }}/downloads
+          key: vcpkg-downloads-macos-arm64-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
+          restore-keys: |
+            vcpkg-downloads-macos-arm64-
+
+      - name: Cache vcpkg binary artifacts
+        id: cache-vcpkg-blobs
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-blobs-macos-arm64-release-only-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
+          restore-keys: |
+            vcpkg-blobs-macos-arm64-release-only-
+
+      - name: Cache vcpkg_installed
+        id: cache-vcpkg-installed
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_INSTALL_ROOT }}
+          key: vcpkg-installed-macos-arm64-release-only-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
+
+      - name: Setup vcpkg
+        shell: bash
+        run: |
+          mkdir -p "${VCPKG_DEFAULT_BINARY_CACHE}"
+
+          BASELINE="$(grep -o '"baseline": "[^"]*"' vcpkg-configuration.json | head -1 | cut -d'"' -f4)"
+          if [ ! -d "${VCPKG_ROOT}/.git" ]; then
+            downloads_backup=""
+            if [ -d "${VCPKG_ROOT}/downloads" ]; then
+              downloads_backup="$(mktemp -d)"
+              mv "${VCPKG_ROOT}/downloads" "${downloads_backup}/downloads"
+            fi
+            rm -rf "${VCPKG_ROOT}"
+            git clone https://github.com/microsoft/vcpkg.git "${VCPKG_ROOT}"
+            if [ -n "${downloads_backup}" ] && [ -d "${downloads_backup}/downloads" ]; then
+              rm -rf "${VCPKG_ROOT}/downloads"
+              mv "${downloads_backup}/downloads" "${VCPKG_ROOT}/downloads"
+              rmdir "${downloads_backup}" 2>/dev/null || true
+            fi
+          fi
+
+          git -C "${VCPKG_ROOT}" fetch --depth 1 origin "${BASELINE}"
+          git -C "${VCPKG_ROOT}" checkout "${BASELINE}"
+          "${VCPKG_ROOT}/bootstrap-vcpkg.sh"
+
+          echo "downloads cache hit: ${{ steps.cache-vcpkg-downloads.outputs.cache-hit }}"
+          echo "binary artifacts cache hit: ${{ steps.cache-vcpkg-blobs.outputs.cache-hit }}"
+          echo "vcpkg_installed cache hit: ${{ steps.cache-vcpkg-installed.outputs.cache-hit }}"
+
+          if [ -d "${VCPKG_INSTALL_ROOT}" ]; then
+            du -sh "${VCPKG_INSTALL_ROOT}" "${VCPKG_DEFAULT_BINARY_CACHE}" 2>/dev/null || true
+            find "${VCPKG_INSTALL_ROOT}" -maxdepth 3 -type d -name 'qtbase*' 2>/dev/null | head -5 || true
+          else
+            echo "vcpkg_installed missing - expect qtbase to compile from source"
+          fi
+
+      - name: Install vcpkg dependencies (Release)
+        shell: bash
+        run: |
+          "${VCPKG_EXE}" install \
+            --triplet "${VCPKG_TRIPLET}" \
+            --host-triplet "${VCPKG_TRIPLET}" \
+            --x-manifest-root="${GITHUB_WORKSPACE}" \
+            --x-install-root="${VCPKG_INSTALL_ROOT}" \
+            --clean-after-build
+
+      - name: Configure application
+        shell: bash
+        run: cmake --preset "${CMAKE_PRESET}"
+
+      - name: Build application
+        shell: bash
+        run: cmake --build --preset "${CMAKE_PRESET}" --parallel "$(sysctl -n hw.ncpu)"
+
+      - name: Package
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          OUTPUT="dist/QTrans-${VERSION}-${DIST_SUFFIX}"
+
+          mkdir -p dist
+          cp build/QTrans "${OUTPUT}"
+          chmod +x "${OUTPUT}"
+
+          if otool -L "${OUTPUT}" | grep -E '@rpath|/vcpkg/'; then
+            echo "Unexpected dynamic third-party libraries in static macOS build"
+            otool -L "${OUTPUT}"
+            exit 1
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qtrans-macos-arm64
+          path: dist/QTrans-*-macos-arm64
+          if-no-files-found: error

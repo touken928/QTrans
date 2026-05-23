@@ -32,8 +32,14 @@ string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "dynamic" BUILD_SHARED_LIBS)
 # MinGW static releases should not depend on libgomp-1.dll at runtime.
 if(VCPKG_TARGET_TRIPLET MATCHES "mingw")
     set(GGML_OPENMP OFF)
+    set(GGML_OPENMP_OPTIONS
+        -DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=ON
+        -DOpenMP_C_FOUND=FALSE
+        -DOpenMP_CXX_FOUND=FALSE
+    )
 else()
     set(GGML_OPENMP ON)
+    set(GGML_OPENMP_OPTIONS)
 endif()
 
 vcpkg_cmake_configure(
@@ -41,6 +47,7 @@ vcpkg_cmake_configure(
     OPTIONS
         -DBUILD_SHARED_LIBS=${BUILD_SHARED_LIBS}
         -DGGML_OPENMP=${GGML_OPENMP}
+        ${GGML_OPENMP_OPTIONS}
         -DGGML_CCACHE=OFF
         -DGGML_VULKAN=OFF
         -DGGML_METAL=OFF
@@ -63,6 +70,21 @@ file(COPY
     "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-rel/ggml/ggml-version.cmake"
     DESTINATION "${CURRENT_PACKAGES_DIR}/lib/cmake/ggml"
 )
+
+if(VCPKG_TARGET_TRIPLET MATCHES "mingw")
+    foreach(CONFIG_FILE
+        "${CURRENT_PACKAGES_DIR}/lib/cmake/ggml/ggml-config.cmake"
+        "${CURRENT_PACKAGES_DIR}/lib/cmake/llama/llama-config.cmake"
+    )
+        if(EXISTS "${CONFIG_FILE}")
+            file(READ "${CONFIG_FILE}" CONFIG_CONTENTS)
+            string(REGEX REPLACE "find_dependency\\(OpenMP[^\\n]*\\)\\n?" "" CONFIG_CONTENTS "${CONFIG_CONTENTS}")
+            string(REPLACE "OpenMP::OpenMP_CXX" "" CONFIG_CONTENTS "${CONFIG_CONTENTS}")
+            string(REPLACE "OpenMP::OpenMP_C" "" CONFIG_CONTENTS "${CONFIG_CONTENTS}")
+            file(WRITE "${CONFIG_FILE}" "${CONFIG_CONTENTS}")
+        endif()
+    endforeach()
+endif()
 
 file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")
 file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/share")

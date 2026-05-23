@@ -1,6 +1,6 @@
 {
   "name": "llama-cpp",
-  "version-string": "pr22836-stq0",
+  "version-string": "pr22836-stq0-mingw-no-openmp",
   "description": "llama.cpp with STQ1_0 kernel from PR #22836",
   "homepage": "https://github.com/ggml-org/llama.cpp/pull/22836",
   "license": "MIT",
