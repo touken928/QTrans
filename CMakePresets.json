@@ -50,6 +50,7 @@
         "VCPKG_TARGET_TRIPLET": "x64-mingw-static-release",
         "VCPKG_HOST_TRIPLET": "x64-mingw-static-release",
         "VCPKG_BUILD_TYPE": "release",
+        "VCPKG_APPLOCAL_DEPS": "OFF",
         "VCPKG_INSTALL_OPTIONS": "--clean-after-build"
       },
       "environment": {
