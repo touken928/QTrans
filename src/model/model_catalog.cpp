@@ -13,10 +13,10 @@ const ModelCatalogEntry k_models[] = {
         2,
     },
     {
-        "hymt15-stq1",
-        "Hy-MT1.5-1.8B (STQ1_0)",
-        "Hy-MT1.5-1.8B-STQ1_0.gguf",
-        "AngelSlim/Hy-MT1.5-1.8B-1.25bit-GGUF/Hy-MT1.5-1.8B-STQ1_0.gguf",
+        "hymt2-2bit",
+        "Hy-MT2-1.8B (2Bit)",
+        "Hy-MT2-1.8B-2Bit.gguf",
+        "tencent/Hy-MT2-1.8B-2Bit-GGUF/Hy-MT2-1.8B-2Bit.gguf",
         2,
     },
 };

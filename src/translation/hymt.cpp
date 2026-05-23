@@ -45,7 +45,7 @@ void set_log_callback() {
     }, nullptr);
 }
 
-// Official inference params: https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF
+// Official inference params: https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF
 llama_sampler * create_sampler(const TranslationModelConfig & config) {
     llama_sampler * chain = llama_sampler_chain_init(llama_sampler_chain_default_params());
     llama_sampler_chain_add(chain, llama_sampler_init_penalties(-1, config.repeat_penalty, 0.0f, 0.0f));
@@ -147,7 +147,7 @@ std::string Hymt::translate(
 std::string Hymt::build_user_prompt(const std::string & text, const std::string & target_language) {
     // ZH=>XX: Chinese instruction template with Chinese target language names.
     // XX=>XX (including XX=>ZH): English template with English target language names.
-    // https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF#prompts
+    // https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF
     if (contains_chinese(text) && !is_chinese_target(target_language)) {
         return "将以下文本翻译为" + translation_chinese_name(target_language) +
                "，注意只需要输出翻译后的结果，不要额外解释：\n\n" +
@@ -160,7 +160,7 @@ std::string Hymt::build_user_prompt(const std::string & text, const std::string 
 }
 
 std::string Hymt::format_chat_prompt(const std::string & user_prompt) {
-    // Official ollama TEMPLATE: https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF#use-with-ollama
+    // Official chat template: https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF
     return std::string(k_hy_bos) + k_hy_user + user_prompt + k_hy_assistant;
 }
 
