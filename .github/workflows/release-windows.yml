@@ -115,27 +115,61 @@ jobs:
             --x-install-root="${VCPKG_INSTALL_ROOT}" \
             --clean-after-build
 
-          # Cached vcpkg_installed may still contain an OpenMP-enabled llama-cpp build.
-          "${VCPKG_EXE}" remove llama-cpp:"${VCPKG_TRIPLET}" \
-            --x-manifest-root="${GITHUB_WORKSPACE}" \
-            --x-install-root="${VCPKG_INSTALL_ROOT}"
-          "${VCPKG_EXE}" install \
-            --triplet "${VCPKG_TRIPLET}" \
-            --host-triplet "${VCPKG_TRIPLET}" \
-            --x-manifest-root="${GITHUB_WORKSPACE}" \
-            --x-install-root="${VCPKG_INSTALL_ROOT}" \
-            --clean-after-build \
-            --no-binarycaching
+          # Manifest mode does not support `vcpkg remove`; purge install records if needed.
+          purge_llama_cpp_from_installed() {
+            local status="${VCPKG_INSTALL_ROOT}/vcpkg/status"
+            local inst="${VCPKG_INSTALL_ROOT}/${VCPKG_TRIPLET}"
 
-          for cfg in \
-            "${VCPKG_INSTALL_ROOT}/${VCPKG_TRIPLET}/lib/cmake/ggml/ggml-config.cmake" \
-            "${VCPKG_INSTALL_ROOT}/${VCPKG_TRIPLET}/lib/cmake/llama/llama-config.cmake"
-          do
-            if [ -f "${cfg}" ] && grep -E 'OpenMP|libgomp|OpenMP::' "${cfg}"; then
-              echo "OpenMP references remain in ${cfg}"
-              exit 1
+            if [ -f "${status}" ]; then
+              awk '
+                BEGIN { skip = 0 }
+                /^Package: / {
+                  if (skip) { skip = 0 }
+                  if ($2 == "llama-cpp") { skip = 1 }
+                }
+                !skip { print }
+              ' "${status}" > "${status}.new"
+              mv "${status}.new" "${status}"
             fi
-          done
+
+            shopt -s nullglob
+            rm -f "${VCPKG_INSTALL_ROOT}/vcpkg/info/llama-cpp_"*.list
+            rm -rf "${inst}/share/llama-cpp"
+            rm -rf "${inst}/lib/cmake/llama" "${inst}/lib/cmake/ggml"
+            rm -f "${inst}/lib/libllama."* "${inst}/lib/libggml."*
+          }
+
+          llama_configs_have_openmp() {
+            local cfg
+            for cfg in \
+              "${VCPKG_INSTALL_ROOT}/${VCPKG_TRIPLET}/lib/cmake/ggml/ggml-config.cmake" \
+              "${VCPKG_INSTALL_ROOT}/${VCPKG_TRIPLET}/lib/cmake/llama/llama-config.cmake"
+            do
+              if [ -f "${cfg}" ] && grep -qE 'OpenMP|libgomp|OpenMP::' "${cfg}"; then
+                echo "OpenMP references found in ${cfg}"
+                grep -nE 'OpenMP|libgomp|OpenMP::' "${cfg}" || true
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          if llama_configs_have_openmp; then
+            echo "Purging cached llama-cpp install and rebuilding without binary cache"
+            purge_llama_cpp_from_installed
+            "${VCPKG_EXE}" install \
+              --triplet "${VCPKG_TRIPLET}" \
+              --host-triplet "${VCPKG_TRIPLET}" \
+              --x-manifest-root="${GITHUB_WORKSPACE}" \
+              --x-install-root="${VCPKG_INSTALL_ROOT}" \
+              --clean-after-build \
+              --no-binarycaching
+          fi
+
+          if llama_configs_have_openmp; then
+            echo "llama/ggml still reference OpenMP after rebuild"
+            exit 1
+          fi
 
       - name: Configure application
         run: cmake --preset "${CMAKE_PRESET}"
