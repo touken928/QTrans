@@ -62,14 +62,14 @@ jobs:
         with:
           path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
           # No restore-keys: avoid reusing pre-GGML_OPENMP=OFF llama-cpp binary blobs (libgomp-1.dll).
-          key: vcpkg-blobs-windows-x64-mingw-ggml-openmp-off-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
+          key: vcpkg-blobs-windows-x64-mingw-ggml-openmp-off-v2-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
 
       - name: Cache vcpkg_installed
         id: cache-vcpkg-installed
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_INSTALL_ROOT }}
-          key: vcpkg-installed-windows-x64-mingw-ggml-openmp-off-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
+          key: vcpkg-installed-windows-x64-mingw-ggml-openmp-off-v2-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
 
       - name: Setup vcpkg
         run: |
@@ -114,6 +114,28 @@ jobs:
             --x-manifest-root="${GITHUB_WORKSPACE}" \
             --x-install-root="${VCPKG_INSTALL_ROOT}" \
             --clean-after-build
+
+          # Cached vcpkg_installed may still contain an OpenMP-enabled llama-cpp build.
+          "${VCPKG_EXE}" remove llama-cpp:"${VCPKG_TRIPLET}" \
+            --x-manifest-root="${GITHUB_WORKSPACE}" \
+            --x-install-root="${VCPKG_INSTALL_ROOT}"
+          "${VCPKG_EXE}" install \
+            --triplet "${VCPKG_TRIPLET}" \
+            --host-triplet "${VCPKG_TRIPLET}" \
+            --x-manifest-root="${GITHUB_WORKSPACE}" \
+            --x-install-root="${VCPKG_INSTALL_ROOT}" \
+            --clean-after-build \
+            --no-binarycaching
+
+          for cfg in \
+            "${VCPKG_INSTALL_ROOT}/${VCPKG_TRIPLET}/lib/cmake/ggml/ggml-config.cmake" \
+            "${VCPKG_INSTALL_ROOT}/${VCPKG_TRIPLET}/lib/cmake/llama/llama-config.cmake"
+          do
+            if [ -f "${cfg}" ] && grep -E 'OpenMP|libgomp|OpenMP::' "${cfg}"; then
+              echo "OpenMP references remain in ${cfg}"
+              exit 1
+            fi
+          done
 
       - name: Configure application
         run: cmake --preset "${CMAKE_PRESET}"
