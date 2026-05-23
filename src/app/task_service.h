@@ -42,7 +42,7 @@ public slots:
 signals:
     void translateTaskStarted(quint64 task_id);
     void statusChanged(const QString & message, bool busy);
-    void modelLoadFinished(bool success);
+    void modelLoadFinished(bool success, const QString & error_message);
     void modelUnloadFinished();
     void downloadProgress(qint64 downloaded_bytes, qint64 total_bytes, double speed_bps, double eta_seconds);
     void downloadFinished(bool success);

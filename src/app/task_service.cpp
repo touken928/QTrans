@@ -16,8 +16,10 @@ void TaskService::wireCallbacks() {
             busy);
     };
 
-    callbacks.on_model_load_finished = [this](bool success) {
-        emit modelLoadFinished(success);
+    callbacks.on_model_load_finished = [this](bool success, const std::string & error_message) {
+        emit modelLoadFinished(
+            success,
+            QString::fromUtf8(error_message.c_str(), static_cast<int>(error_message.size())));
     };
 
     callbacks.on_model_unload_finished = [this]() {

@@ -38,7 +38,7 @@ private slots:
     void onTranslateTaskStarted(quint64 task_id);
     void onTranslationFinished(quint64 task_id, int state);
     void onStatusChanged(const QString & message, bool busy);
-    void onModelLoadFinished(bool success);
+    void onModelLoadFinished(bool success, const QString & error_message);
     void onModelUnloadFinished();
     void onDownloadProgress(qint64 downloaded, qint64 total, double speed_bps, double eta_seconds);
     void onDownloadFinished(bool success);
@@ -59,6 +59,7 @@ private:
     bool isActiveTranslateTask(quint64 task_id) const;
 
     void showModelMissingDialog();
+    void showAlertDialog(const QString & title, const QString & message);
     void showDownloadDialog();
     void hideModal();
     void startDownloadAndLoad();

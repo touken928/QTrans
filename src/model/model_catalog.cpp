@@ -12,13 +12,6 @@ const ModelCatalogEntry k_models[] = {
         "AngelSlim/Hy-MT2-1.8B-1.25Bit-GGUF/Hy-MT2-1.8B-1.25Bit.gguf",
         2,
     },
-    {
-        "hymt2-2bit",
-        "Hy-MT2-1.8B (2Bit)",
-        "Hy-MT2-1.8B-2Bit.gguf",
-        "tencent/Hy-MT2-1.8B-2Bit-GGUF/Hy-MT2-1.8B-2Bit.gguf",
-        2,
-    },
 };
 
 } // namespace

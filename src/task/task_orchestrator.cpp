@@ -287,7 +287,7 @@ void TaskOrchestrator::execute_task(Task task) {
 
             emit_status("Model loaded", false);
             if (callbacks_.on_model_load_finished) {
-                callbacks_.on_model_load_finished(true);
+                callbacks_.on_model_load_finished(true, "");
             }
             finalize_task(task_id, task.kind, TaskState::Completed);
             break;
@@ -370,7 +370,7 @@ void TaskOrchestrator::execute_task(Task task) {
             }
             emit_status(std::string("Error: ") + ex.what(), false);
             if (callbacks_.on_model_load_finished) {
-                callbacks_.on_model_load_finished(false);
+                callbacks_.on_model_load_finished(false, ex.what());
             }
         } else {
             emit_status(std::string("Error: ") + ex.what(), false);

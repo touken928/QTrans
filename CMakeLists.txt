@@ -37,6 +37,8 @@ add_executable(QTrans
     src/app/task_service.h
     src/app/modal_overlay.cpp
     src/app/modal_overlay.h
+    src/app/ui/alert_panel.cpp
+    src/app/ui/alert_panel.h
     src/app/ui/app_theme.cpp
     src/app/ui/app_theme.h
     src/app/ui/download_progress_panel.cpp

@@ -3,6 +3,7 @@
 #include "app/modal_overlay.h"
 #include "app/task_service.h"
 #include "app/ui/app_theme.h"
+#include "app/ui/alert_panel.h"
 #include "app/ui/download_progress_panel.h"
 #include "app/ui/model_missing_panel.h"
 #include "app/ui/model_page.h"
@@ -210,6 +211,14 @@ void MainWindow::showDownloadDialog() {
     modal_->showModal();
 }
 
+void MainWindow::showAlertDialog(const QString & title, const QString & message) {
+    auto * panel = new AlertPanel(title, message);
+    connect(panel, &AlertPanel::dismissed, this, &MainWindow::hideModal);
+
+    modal_->setContent(panel, QSize(500, 220));
+    modal_->showModal();
+}
+
 void MainWindow::startDownloadAndLoad() {
     awaiting_download_load_ = true;
     showDownloadDialog();
@@ -273,16 +282,25 @@ void MainWindow::onStatusChanged(const QString & message, bool busy) {
     setUiBusy(busy);
 }
 
-void MainWindow::onModelLoadFinished(bool success) {
+void MainWindow::onModelLoadFinished(bool success, const QString & error_message) {
     model_loaded_ = success;
     translate_page_->setModelLoaded(success);
     model_page_->setModelLoaded(success);
     setUiBusy(busy_);
 
-    if (success && modal_->isVisible()) {
-        hideModal();
-        switchPage(0);
+    if (success) {
+        if (modal_->isVisible()) {
+            hideModal();
+            switchPage(0);
+        }
+        return;
     }
+
+    QString message = error_message.trimmed();
+    if (message.isEmpty()) {
+        message = QStringLiteral("Failed to load the model.");
+    }
+    showAlertDialog(QStringLiteral("Failed to Load Model"), message);
 }
 
 void MainWindow::onModelUnloadFinished() {

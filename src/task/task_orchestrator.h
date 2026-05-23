@@ -14,7 +14,7 @@
 
 struct TaskOrchestratorCallbacks {
     std::function<void(const std::string & message, bool busy)> on_status;
-    std::function<void(bool success)> on_model_load_finished;
+    std::function<void(bool success, const std::string & error_message)> on_model_load_finished;
     std::function<void()> on_model_unload_finished;
     std::function<void(
         std::int64_t downloaded_bytes,
