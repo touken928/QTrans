@@ -33,8 +33,6 @@
 
 - macOS arm64：`QTrans-<版本>-macos-arm64`
 
-Windows 发布构建已暂时从 CI 中移除；如需可自行用 `windows-x64-mingw-static` 预设本地编译。
-
 下载对应平台的文件，在 macOS 上如需请先赋予可执行权限，然后运行。首次使用请打开 **Model** 页面下载模型，再点击 **Load**。
 
 ## 从源码构建
@@ -44,21 +42,15 @@ Windows 发布构建已暂时从 CI 中移除；如需可自行用 `windows-x64-
 - [vcpkg](https://vcpkg.io/)（设置 `VCPKG_ROOT`）
 - CMake 3.21+、Ninja
 - macOS：`ninja`、`pkg-config`、`autoconf`、`automake`、`libtool`
-- Windows：MSYS2 MinGW64 工具链
 
 ```bash
 export VCPKG_ROOT=/path/to/vcpkg
 
-# macOS（Debug）
 cmake --preset dev-macos-arm64
-cmake --build --preset dev
-
-# Windows MinGW（Debug）
-cmake --preset dev-windows-x64-mingw
 cmake --build --preset dev
 ```
 
-Release 预设：`macos-arm64-static`、`windows-x64-mingw-static`。
+Release 预设：`macos-arm64-static`。
 
 ## 许可证
 

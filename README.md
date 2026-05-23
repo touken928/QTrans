@@ -33,8 +33,6 @@ Prebuilt binaries are available on the [Releases](https://github.com/touken928/Q
 
 - macOS arm64: `QTrans-<version>-macos-arm64`
 
-Windows release builds are temporarily paused in CI; build locally with the `windows-x64-mingw-static` preset if needed.
-
 Download the file for your platform, make it executable on macOS if needed, then run it. On first launch, open **Model**, download the model, and click **Load**.
 
 ## Build from Source
@@ -44,21 +42,15 @@ Requirements:
 - [vcpkg](https://vcpkg.io/) (set `VCPKG_ROOT`)
 - CMake 3.21+, Ninja
 - macOS: `ninja`, `pkg-config`, `autoconf`, `automake`, `libtool`
-- Windows: MSYS2 MinGW64 toolchain
 
 ```bash
 export VCPKG_ROOT=/path/to/vcpkg
 
-# macOS (Debug)
 cmake --preset dev-macos-arm64
-cmake --build --preset dev
-
-# Windows MinGW (Debug)
-cmake --preset dev-windows-x64-mingw
 cmake --build --preset dev
 ```
 
-Release presets: `macos-arm64-static`, `windows-x64-mingw-static`.
+Release preset: `macos-arm64-static`.
 
 ## License
 

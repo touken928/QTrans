@@ -58,36 +58,9 @@ add_executable(QTrans
 
 target_link_libraries(QTrans PRIVATE qtrans_engine Qt6::Widgets)
 
-if(WIN32)
-    qt_import_plugins(QTrans
-        INCLUDE BY_TYPE platforms Qt6::QWindowsIntegrationPlugin
-        INCLUDE BY_TYPE platformthemes Qt6::QModernWindowsStylePlugin
-    )
-elseif(APPLE)
+if(APPLE)
     qt_import_plugins(QTrans
         INCLUDE BY_TYPE platforms Qt6::QCocoaIntegrationPlugin
         INCLUDE BY_TYPE platformthemes Qt6::QMacStylePlugin
     )
-endif()
-
-if(MINGW)
-    # LINK_OPTIONS are appended last: fully static runtime (no libstdc++/libwinpthread DLLs).
-    # Do not use -Wl,-Bdynamic here; it would relink Qt/llama against shared runtimes.
-    target_link_options(QTrans PRIVATE
-        -static
-        -static-libgcc
-        -static-libstdc++
-        -Wl,--whole-archive
-        -lwinpthread
-        -Wl,--no-whole-archive
-    )
-endif()
-
-if(MSVC)
-    target_compile_options(QTrans PRIVATE /utf-8)
-    target_compile_options(qtrans_engine PRIVATE /utf-8)
-endif()
-
-if(WIN32)
-    set_target_properties(QTrans PROPERTIES WIN32_EXECUTABLE TRUE)
 endif()

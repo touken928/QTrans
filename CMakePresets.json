@@ -19,8 +19,7 @@
       "name": "default",
       "hidden": true,
       "inherits": [
-        "dev-macos-arm64",
-        "dev-windows-x64-mingw"
+        "dev-macos-arm64"
       ]
     },
     {
@@ -41,24 +40,6 @@
       }
     },
     {
-      "name": "windows-x64-mingw-static",
-      "displayName": "Windows x64 MinGW static (Release)",
-      "description": "Static release build for Windows x64 using vcpkg triplet x64-mingw-static.",
-      "inherits": "base",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "VCPKG_TARGET_TRIPLET": "x64-mingw-static-release",
-        "VCPKG_HOST_TRIPLET": "x64-mingw-static-release",
-        "VCPKG_BUILD_TYPE": "release",
-        "VCPKG_APPLOCAL_DEPS": "OFF",
-        "VCPKG_INSTALL_OPTIONS": "--clean-after-build"
-      },
-      "environment": {
-        "VCPKG_DEFAULT_TRIPLET": "x64-mingw-static-release",
-        "VCPKG_DEFAULT_HOST_TRIPLET": "x64-mingw-static-release"
-      }
-    },
-    {
       "name": "dev-macos-arm64",
       "displayName": "macOS arm64 (Debug)",
       "description": "Local debug build for macOS arm64.",
@@ -73,26 +54,6 @@
         "VCPKG_TARGET_TRIPLET": "arm64-osx",
         "VCPKG_BUILD_TYPE": "debug"
       }
-    },
-    {
-      "name": "dev-windows-x64-mingw",
-      "displayName": "Windows x64 MinGW (Debug)",
-      "description": "Local debug build for Windows x64 MinGW.",
-      "inherits": "base",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
-      },
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "VCPKG_TARGET_TRIPLET": "x64-mingw-static",
-        "VCPKG_BUILD_TYPE": "debug"
-      },
-      "environment": {
-        "VCPKG_DEFAULT_TRIPLET": "x64-mingw-static",
-        "VCPKG_DEFAULT_HOST_TRIPLET": "x64-mingw-static"
-      }
     }
   ],
   "buildPresets": [
@@ -100,11 +61,6 @@
       "name": "macos-arm64-static",
       "displayName": "macOS arm64 static (Release)",
       "configurePreset": "macos-arm64-static"
-    },
-    {
-      "name": "windows-x64-mingw-static",
-      "displayName": "Windows x64 MinGW static (Release)",
-      "configurePreset": "windows-x64-mingw-static"
     },
     {
       "name": "dev",
