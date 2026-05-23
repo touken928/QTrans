@@ -73,7 +73,6 @@ endif()
 if(MINGW)
     # LINK_OPTIONS are appended last: fully static runtime (no libstdc++/libwinpthread DLLs).
     # Do not use -Wl,-Bdynamic here; it would relink Qt/llama against shared runtimes.
-    # llama-cpp MinGW builds disable OpenMP in overlay/llama-cpp (no libgomp-1.dll).
     target_link_options(QTrans PRIVATE
         -static
         -static-libgcc
