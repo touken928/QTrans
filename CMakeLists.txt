@@ -53,6 +53,8 @@ add_executable(QTrans
     src/app/ui/sidebar_widget.h
     src/app/ui/translate_page.cpp
     src/app/ui/translate_page.h
+    src/app/ui/wordselect_page.cpp
+    src/app/ui/wordselect_page.h
     src/app/widget_utils.cpp
     src/app/widget_utils.h
     src/wordselect/popup_window.cpp

@@ -9,6 +9,7 @@
 #include "app/ui/model_page.h"
 #include "app/ui/sidebar_widget.h"
 #include "app/ui/translate_page.h"
+#include "app/ui/wordselect_page.h"
 #include "network/download.h"
 #include "model/model_catalog.h"
 #include "wordselect/hotkey_manager.h"
@@ -51,10 +52,12 @@ MainWindow::MainWindow(TaskService * task_service, QThread * worker_thread, QWid
     translate_page_ = new TranslatePage(central_root_);
     model_page_ = new ModelPage(central_root_);
     model_page_->setSettings(paths_, settings_);
+    wordselect_page_ = new WordSelectPage(central_root_);
 
     content_stack_ = new QStackedWidget(central_root_);
     content_stack_->addWidget(translate_page_);
     content_stack_->addWidget(model_page_);
+    content_stack_->addWidget(wordselect_page_);
     shell->addWidget(content_stack_, 1);
 
     setCentralWidget(central_root_);
@@ -95,10 +98,22 @@ MainWindow::MainWindow(TaskService * task_service, QThread * worker_thread, QWid
     if (!hotkeyStr.isEmpty()) {
         session_controller_->setHotkey(hotkeyStr);
     }
+    session_controller_->setTranslateLanguages(
+        QString::fromStdString(settings_.wordselect_source_language),
+        QString::fromStdString(settings_.wordselect_target_language));
+    session_controller_->setEnabled(settings_.wordselect_enabled);
 
     translate_page_->setSourceLanguage(QString::fromStdString(settings_.source_language));
     translate_page_->setTargetLanguage(QString::fromStdString(settings_.target_language));
     syncLanguagesToSettings();
+
+    wordselect_page_->setEnabled(settings_.wordselect_enabled);
+    wordselect_page_->setSourceLanguage(QString::fromStdString(settings_.wordselect_source_language));
+    wordselect_page_->setTargetLanguage(QString::fromStdString(settings_.wordselect_target_language));
+    wordselect_page_->setHotkey(hotkeyStr);
+    wordselect_page_->setAutoCloseMs(settings_.auto_close_ms);
+    connect(wordselect_page_, &WordSelectPage::settingsChanged,
+            this, &MainWindow::onWordSelectSettingsChanged);
 
     system_tray_ = new SystemTray(this);
     connect(system_tray_, &SystemTray::openMainWindow, this, [this]() {
@@ -174,7 +189,27 @@ void MainWindow::syncLanguagesToSettings() {
     settings_.source_language = source.toStdString();
     settings_.target_language = target.toStdString();
     saveSettings();
+}
+
+void MainWindow::onWordSelectSettingsChanged() {
+    const bool enabled = wordselect_page_->isEnabled();
+    const QString source = wordselect_page_->sourceLanguage();
+    const QString target = wordselect_page_->targetLanguage();
+    const QString hotkey = wordselect_page_->hotkey();
+    const int auto_close = wordselect_page_->autoCloseMs();
+
+    settings_.wordselect_enabled = enabled;
+    settings_.wordselect_source_language = source.toStdString();
+    settings_.wordselect_target_language = target.toStdString();
+    settings_.hotkey = hotkey.toStdString();
+    settings_.auto_close_ms = auto_close;
+    saveSettings();
+
+    session_controller_->setEnabled(enabled);
     session_controller_->setTranslateLanguages(source, target);
+    if (!hotkey.isEmpty()) {
+        session_controller_->setHotkey(hotkey);
+    }
 }
 
 void MainWindow::saveSettings() {

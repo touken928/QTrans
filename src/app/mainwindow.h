@@ -15,6 +15,7 @@ class SidebarWidget;
 class SystemTray;
 class TaskService;
 class TranslatePage;
+class WordSelectPage;
 class QStackedWidget;
 class QThread;
 
@@ -41,6 +42,7 @@ private slots:
         bool back_translate);
     void onCancelRequested();
     void onLanguageChanged();
+    void onWordSelectSettingsChanged();
     void onTranslateTaskStarted(quint64 task_id);
     void onTranslationFinished(quint64 task_id, int state);
     void onStatusChanged(const QString & message, bool busy);
@@ -82,6 +84,7 @@ private:
     QStackedWidget * content_stack_ = nullptr;
     TranslatePage * translate_page_ = nullptr;
     ModelPage * model_page_ = nullptr;
+    WordSelectPage * wordselect_page_ = nullptr;
     ModalOverlay * modal_ = nullptr;
     DownloadProgressPanel * download_panel_ = nullptr;
 

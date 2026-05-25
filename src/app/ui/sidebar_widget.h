@@ -29,4 +29,5 @@ private:
     QLabel * logo_label_ = nullptr;
     QPushButton * translate_button_ = nullptr;
     QPushButton * model_button_ = nullptr;
+    QPushButton * wordselect_button_ = nullptr;
 };

@@ -48,10 +48,16 @@ SidebarWidget::SidebarWidget(QWidget * parent)
     model_button_->setCheckable(true);
     layout->addWidget(model_button_);
 
+    wordselect_button_ = new QPushButton(QStringLiteral("划词翻译"), this);
+    wordselect_button_->setObjectName(QStringLiteral("navButton"));
+    wordselect_button_->setCheckable(true);
+    layout->addWidget(wordselect_button_);
+
     auto * nav_group = new QButtonGroup(this);
     nav_group->setExclusive(true);
     nav_group->addButton(translate_button_, 0);
     nav_group->addButton(model_button_, 1);
+    nav_group->addButton(wordselect_button_, 2);
 
     connect(nav_group, &QButtonGroup::idClicked, this, &SidebarWidget::pageSelected);
 
@@ -62,11 +68,13 @@ SidebarWidget::SidebarWidget(QWidget * parent)
 void SidebarWidget::setCurrentPage(int index) {
     translate_button_->setChecked(index == 0);
     model_button_->setChecked(index == 1);
+    wordselect_button_->setChecked(index == 2);
 }
 
 void SidebarWidget::setNavigationEnabled(bool enabled) {
     translate_button_->setEnabled(enabled);
     model_button_->setEnabled(enabled);
+    wordselect_button_->setEnabled(enabled);
 }
 
 void SidebarWidget::resizeEvent(QResizeEvent * event) {

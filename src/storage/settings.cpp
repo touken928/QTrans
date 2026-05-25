@@ -96,6 +96,12 @@ void AppSettings::load(const AppPaths & paths) {
             source_language = value;
         } else if (key == "target_language") {
             target_language = value;
+        } else if (key == "wordselect_source_language") {
+            wordselect_source_language = value;
+        } else if (key == "wordselect_target_language") {
+            wordselect_target_language = value;
+        } else if (key == "wordselect_enabled") {
+            wordselect_enabled = (value == "1" || value == "true");
         }
     }
 
@@ -116,6 +122,9 @@ void AppSettings::save(const AppPaths & paths) const {
     output << "auto_close_ms=" << auto_close_ms << '\n';
     output << "source_language=" << source_language << '\n';
     output << "target_language=" << target_language << '\n';
+    output << "wordselect_source_language=" << wordselect_source_language << '\n';
+    output << "wordselect_target_language=" << wordselect_target_language << '\n';
+    output << "wordselect_enabled=" << (wordselect_enabled ? "true" : "false") << '\n';
 }
 
 void AppSettings::ensureStorage(const AppPaths & paths) const {
