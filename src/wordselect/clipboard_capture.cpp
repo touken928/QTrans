@@ -4,25 +4,8 @@
 #include <QClipboard>
 #include <QTimer>
 #include <chrono>
+#include <cstdio>
 #include <thread>
-
-#ifdef Q_OS_WIN
-#include <windows.h>
-#endif
-
-namespace {
-
-void simulateCtrlC() {
-#ifdef Q_OS_WIN
-    ::keybd_event(VK_CONTROL, 0, 0, 0);
-    ::keybd_event('C', 0, 0, 0);
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-    ::keybd_event('C', 0, KEYEVENTF_KEYUP, 0);
-    ::keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
-#endif
-}
-
-} // namespace
 
 namespace ClipboardCapture {
 
@@ -33,23 +16,35 @@ QString captureSelectedText(int timeoutMs) {
     }
 
     const QString oldText = clipboard->text();
+    fprintf(stderr, "[ClipboardCapture] oldText '%s' (empty=%d)\n",
+            oldText.toUtf8().constData(), oldText.isEmpty());
 
     clipboard->clear();
+    fprintf(stderr, "[ClipboardCapture] clipboard cleared, simulating pasteboard copy\n");
 
-    simulateCtrlC();
+    simulateCopy();
+    fprintf(stderr, "[ClipboardCapture] copy simulated, polling clipboard\n");
 
     auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
 
     QString captured;
     constexpr int pollIntervalMs = 30;
+    int pollCount = 0;
     while (std::chrono::steady_clock::now() < deadline) {
         QApplication::processEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(pollIntervalMs));
 
         captured = clipboard->text();
+        ++pollCount;
         if (!captured.isEmpty()) {
+            fprintf(stderr, "[ClipboardCapture] captured after %d polls: '%s'\n",
+                    pollCount, captured.toUtf8().constData());
             break;
         }
+    }
+
+    if (captured.isEmpty()) {
+        fprintf(stderr, "[ClipboardCapture] timeout after %d polls, no text captured\n", pollCount);
     }
 
     QTimer::singleShot(200, qApp, [oldText]() {

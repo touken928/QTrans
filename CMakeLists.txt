@@ -29,7 +29,7 @@ add_library(qtrans_engine STATIC
 target_include_directories(qtrans_engine PUBLIC src)
 target_link_libraries(qtrans_engine PUBLIC llama CURL::libcurl)
 
-add_executable(QTrans
+set(QTRANS_SOURCES_COMMON
     src/app/main.cpp
     src/app/mainwindow.cpp
     src/app/mainwindow.h
@@ -59,10 +59,9 @@ add_executable(QTrans
     src/app/widget_utils.h
     src/wordselect/popup_window.cpp
     src/wordselect/popup_window.h
-    src/wordselect/hotkey_manager.cpp
-    src/wordselect/hotkey_manager.h
     src/wordselect/clipboard_capture.cpp
     src/wordselect/clipboard_capture.h
+    src/wordselect/hotkey_manager.h
     src/wordselect/session_controller.cpp
     src/wordselect/session_controller.h
     src/wordselect/system_tray.cpp
@@ -70,15 +69,27 @@ add_executable(QTrans
     resources/qtrans.qrc
 )
 
+set(QTRANS_SOURCES_WIN
+    src/wordselect/win/clipboard_capture.cpp
+    src/wordselect/win/hotkey_manager.cpp
+)
+
+set(QTRANS_SOURCES_MAC
+    src/wordselect/mac/clipboard_capture.cpp
+    src/wordselect/mac/hotkey_manager.cpp
+    src/wordselect/mac/platform_utils.cpp
+    src/wordselect/mac/platform_utils.h
+)
+
+add_executable(QTrans ${QTRANS_SOURCES_COMMON})
+
 target_link_libraries(QTrans PRIVATE qtrans_engine Qt6::Widgets)
 
-add_executable(ai_test
-    test_direct.cpp
-)
-target_link_libraries(ai_test PRIVATE qtrans_engine Qt6::Core)
-
-if(APPLE)
-    target_link_libraries(QTrans PRIVATE "-framework Carbon")
+if(WIN32)
+    target_sources(QTrans PRIVATE ${QTRANS_SOURCES_WIN})
+elseif(APPLE)
+    target_sources(QTrans PRIVATE ${QTRANS_SOURCES_MAC})
+    target_link_libraries(QTrans PRIVATE "-framework Carbon" "-framework CoreGraphics")
     qt_import_plugins(QTrans
         INCLUDE BY_TYPE platforms Qt6::QCocoaIntegrationPlugin
         INCLUDE BY_TYPE platformthemes Qt6::QMacStylePlugin

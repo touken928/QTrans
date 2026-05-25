@@ -13,7 +13,7 @@ PopupWindow::PopupWindow(QWidget* parent)
     setWindowFlags(
         Qt::FramelessWindowHint
         | Qt::WindowStaysOnTopHint
-        | Qt::Tool
+        | Qt::ToolTip
         | Qt::NoDropShadowWindowHint);
     setAttribute(Qt::WA_ShowWithoutActivating, true);
     setAttribute(Qt::WA_DeleteOnClose, false);
@@ -80,7 +80,7 @@ void PopupWindow::showLoading(const QString& sourceText) {
     Q_UNUSED(sourceText);
     m_isStreaming = true;
 
-    m_resultLabel->setText(QString::fromUtf8("\347\277\273\350\257\221\344\270\255\342\200\246")); // 翻译中…
+    m_resultLabel->setText(QStringLiteral("Translating\u2026"));
     m_resultLabel->setStyleSheet(QStringLiteral(R"(
         QLabel#popupResult {
             color: #0071e3;
@@ -89,17 +89,18 @@ void PopupWindow::showLoading(const QString& sourceText) {
         }
     )"));
 
-    m_statusLabel->setText(QString::fromUtf8("AI \347\277\273\350\257\221\344\270\255\342\200\246")); // AI 翻译中…
+    m_statusLabel->setText(QStringLiteral("AI Translating\u2026"));
 
     positionNearCursor();
     show();
+    raise();
 }
 
 void PopupWindow::appendChunk(const QString& chunk) {
     if (!m_isStreaming) return;
 
     QString current = m_resultLabel->text();
-    static const QString placeholder = QString::fromUtf8("\347\277\273\350\257\221\344\270\255\342\200\246"); // 翻译中…
+    static const QString placeholder = QStringLiteral("Translating\u2026");
     if (current == placeholder) {
         m_resultLabel->setText(chunk);
     } else {
@@ -121,7 +122,7 @@ void PopupWindow::finishStreaming() {
         }
     )"));
 
-    m_statusLabel->setText(QString::fromUtf8("AI \347\277\273\350\257\221")); // AI 翻译
+    m_statusLabel->setText(QStringLiteral("AI Translate"));
     adjustPopupSize();
     startAutoClose();
 }
@@ -138,7 +139,7 @@ void PopupWindow::showError(const QString& message) {
         }
     )"));
 
-    m_statusLabel->setText(QString::fromUtf8("\351\224\231\350\257\257")); // 错误
+    m_statusLabel->setText(QStringLiteral("Error"));
     positionNearCursor();
     show();
     startAutoClose();

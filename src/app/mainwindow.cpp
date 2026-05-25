@@ -56,8 +56,8 @@ MainWindow::MainWindow(TaskService * task_service, QThread * worker_thread, QWid
 
     content_stack_ = new QStackedWidget(central_root_);
     content_stack_->addWidget(translate_page_);
-    content_stack_->addWidget(model_page_);
     content_stack_->addWidget(wordselect_page_);
+    content_stack_->addWidget(model_page_);
     shell->addWidget(content_stack_, 1);
 
     setCentralWidget(central_root_);
@@ -100,7 +100,7 @@ MainWindow::MainWindow(TaskService * task_service, QThread * worker_thread, QWid
     }
     session_controller_->setTranslateLanguages(
         QString::fromStdString(settings_.wordselect_source_language),
-        QString::fromStdString(settings_.wordselect_target_language));
+        QStringLiteral("Auto"));
     session_controller_->setEnabled(settings_.wordselect_enabled);
 
     translate_page_->setSourceLanguage(QString::fromStdString(settings_.source_language));
@@ -108,7 +108,6 @@ MainWindow::MainWindow(TaskService * task_service, QThread * worker_thread, QWid
     syncLanguagesToSettings();
 
     wordselect_page_->setEnabled(settings_.wordselect_enabled);
-    wordselect_page_->setSourceLanguage(QString::fromStdString(settings_.wordselect_source_language));
     wordselect_page_->setTargetLanguage(QString::fromStdString(settings_.wordselect_target_language));
     wordselect_page_->setHotkey(hotkeyStr);
     wordselect_page_->setAutoCloseMs(settings_.auto_close_ms);
@@ -157,7 +156,7 @@ void MainWindow::switchPage(int index) {
     content_stack_->setCurrentIndex(index);
     sidebar_->setCurrentPage(index);
 
-    if (index == 1) {
+    if (index == 2) {
         refreshModelPage();
     }
 }
@@ -193,20 +192,18 @@ void MainWindow::syncLanguagesToSettings() {
 
 void MainWindow::onWordSelectSettingsChanged() {
     const bool enabled = wordselect_page_->isEnabled();
-    const QString source = wordselect_page_->sourceLanguage();
     const QString target = wordselect_page_->targetLanguage();
     const QString hotkey = wordselect_page_->hotkey();
     const int auto_close = wordselect_page_->autoCloseMs();
 
     settings_.wordselect_enabled = enabled;
-    settings_.wordselect_source_language = source.toStdString();
     settings_.wordselect_target_language = target.toStdString();
     settings_.hotkey = hotkey.toStdString();
     settings_.auto_close_ms = auto_close;
     saveSettings();
 
     session_controller_->setEnabled(enabled);
-    session_controller_->setTranslateLanguages(source, target);
+    session_controller_->setTranslateLanguages(QStringLiteral("Auto"), target);
     if (!hotkey.isEmpty()) {
         session_controller_->setHotkey(hotkey);
     }

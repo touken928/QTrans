@@ -7,6 +7,11 @@
 
 #include <QMetaObject>
 #include <QTimer>
+#include <cstdio>
+
+#ifdef Q_OS_MACOS
+#include "wordselect/mac/platform_utils.h"
+#endif
 
 SessionController::SessionController(
     HotkeyManager* hotkeyMgr,
@@ -37,7 +42,7 @@ SessionController::SessionController(
 void SessionController::initialize() {
     m_hotkeyStr = QStringLiteral("Ctrl+`");
     setHotkey(m_hotkeyStr);
-    m_sourceLanguage = QStringLiteral("English");
+    m_sourceLanguage = QStringLiteral("Auto");
     m_targetLanguage = QStringLiteral("Chinese");
 }
 
@@ -82,11 +87,15 @@ void SessionController::onHotkeyTriggered(int hotkeyId) {
         return;
     }
 
+    fprintf(stderr, "[SessionCtrl] hotkey triggered, state=%d\n", static_cast<int>(m_state));
+
     if (m_state == PopupState::Capturing) {
+        fprintf(stderr, "[SessionCtrl] already capturing, ignoring\n");
         return;
     }
 
     if (m_state == PopupState::Translating) {
+        fprintf(stderr, "[SessionCtrl] cancelling current translation\n");
         if (m_activeTaskId != 0) {
             TaskId id{};
             id.value = m_activeTaskId;
@@ -96,24 +105,41 @@ void SessionController::onHotkeyTriggered(int hotkeyId) {
     }
 
     if (!m_taskService->isModelLoaded()) {
-        m_popup->showError(QString::fromUtf8("\346\250\241\345\236\213\346\234\252\345\212\240\350\275\275\357\274\214\350\257\267\345\205\210\346\211\223\345\274\200\344\270\273\347\252\227\345\217\243\345\212\240\350\275\275\346\250\241\345\236\213"));
+        fprintf(stderr, "[SessionCtrl] model not loaded\n");
+        m_popup->showError(QStringLiteral("Model not loaded. Open main window and load a model first."));
+#ifdef Q_OS_MACOS
+        macRestoreFrontApp();
+#endif
         return;
     }
 
     m_state = PopupState::Capturing;
+#ifdef Q_OS_MACOS
+    macSaveFrontApp();
+#endif
     QTimer::singleShot(50, this, &SessionController::doTranslate);
 }
 
 void SessionController::doTranslate() {
     if (m_state != PopupState::Capturing) {
+        fprintf(stderr, "[SessionCtrl] doTranslate: not capturing (state=%d), skipping\n",
+                static_cast<int>(m_state));
         return;
     }
 
+    fprintf(stderr, "[SessionCtrl] capturing clipboard text\n");
     const QString text = ClipboardCapture::captureSelectedText(300);
     if (text.isEmpty()) {
+        fprintf(stderr, "[SessionCtrl] captured text is empty, resetting session\n");
+#ifdef Q_OS_MACOS
+        macRestoreFrontApp();
+#endif
         resetSession();
         return;
     }
+
+    fprintf(stderr, "[SessionCtrl] captured text: '%s' (len=%d)\n",
+            text.toUtf8().constData(), static_cast<int>(text.size()));
 
     m_state = PopupState::Translating;
     m_activeTaskId = 0;
@@ -135,6 +161,9 @@ void SessionController::onTranslateTaskStarted(quint64 taskId) {
 
     m_activeTaskId = taskId;
     m_popup->showLoading(QString());
+#ifdef Q_OS_MACOS
+    macRestoreFrontApp();
+#endif
 }
 
 void SessionController::onTargetReset(quint64 taskId) {
@@ -163,7 +192,7 @@ void SessionController::onTranslationFinished(quint64 taskId, int state) {
         m_popup->hide();
         resetSession();
     } else {
-        m_popup->showError(QString::fromUtf8("\347\277\273\350\257\221\345\244\261\350\264\245")); // 翻译失败
+        m_popup->showError(QStringLiteral("Translation failed"));
         m_state = PopupState::Showing;
     }
 }

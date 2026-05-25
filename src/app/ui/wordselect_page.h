@@ -4,7 +4,6 @@
 
 class QCheckBox;
 class QComboBox;
-class QLabel;
 class QLineEdit;
 class QSpinBox;
 
@@ -15,13 +14,11 @@ public:
     explicit WordSelectPage(QWidget * parent = nullptr);
 
     void setEnabled(bool enabled);
-    void setSourceLanguage(const QString & model_name);
     void setTargetLanguage(const QString & model_name);
     void setHotkey(const QString & shortcut);
     void setAutoCloseMs(int ms);
 
     bool isEnabled() const;
-    QString sourceLanguage() const;
     QString targetLanguage() const;
     QString hotkey() const;
     int autoCloseMs() const;
@@ -31,7 +28,6 @@ signals:
 
 private:
     QCheckBox * enabled_checkbox_ = nullptr;
-    QComboBox * source_lang_combo_ = nullptr;
     QComboBox * target_lang_combo_ = nullptr;
     QLineEdit * hotkey_edit_ = nullptr;
     QSpinBox * auto_close_spin_ = nullptr;

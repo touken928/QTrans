@@ -21,6 +21,7 @@ struct TranslationModelConfig {
     int top_k = 20;
     float top_p = 0.6f;
     float repeat_penalty = 1.05f;
+    int n_gpu_layers = 0;
 };
 
 struct LlamaModelFromMemory {

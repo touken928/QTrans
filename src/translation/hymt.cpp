@@ -109,7 +109,7 @@ void Hymt::load(const std::vector<std::uint8_t> & data, const TranslationModelCo
     model_holder_.reset();
 
     llama_model_params model_params = llama_model_default_params();
-    model_params.n_gpu_layers = 0;
+    model_params.n_gpu_layers = config.n_gpu_layers;
 
     model_holder_ = std::make_unique<LlamaModelFromMemory>(
         load_llama_model_from_memory(data, model_params));
@@ -146,9 +146,11 @@ std::string Hymt::translate(
 }
 
 std::string Hymt::build_user_prompt(const std::string & text, const std::string & target_language) {
-    // ZH=>XX: Chinese instruction template with Chinese target language names.
-    // XX=>XX (including XX=>ZH): English template with English target language names.
     // https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF
+    if (target_language == "Auto") {
+        return "Translate the following segment:\n\n" + text;
+    }
+
     if (contains_chinese(text) && !is_chinese_target(target_language)) {
         return "将以下文本翻译为" + translation_chinese_name(target_language) +
                "，注意只需要输出翻译后的结果，不要额外解释：\n\n" +

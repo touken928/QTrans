@@ -13,7 +13,7 @@ struct AppSettings {
     std::string source_language = "English";
     std::string target_language = "Chinese";
     std::string wordselect_source_language = "English";
-    std::string wordselect_target_language = "Chinese";
+    std::string wordselect_target_language = "Auto";
     bool wordselect_enabled = true;
 
     void load(const AppPaths & paths);
