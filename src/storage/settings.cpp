@@ -88,6 +88,14 @@ void AppSettings::load(const AppPaths & paths) {
             models_dir = value;
         } else if (key == "model_id") {
             model_id = value;
+        } else if (key == "hotkey") {
+            hotkey = value;
+        } else if (key == "auto_close_ms") {
+            auto_close_ms = std::stoi(value);
+        } else if (key == "source_language") {
+            source_language = value;
+        } else if (key == "target_language") {
+            target_language = value;
         }
     }
 
@@ -104,6 +112,10 @@ void AppSettings::save(const AppPaths & paths) const {
 
     output << "models_dir=" << models_dir << '\n';
     output << "model_id=" << model_id << '\n';
+    output << "hotkey=" << hotkey << '\n';
+    output << "auto_close_ms=" << auto_close_ms << '\n';
+    output << "source_language=" << source_language << '\n';
+    output << "target_language=" << target_language << '\n';
 }
 
 void AppSettings::ensureStorage(const AppPaths & paths) const {

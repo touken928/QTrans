@@ -2,6 +2,7 @@
 
 #include "network/download.h"
 
+#include <cstdio>
 #include <stdexcept>
 
 namespace {
@@ -309,8 +310,13 @@ void TaskOrchestrator::execute_task(Task task) {
             break;
         }
         case TaskKind::TranslatePipeline: {
-            emit_status("Translating", true);
             const auto & payload = std::get<TranslatePipelinePayload>(task.payload);
+            fprintf(stderr, "[Orchestrator] TranslatePipeline task:%llu src:'%s' target:'%s' back:%d\n",
+                    static_cast<unsigned long long>(task_id.value),
+                    payload.source.c_str(),
+                    payload.target_language.c_str(),
+                    payload.back_translate ? 1 : 0);
+            emit_status("Translating", true);
 
             if (payload.source.empty()) {
                 throw std::runtime_error("enter text to translate");
@@ -332,6 +338,10 @@ void TaskOrchestrator::execute_task(Task task) {
                     }
                 },
                 [this, task_id](bool is_back_channel, const std::string & piece) {
+                    fprintf(stderr, "[Orchestrator] token:%s chan:%d piece:'%s'\n",
+                            is_back_channel ? "back" : "fwd",
+                            is_back_channel ? 1 : 0,
+                            piece.c_str());
                     if (is_back_channel) {
                         if (callbacks_.on_back_translate_appended) {
                             callbacks_.on_back_translate_appended(task_id.value, piece);
@@ -343,12 +353,18 @@ void TaskOrchestrator::execute_task(Task task) {
                 cancel_token.get());
 
             if (result.outcome == InferenceOutcome::Cancelled) {
+                fprintf(stderr, "[Orchestrator] TranslatePipeline cancelled task:%llu\n",
+                        static_cast<unsigned long long>(task_id.value));
                 emit_status("Cancelled", false);
                 finalize_task(task_id, task.kind, TaskState::Cancelled);
             } else if (result.outcome == InferenceOutcome::Failed) {
+                fprintf(stderr, "[Orchestrator] TranslatePipeline failed task:%llu err:%s\n",
+                        static_cast<unsigned long long>(task_id.value), result.error_message.c_str());
                 emit_status(std::string("Error: ") + result.error_message, false);
                 finalize_task(task_id, task.kind, TaskState::Failed);
             } else {
+                fprintf(stderr, "[Orchestrator] TranslatePipeline completed task:%llu result_len:%zu\n",
+                        static_cast<unsigned long long>(task_id.value), result.text.size());
                 emit_status("Done", false);
                 finalize_task(task_id, task.kind, TaskState::Completed);
             }

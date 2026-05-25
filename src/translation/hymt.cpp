@@ -4,6 +4,7 @@
 #include "llama.h"
 
 #include <cstdio>
+#include <ctime>
 #include <functional>
 #include <memory>
 #include <stdexcept>
@@ -171,10 +172,20 @@ std::string Hymt::generate(
     std::function<bool()> cancel_fn = should_cancel ? should_cancel : []() { return false; };
     llama_set_abort_callback(ctx_, abort_callback, &cancel_fn);
 
+    struct AbortGuard {
+        llama_context* ctx;
+        ~AbortGuard() { llama_set_abort_callback(ctx, nullptr, nullptr); }
+    } guard{ctx_};
+
+    fprintf(stderr, "[Hymt] generate start, clearing memory\n");
+    fprintf(stderr, "[Hymt] prompt: '%s'\n", prompt.c_str());
     llama_memory_clear(llama_get_memory(ctx_), true);
+    fprintf(stderr, "[Hymt] memory cleared, resetting sampler\n");
     llama_sampler_reset(sampler_);
 
     const llama_vocab * vocab = llama_model_get_vocab(model_holder_->model);
+    fprintf(stderr, "[Hymt] vocab obtained, tokenizing prompt (len=%d)\n",
+            static_cast<int>(prompt.size()));
 
     const int n_prompt = -llama_tokenize(
         vocab,
@@ -184,6 +195,7 @@ std::string Hymt::generate(
         0,
         true,
         true);
+    fprintf(stderr, "[Hymt] token count: %d\n", n_prompt);
     if (n_prompt <= 0) {
         throw std::runtime_error("failed to measure prompt tokens");
     }
@@ -203,8 +215,13 @@ std::string Hymt::generate(
     llama_batch batch = llama_batch_get_one(prompt_tokens.data(), static_cast<int32_t>(prompt_tokens.size()));
     std::string response;
 
+    fprintf(stderr, "[Hymt] starting decode loop, max_tokens=%d\n", config_.max_tokens);
     for (int i = 0; i < config_.max_tokens; ++i) {
+        if (i > 0 && i % 10 == 0) {
+            fprintf(stderr, "[Hymt] token %d/%d\n", i, config_.max_tokens);
+        }
         if (cancel_fn()) {
+            fprintf(stderr, "[Hymt] cancelled at token %d\n", i);
             throw TranslationCancelled();
         }
 
@@ -218,6 +235,7 @@ std::string Hymt::generate(
 
         const llama_token token = llama_sampler_sample(sampler_, ctx_, -1);
         if (llama_vocab_is_eog(vocab, token)) {
+            fprintf(stderr, "[Hymt] EOG at token %d\n", i);
             break;
         }
 
@@ -228,15 +246,35 @@ std::string Hymt::generate(
         }
 
         response.append(piece, static_cast<size_t>(piece_len));
+        fprintf(stderr, "[Hymt] token %d:'%s'\n", i, std::string(piece, static_cast<size_t>(piece_len)).c_str());
         if (on_token) {
             on_token(std::string(piece, static_cast<size_t>(piece_len)));
         }
         if (cancel_fn()) {
+            fprintf(stderr, "[Hymt] cancelled at token %d\n", i);
             throw TranslationCancelled();
         }
         batch = llama_batch_get_one(const_cast<llama_token *>(&token), 1);
     }
 
-    llama_set_abort_callback(ctx_, nullptr, nullptr);
+    fprintf(stderr, "[Hymt] generate done, response_len=%zu response:'%s'\n",
+            response.size(), response.c_str());
+
+    {
+        time_t now = time(nullptr);
+        char time_buf[32];
+        strftime(time_buf, sizeof(time_buf), "%Y%m%d_%H%M%S", localtime(&now));
+        char log_path[512];
+        snprintf(log_path, sizeof(log_path), "%s/qtrans_ai_output_%s.log",
+                 getenv("TEMP") ? getenv("TEMP") : ".", time_buf);
+        FILE * logf = fopen(log_path, "wb");
+        if (logf) {
+            fprintf(logf, "=== prompt ===\n%s\n\n=== response ===\n%s\n",
+                    prompt.c_str(), response.c_str());
+            fclose(logf);
+            fprintf(stderr, "[Hymt] log written to: %s\n", log_path);
+        }
+    }
+
     return response;
 }

@@ -55,12 +55,28 @@ add_executable(QTrans
     src/app/ui/translate_page.h
     src/app/widget_utils.cpp
     src/app/widget_utils.h
+    src/wordselect/popup_window.cpp
+    src/wordselect/popup_window.h
+    src/wordselect/hotkey_manager.cpp
+    src/wordselect/hotkey_manager.h
+    src/wordselect/clipboard_capture.cpp
+    src/wordselect/clipboard_capture.h
+    src/wordselect/session_controller.cpp
+    src/wordselect/session_controller.h
+    src/wordselect/system_tray.cpp
+    src/wordselect/system_tray.h
     resources/qtrans.qrc
 )
 
 target_link_libraries(QTrans PRIVATE qtrans_engine Qt6::Widgets)
 
+add_executable(ai_test
+    test_direct.cpp
+)
+target_link_libraries(ai_test PRIVATE qtrans_engine Qt6::Core)
+
 if(APPLE)
+    target_link_libraries(QTrans PRIVATE "-framework Carbon")
     qt_import_plugins(QTrans
         INCLUDE BY_TYPE platforms Qt6::QCocoaIntegrationPlugin
         INCLUDE BY_TYPE platformthemes Qt6::QMacStylePlugin

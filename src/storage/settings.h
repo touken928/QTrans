@@ -8,6 +8,10 @@
 struct AppSettings {
     std::string models_dir;
     std::string model_id = default_model()->id;
+    std::string hotkey = "Ctrl+`";
+    int auto_close_ms = 5000;
+    std::string source_language = "English";
+    std::string target_language = "Chinese";
 
     void load(const AppPaths & paths);
     void save(const AppPaths & paths) const;

@@ -34,6 +34,7 @@ signals:
         const QString & source_language,
         bool back_translate);
     void cancelRequested();
+    void languageChanged();
 
 private slots:
     void onTranslate();
@@ -42,9 +43,13 @@ private slots:
     void onCopyResult();
     void onBackTranslateToggled(bool enabled);
 
-private:
+public:
+    void setSourceLanguage(const QString & model_name);
+    void setTargetLanguage(const QString & model_name);
     QString targetLanguageName() const;
     QString sourceLanguageName() const;
+
+private:
     void setBackTranslateVisible(bool visible);
     void updateActions();
 

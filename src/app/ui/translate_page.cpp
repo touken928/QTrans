@@ -7,6 +7,7 @@
 #include <QCheckBox>
 #include <QClipboard>
 #include <QComboBox>
+#include <QDebug>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPlainTextEdit>
@@ -14,6 +15,7 @@
 #include <QSplitter>
 #include <QString>
 #include <QTextCursor>
+#include <QThread>
 #include <QVBoxLayout>
 
 namespace {
@@ -143,6 +145,10 @@ TranslatePage::TranslatePage(QWidget * parent)
     connect(clear_button_, &QPushButton::clicked, this, &TranslatePage::onClear);
     connect(copy_button_, &QPushButton::clicked, this, &TranslatePage::onCopyResult);
     connect(back_translate_checkbox_, &QCheckBox::toggled, this, &TranslatePage::onBackTranslateToggled);
+    connect(source_lang_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &TranslatePage::languageChanged);
+    connect(target_lang_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &TranslatePage::languageChanged);
 
     setBackTranslateVisible(false);
     updateActions();
@@ -179,6 +185,7 @@ void TranslatePage::resetBackTranslate() {
 }
 
 void TranslatePage::appendTarget(const QString & piece) {
+    qDebug() << "[TranslatePage] appendTarget len:" << piece.size() << "thread:" << QThread::currentThread();
     target_edit_->moveCursor(QTextCursor::End);
     target_edit_->insertPlainText(piece);
     target_edit_->moveCursor(QTextCursor::End);
@@ -246,6 +253,8 @@ void TranslatePage::onSwap() {
     const QString source_text = source_edit_->toPlainText();
     source_edit_->setPlainText(target_edit_->toPlainText());
     target_edit_->setPlainText(source_text);
+
+    emit languageChanged();
 }
 
 void TranslatePage::onClear() {
@@ -264,6 +273,20 @@ QString TranslatePage::targetLanguageName() const {
 
 QString TranslatePage::sourceLanguageName() const {
     return languageNameAt(source_lang_combo_);
+}
+
+void TranslatePage::setSourceLanguage(const QString & model_name) {
+    const int idx = source_lang_combo_->findText(model_name);
+    if (idx >= 0) {
+        source_lang_combo_->setCurrentIndex(idx);
+    }
+}
+
+void TranslatePage::setTargetLanguage(const QString & model_name) {
+    const int idx = target_lang_combo_->findText(model_name);
+    if (idx >= 0) {
+        target_lang_combo_->setCurrentIndex(idx);
+    }
 }
 
 void TranslatePage::updateActions() {

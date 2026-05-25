@@ -2,6 +2,7 @@
   "version": 6,
   "cmakeMinimumRequired": {
     "major": 3,
+    
     "minor": 21,
     "patch": 0
   },
@@ -19,7 +20,8 @@
       "name": "default",
       "hidden": true,
       "inherits": [
-        "dev-macos-arm64"
+        "dev-macos-arm64",
+        "dev-win-mingw"
       ]
     },
     {
@@ -37,6 +39,49 @@
       "environment": {
         "VCPKG_DEFAULT_TRIPLET": "arm64-osx-release",
         "VCPKG_DEFAULT_HOST_TRIPLET": "arm64-osx-release"
+      }
+    },
+    {
+      "name": "win-mingw-static",
+      "displayName": "Windows MinGW static (Release)",
+      "description": "Static release build for Windows using MinGW.",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build/mingw-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "D:/mingw64/bin/gcc.exe",
+        "CMAKE_CXX_COMPILER": "D:/mingw64/bin/g++.exe",
+        "VCPKG_TARGET_TRIPLET": "x64-mingw-static",
+        "VCPKG_HOST_TRIPLET": "x64-mingw-static",
+        "VCPKG_BUILD_TYPE": "release",
+        "VCPKG_INSTALL_OPTIONS": "--clean-after-build",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets",
+        "CMAKE_MAKE_PROGRAM": "D:/ninja-win/ninja.exe"
+      },
+      "environment": {
+        "VCPKG_DEFAULT_TRIPLET": "x64-mingw-static"
+      }
+    },
+    {
+      "name": "dev-win-mingw",
+      "displayName": "Windows MinGW (Debug)",
+      "description": "Local debug build for Windows using MinGW.",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build/mingw-debug",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "D:/mingw64/bin/gcc.exe",
+        "CMAKE_CXX_COMPILER": "D:/mingw64/bin/g++.exe",
+        "CMAKE_MAKE_PROGRAM": "D:/ninja-win/ninja.exe",
+        "VCPKG_TARGET_TRIPLET": "x64-mingw-static",
+        "VCPKG_HOST_TRIPLET": "x64-mingw-static",
+        "VCPKG_BUILD_TYPE": "debug",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets"
       }
     },
     {
@@ -61,6 +106,16 @@
       "name": "macos-arm64-static",
       "displayName": "macOS arm64 static (Release)",
       "configurePreset": "macos-arm64-static"
+    },
+    {
+      "name": "win-mingw-static",
+      "displayName": "Windows MinGW static (Release)",
+      "configurePreset": "win-mingw-static"
+    },
+    {
+      "name": "dev-win-mingw",
+      "displayName": "Windows MinGW (Debug)",
+      "configurePreset": "dev-win-mingw"
     },
     {
       "name": "dev",

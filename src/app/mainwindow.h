@@ -6,9 +6,13 @@
 #include <QMainWindow>
 
 class DownloadProgressPanel;
+class HotkeyManager;
 class ModalOverlay;
 class ModelPage;
+class PopupWindow;
+class SessionController;
 class SidebarWidget;
+class SystemTray;
 class TaskService;
 class TranslatePage;
 class QStackedWidget;
@@ -23,6 +27,7 @@ public:
 
 protected:
     void showEvent(QShowEvent * event) override;
+    void closeEvent(QCloseEvent * event) override;
 
 private slots:
     void onPageSelected(int index);
@@ -35,6 +40,7 @@ private slots:
         const QString & source_language,
         bool back_translate);
     void onCancelRequested();
+    void onLanguageChanged();
     void onTranslateTaskStarted(quint64 task_id);
     void onTranslationFinished(quint64 task_id, int state);
     void onStatusChanged(const QString & message, bool busy);
@@ -50,6 +56,7 @@ private slots:
 private:
     void performStartupCheck();
     void syncSettingsToTaskService();
+    void syncLanguagesToSettings();
     void saveSettings();
     void setUiBusy(bool busy);
     void switchPage(int index);
@@ -82,5 +89,11 @@ private:
     bool model_loaded_ = false;
     bool busy_ = false;
     bool awaiting_download_load_ = false;
+    bool own_translation_active_ = false;
     quint64 active_translate_task_id_ = 0;
+
+    SystemTray * system_tray_ = nullptr;
+    HotkeyManager * hotkey_manager_ = nullptr;
+    PopupWindow * popup_window_ = nullptr;
+    SessionController * session_controller_ = nullptr;
 };

@@ -1,6 +1,9 @@
 #include "app/task_service.h"
 
+#include <cstdio>
+#include <QDebug>
 #include <QMetaObject>
+#include <QThread>
 
 TaskService::TaskService(QObject * parent)
     : QObject(parent) {
@@ -43,11 +46,21 @@ void TaskService::wireCallbacks() {
         emit taskStateChanged(task_id, static_cast<int>(state));
     };
 
+    callbacks.on_translation_finished = [this](std::uint64_t task_id, TaskState state) {
+        fprintf(stderr, "[TaskService] translationFinished task:%llu state:%d\n",
+                static_cast<unsigned long long>(task_id), static_cast<int>(state));
+        emit translationFinished(task_id, static_cast<int>(state));
+    };
+
     callbacks.on_target_reset = [this](std::uint64_t task_id) {
+        fprintf(stderr, "[TaskService] targetReset task:%llu\n",
+                static_cast<unsigned long long>(task_id));
         emit targetReset(task_id);
     };
 
     callbacks.on_target_appended = [this](std::uint64_t task_id, const std::string & piece) {
+        fprintf(stderr, "[TaskService] targetAppended task:%llu piece:'%s'\n",
+                static_cast<unsigned long long>(task_id), piece.c_str());
         emit targetAppended(
             task_id,
             QString::fromUtf8(piece.c_str(), static_cast<int>(piece.size())));
@@ -61,10 +74,6 @@ void TaskService::wireCallbacks() {
         emit backTranslateAppended(
             task_id,
             QString::fromUtf8(piece.c_str(), static_cast<int>(piece.size())));
-    };
-
-    callbacks.on_translation_finished = [this](std::uint64_t task_id, TaskState state) {
-        emit translationFinished(task_id, static_cast<int>(state));
     };
 
     orchestrator_.set_callbacks(std::move(callbacks));
@@ -157,6 +166,12 @@ void TaskService::translateInteractive(
     payload.source_language = source_language.toUtf8().constData();
     payload.back_translate = back_translate;
     const TaskId task_id = submitTranslatePipeline(payload, TaskPriority::Interactive);
+    fprintf(stderr, "[TaskService] translateInteractive task:%llu src_len:%d src:'%s' target:'%s' back:%d\n",
+            static_cast<unsigned long long>(task_id.value),
+            static_cast<int>(source.size()),
+            payload.source.c_str(),
+            payload.target_language.c_str(),
+            payload.back_translate ? 1 : 0);
     emit translateTaskStarted(task_id.value);
 }
 

@@ -6,6 +6,7 @@
 
 int main(int argc, char * argv[]) {
     QApplication app(argc, argv);
+    app.setQuitOnLastWindowClosed(false);
 
     QThread worker_thread;
     TaskService task_service;
