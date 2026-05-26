@@ -1,0 +1,129 @@
+name: Release Windows
+
+on:
+  workflow_call:
+
+jobs:
+  build-mingw-x64:
+    name: MinGW x64
+    runs-on: windows-latest
+    timeout-minutes: 180
+    env:
+      CMAKE_PRESET: mingw-release
+      VCPKG_TARGET_TRIPLET: x64-mingw-static
+      VCPKG_HOST_TRIPLET: x64-mingw-static
+      DIST_SUFFIX: mingw-x64
+      VCPKG_EXE: C:\vcpkg\vcpkg.exe
+      VCPKG_ROOT: C:\vcpkg
+      VCPKG_INSTALL_ROOT: ${{ github.workspace }}\build\mingw-release\vcpkg_installed
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\.vcpkg-cache
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Ninja
+        shell: pwsh
+        run: |
+          $url = "https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-win.zip"
+          $archive = Join-Path $env:TEMP "ninja.zip"
+          Invoke-WebRequest -Uri $url -OutFile $archive
+          Expand-Archive -Path $archive -DestinationPath C:\ninja
+          echo "C:\ninja" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Setup llvm-mingw
+        shell: pwsh
+        run: |
+          $url = "https://github.com/mstorsjo/llvm-mingw/releases/download/20250114/llvm-mingw-20250114-ucrt-x86_64.zip"
+          $archive = Join-Path $env:TEMP "llvm-mingw.zip"
+          Invoke-WebRequest -Uri $url -OutFile $archive
+          Expand-Archive -Path $archive -DestinationPath $env:TEMP
+          $extracted = Get-ChildItem "$env:TEMP\llvm-mingw-*" -Directory | Select-Object -First 1
+          Move-Item $extracted.FullName C:\llvm-mingw
+          echo "C:\llvm-mingw\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Cache vcpkg downloads
+        id: cache-vcpkg-downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_ROOT }}\downloads
+          key: vcpkg-downloads-mingw-x64-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
+          restore-keys: |
+            vcpkg-downloads-mingw-x64-
+
+      - name: Cache vcpkg binary artifacts
+        id: cache-vcpkg-blobs
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-blobs-mingw-x64-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
+          restore-keys: |
+            vcpkg-blobs-mingw-x64-
+
+      - name: Cache vcpkg_installed
+        id: cache-vcpkg-installed
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_INSTALL_ROOT }}
+          key: vcpkg-installed-mingw-x64-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
+
+      - name: Setup vcpkg
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path $env:VCPKG_DEFAULT_BINARY_CACHE
+
+          $config = Get-Content vcpkg-configuration.json | ConvertFrom-Json
+          $baseline = $config.'default-registry'.baseline
+          if (-not (Test-Path "$env:VCPKG_ROOT\.git")) {
+            $downloadsBackup = $null
+            if (Test-Path "$env:VCPKG_ROOT\downloads") {
+              $downloadsBackup = Join-Path $env:TEMP "vcpkg-downloads-backup"
+              Move-Item "$env:VCPKG_ROOT\downloads" $downloadsBackup -Force
+            }
+            Remove-Item $env:VCPKG_ROOT -Recurse -Force -ErrorAction SilentlyContinue
+            git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT
+            if ($downloadsBackup -and (Test-Path $downloadsBackup)) {
+              Remove-Item "$env:VCPKG_ROOT\downloads" -Recurse -Force -ErrorAction SilentlyContinue
+              Move-Item $downloadsBackup "$env:VCPKG_ROOT\downloads" -Force
+            }
+          }
+
+          git -C $env:VCPKG_ROOT fetch --depth 1 origin $baseline
+          git -C $env:VCPKG_ROOT checkout $baseline
+          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat"
+
+          Write-Host "downloads cache hit: ${{ steps.cache-vcpkg-downloads.outputs.cache-hit }}"
+          Write-Host "binary artifacts cache hit: ${{ steps.cache-vcpkg-blobs.outputs.cache-hit }}"
+          Write-Host "vcpkg_installed cache hit: ${{ steps.cache-vcpkg-installed.outputs.cache-hit }}"
+
+      - name: Install vcpkg dependencies
+        shell: pwsh
+        run: |
+          & $env:VCPKG_EXE install `
+            --triplet $env:VCPKG_TARGET_TRIPLET `
+            --host-triplet $env:VCPKG_HOST_TRIPLET `
+            --x-manifest-root=$env:GITHUB_WORKSPACE `
+            --x-install-root=$env:VCPKG_INSTALL_ROOT
+
+      - name: Configure
+        shell: pwsh
+        run: cmake --preset $env:CMAKE_PRESET
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build --preset $env:CMAKE_PRESET --parallel $env:NUMBER_OF_PROCESSORS
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          $output = "dist/QTrans-$version-$env:DIST_SUFFIX.exe"
+          New-Item -ItemType Directory -Force -Path dist
+          Copy-Item "build/$env:CMAKE_PRESET/QTrans.exe" $output
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qtrans-mingw-x64
+          path: dist/QTrans-*-mingw-x64.exe
+          if-no-files-found: error

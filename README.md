@@ -20,6 +20,7 @@
 
 - Translate and back-translate
 - Built-in model download and management
+- Word selection translation (hover or clipboard capture)
 
 ## Screenshot
 
@@ -31,26 +32,49 @@
 
 Prebuilt binaries are available on the [Releases](https://github.com/touken928/QTrans/releases) page:
 
-- macOS arm64: `QTrans-<version>-macos-arm64`
+- `QTrans-<version>-macos-arm64` — macOS ARM64
+- `QTrans-<version>-mingw-x64.exe` — Windows x64
 
 Download the file for your platform, make it executable on macOS if needed, then run it. On first launch, open **Model**, download the model, and click **Load**.
 
 ## Build from Source
 
-Requirements:
+### Prerequisites
 
 - [vcpkg](https://vcpkg.io/) (set `VCPKG_ROOT`)
 - CMake 3.21+, Ninja
-- macOS: `ninja`, `pkg-config`, `autoconf`, `automake`, `libtool`
+- macOS: `brew install ninja pkg-config autoconf autoconf-archive automake libtool`
+- Windows: MinGW toolchain (e.g. [llvm-mingw](https://github.com/mstorsjo/llvm-mingw)) in `PATH`
+
+### Build
 
 ```bash
-export VCPKG_ROOT=/path/to/vcpkg
+# macOS ARM64 (Release)
+cmake --preset arm64-osx-release
+cmake --build --preset arm64-osx-release
 
-cmake --preset dev-macos-arm64
-cmake --build --preset dev
+# Windows MinGW x64 (Release)
+cmake --preset x64-mingw-release
+cmake --build --preset x64-mingw-release
+
+# Windows MinGW arm64 (Release)
+cmake --preset arm64-mingw-release
+cmake --build --preset arm64-mingw-release
+
+# Debug (any platform, using VCPKG_DEFAULT_TRIPLET)
+cmake --preset default
+cmake --build --preset debug
 ```
 
-Release preset: `macos-arm64-static`.
+The triplet is set per preset. Override with `VCPKG_DEFAULT_TRIPLET` env var if needed.
+
+### clangd
+
+Configure with the `default` preset to generate `compile_commands.json` for clangd:
+
+```bash
+cmake --preset default
+```
 
 ## License
 

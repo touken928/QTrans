@@ -9,13 +9,13 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 180
     env:
-      CMAKE_PRESET: macos-arm64-static
+      CMAKE_PRESET: arm64-osx-release
       DIST_SUFFIX: macos-arm64
       VCPKG_EXE: /Users/runner/vcpkg/vcpkg
       VCPKG_ROOT: /Users/runner/vcpkg
       VCPKG_TRIPLET: arm64-osx-release
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
-      VCPKG_INSTALL_ROOT: ${{ github.workspace }}/build/vcpkg_installed
+      VCPKG_INSTALL_ROOT: ${{ github.workspace }}/build/arm64-osx-release/vcpkg_installed
 
     steps:
       - name: Checkout
@@ -110,7 +110,7 @@ jobs:
           OUTPUT="dist/QTrans-${VERSION}-${DIST_SUFFIX}"
 
           mkdir -p dist
-          cp build/QTrans "${OUTPUT}"
+          cp "build/${CMAKE_PRESET}/QTrans" "${OUTPUT}"
           chmod +x "${OUTPUT}"
 
           if otool -L "${OUTPUT}" | grep -E '@rpath|/vcpkg/'; then

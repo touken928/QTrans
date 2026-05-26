@@ -11,7 +11,7 @@
       "name": "base",
       "hidden": true,
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build",
+      "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
       }
@@ -19,106 +19,50 @@
     {
       "name": "default",
       "hidden": true,
-      "inherits": [
-        "dev-macos-arm64",
-        "dev-win-mingw"
-      ]
-    },
-    {
-      "name": "macos-arm64-static",
-      "displayName": "macOS arm64 static (Release)",
-      "description": "Static release build for macOS arm64 using vcpkg triplet arm64-osx.",
       "inherits": "base",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "hidden": true,
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "arm64-osx-release",
+      "displayName": "macOS arm64 (Release)",
+      "description": "Release build for macOS arm64.",
+      "inherits": "release",
+      "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "arm64-osx-release",
-        "VCPKG_HOST_TRIPLET": "arm64-osx-release",
-        "VCPKG_BUILD_TYPE": "release",
-        "VCPKG_INSTALL_OPTIONS": "--clean-after-build"
-      },
-      "environment": {
-        "VCPKG_DEFAULT_TRIPLET": "arm64-osx-release",
-        "VCPKG_DEFAULT_HOST_TRIPLET": "arm64-osx-release"
+        "VCPKG_HOST_TRIPLET": "arm64-osx-release"
       }
     },
     {
-      "name": "win-mingw-static",
-      "displayName": "Windows MinGW static (Release)",
-      "description": "Static release build for Windows using MinGW.",
-      "inherits": "base",
-      "binaryDir": "${sourceDir}/build/mingw-release",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_C_COMPILER": "D:/mingw64/bin/gcc.exe",
-        "CMAKE_CXX_COMPILER": "D:/mingw64/bin/g++.exe",
-        "VCPKG_TARGET_TRIPLET": "x64-mingw-static",
-        "VCPKG_HOST_TRIPLET": "x64-mingw-static",
-        "VCPKG_BUILD_TYPE": "release",
-        "VCPKG_INSTALL_OPTIONS": "--clean-after-build",
-        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets",
-        "CMAKE_MAKE_PROGRAM": "D:/ninja-win/ninja.exe"
-      },
-      "environment": {
-        "VCPKG_DEFAULT_TRIPLET": "x64-mingw-static"
-      }
-    },
-    {
-      "name": "dev-win-mingw",
-      "displayName": "Windows MinGW (Debug)",
-      "description": "Local debug build for Windows using MinGW.",
-      "inherits": "base",
-      "binaryDir": "${sourceDir}/build/mingw-debug",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
-      },
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_C_COMPILER": "D:/mingw64/bin/gcc.exe",
-        "CMAKE_CXX_COMPILER": "D:/mingw64/bin/g++.exe",
-        "CMAKE_MAKE_PROGRAM": "D:/ninja-win/ninja.exe",
-        "VCPKG_TARGET_TRIPLET": "x64-mingw-static",
-        "VCPKG_HOST_TRIPLET": "x64-mingw-static",
-        "VCPKG_BUILD_TYPE": "debug",
-        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets"
-      }
-    },
-    {
-      "name": "dev-macos-arm64",
-      "displayName": "macOS arm64 (Debug)",
-      "description": "Local debug build for macOS arm64.",
-      "inherits": "base",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Darwin"
-      },
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "VCPKG_TARGET_TRIPLET": "arm64-osx",
-        "VCPKG_BUILD_TYPE": "debug"
-      }
+      "name": "mingw-release",
+      "displayName": "MinGW (Release)",
+      "description": "Release build for Windows using MinGW.",
+      "inherits": "release"
     }
   ],
   "buildPresets": [
     {
-      "name": "macos-arm64-static",
-      "displayName": "macOS arm64 static (Release)",
-      "configurePreset": "macos-arm64-static"
+      "name": "arm64-osx-release",
+      "displayName": "macOS arm64 (Release)",
+      "configurePreset": "arm64-osx-release"
     },
     {
-      "name": "win-mingw-static",
-      "displayName": "Windows MinGW static (Release)",
-      "configurePreset": "win-mingw-static"
+      "name": "mingw-release",
+      "displayName": "MinGW (Release)",
+      "configurePreset": "mingw-release"
     },
     {
-      "name": "dev-win-mingw",
-      "displayName": "Windows MinGW (Debug)",
-      "configurePreset": "dev-win-mingw"
-    },
-    {
-      "name": "dev",
+      "name": "debug",
       "displayName": "Local development (Debug)",
       "configurePreset": "default"
     }
