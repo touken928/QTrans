@@ -10,7 +10,6 @@ jobs:
     timeout-minutes: 180
     env:
       CMAKE_PRESET: x64-mingw-release
-      VCPKG_TARGET_TRIPLET: x64-mingw-static
       VCPKG_HOST_TRIPLET: x64-linux-release
       DIST_SUFFIX: mingw-x64
       VCPKG_ROOT: /tmp/vcpkg
@@ -40,16 +39,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
-          key: vcpkg-blobs-mingw-x64-release-only-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
+          key: vcpkg-blobs-mingw-x64-static-release-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
           restore-keys: |
-            vcpkg-blobs-mingw-x64-release-only-
+            vcpkg-blobs-mingw-x64-static-release-
 
       - name: Cache vcpkg_installed
         id: cache-vcpkg-installed
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_INSTALL_ROOT }}
-          key: vcpkg-installed-mingw-x64-release-only-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
+          key: vcpkg-installed-mingw-x64-static-release-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
 
       - name: Setup vcpkg
         shell: bash
@@ -86,16 +85,6 @@ jobs:
           else
             echo "vcpkg_installed missing - expect qtbase to compile from source"
           fi
-
-      - name: Install vcpkg dependencies (Release)
-        shell: bash
-        run: |
-          "${VCPKG_ROOT}/vcpkg" install \
-            --triplet "${VCPKG_TARGET_TRIPLET}" \
-            --host-triplet "${VCPKG_HOST_TRIPLET}" \
-            --x-manifest-root="${GITHUB_WORKSPACE}" \
-            --x-install-root="${VCPKG_INSTALL_ROOT}" \
-            --clean-after-build
 
       - name: Configure application
         shell: bash

@@ -49,7 +49,7 @@
       "description": "Release build for Windows x64 using MinGW.",
       "inherits": "release",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-mingw-static"
+        "VCPKG_TARGET_TRIPLET": "x64-mingw-static-release"
       }
     }
   ],
