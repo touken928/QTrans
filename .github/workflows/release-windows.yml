@@ -161,11 +161,11 @@ jobs:
             Add-BundledDll $dll
           }
 
-          # OpenMP may not appear in PE imports with -static, but llama.cpp still needs libgomp at runtime.
-          Add-BundledDll "libgomp-1.dll"
+          # llvm-mingw uses libomp.dll (not GCC libgomp-1.dll); bundle even if -static hides PE imports.
+          Add-BundledDll "libomp.dll"
 
-          if ($bundled -notcontains "libgomp-1.dll") {
-            Write-Error "libgomp-1.dll not found in $mingwBin"
+          if ($bundled -notcontains "libomp.dll") {
+            Write-Error "libomp.dll not found in $mingwBin"
           }
 
           Write-Host "Bundled MinGW runtime DLLs:"
