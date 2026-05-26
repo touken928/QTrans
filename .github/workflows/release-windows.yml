@@ -147,17 +147,27 @@ jobs:
           Write-Host "Imported DLLs:"
           $imports | ForEach-Object { Write-Host "  $_" }
 
-          $bundled = @()
-          foreach ($dll in $imports) {
+          function Add-BundledDll([string]$dll) {
+            if ($bundled -contains $dll) { return }
             $src = Join-Path $mingwBin $dll
             if (Test-Path $src) {
               Copy-Item $src $stage
-              $bundled += $dll
+              $script:bundled += $dll
             }
           }
 
+          $bundled = @()
+          foreach ($dll in $imports) {
+            Add-BundledDll $dll
+          }
+
+          # OpenMP may not appear in PE imports with -static, but llama.cpp still needs libgomp at runtime.
+          foreach ($dll in @("libgomp-1.dll", "libwinpthread-1.dll", "libgcc_s_seh-1.dll")) {
+            Add-BundledDll $dll
+          }
+
           if ($bundled -notcontains "libgomp-1.dll") {
-            Write-Error "Expected libgomp-1.dll in PE imports for OpenMP-enabled build"
+            Write-Error "libgomp-1.dll not found in $mingwBin"
           }
 
           Write-Host "Bundled MinGW runtime DLLs:"
