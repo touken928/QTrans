@@ -106,13 +106,17 @@ jobs:
       - name: Configure application
         shell: pwsh
         run: |
-          cmake --preset $env:CMAKE_PRESET `
-            -DCMAKE_SYSTEM_NAME=Windows `
-            -DCMAKE_C_COMPILER="$env:LLVM_MINGW/bin/x86_64-w64-mingw32-gcc" `
-            -DCMAKE_CXX_COMPILER="$env:LLVM_MINGW/bin/x86_64-w64-mingw32-g++" `
-            -DCMAKE_MAKE_PROGRAM=C:/ninja/ninja.exe `
-            -DVCPKG_HOST_TRIPLET=$env:VCPKG_HOST_TRIPLET `
-            -DVCPKG_APPLOCAL_DEPS=OFF
+          $llvmMingw = $env:LLVM_MINGW -replace '\\', '/'
+          $cmakeArgs = @(
+            "--preset", $env:CMAKE_PRESET,
+            "-DCMAKE_SYSTEM_NAME=Windows",
+            "-DCMAKE_C_COMPILER=$llvmMingw/bin/x86_64-w64-mingw32-gcc.exe",
+            "-DCMAKE_CXX_COMPILER=$llvmMingw/bin/x86_64-w64-mingw32-g++.exe",
+            "-DCMAKE_MAKE_PROGRAM=C:/ninja/ninja.exe",
+            "-DVCPKG_HOST_TRIPLET=$($env:VCPKG_HOST_TRIPLET)",
+            "-DVCPKG_APPLOCAL_DEPS=OFF"
+          )
+          cmake @cmakeArgs
 
       - name: Build application
         shell: pwsh
