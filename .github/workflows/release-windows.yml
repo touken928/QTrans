@@ -141,7 +141,7 @@ jobs:
           )
           $imports = & $objdump -p $binary
           foreach ($dll in $unwanted) {
-            if ($imports -match "DLL Name: $dll") {
+            if ($imports | Select-String -SimpleMatch "DLL Name: $dll" -Quiet) {
               Write-Error "Unexpected dependency on $dll - static linking failed"
             }
           }
