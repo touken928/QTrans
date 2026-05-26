@@ -9,6 +9,11 @@ constexpr const char kPortableMarker[] = ".portable";
 constexpr const char kDefaultModelFile[] = "Hy-MT2-1.8B-1.25Bit.gguf";
 
 std::filesystem::path homeDirectory() {
+#ifdef _WIN32
+    if (const char * userprofile = std::getenv("USERPROFILE"); userprofile != nullptr && userprofile[0] != '\0') {
+        return std::filesystem::path(userprofile);
+    }
+#endif
     if (const char * home = std::getenv("HOME"); home != nullptr && home[0] != '\0') {
         return std::filesystem::path(home);
     }

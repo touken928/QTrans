@@ -57,10 +57,6 @@ cmake --build --preset arm64-osx-release
 cmake --preset x64-mingw-release
 cmake --build --preset x64-mingw-release
 
-# Windows MinGW arm64（Release）
-cmake --preset arm64-mingw-release
-cmake --build --preset arm64-mingw-release
-
 # Debug（任意平台，使用 VCPKG_DEFAULT_TRIPLET）
 cmake --preset default
 cmake --build --preset debug

@@ -39,15 +39,17 @@
       "description": "Release build for macOS arm64.",
       "inherits": "release",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "arm64-osx-release",
-        "VCPKG_HOST_TRIPLET": "arm64-osx-release"
+        "VCPKG_TARGET_TRIPLET": "arm64-osx-release"
       }
     },
     {
-      "name": "mingw-release",
-      "displayName": "MinGW (Release)",
-      "description": "Release build for Windows using MinGW.",
-      "inherits": "release"
+      "name": "x64-mingw-release",
+      "displayName": "MinGW x64 (Release)",
+      "description": "Release build for Windows x64 using MinGW.",
+      "inherits": "release",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-mingw-static"
+      }
     }
   ],
   "buildPresets": [
@@ -57,9 +59,9 @@
       "configurePreset": "arm64-osx-release"
     },
     {
-      "name": "mingw-release",
-      "displayName": "MinGW (Release)",
-      "configurePreset": "mingw-release"
+      "name": "x64-mingw-release",
+      "displayName": "MinGW x64 (Release)",
+      "configurePreset": "x64-mingw-release"
     },
     {
       "name": "debug",

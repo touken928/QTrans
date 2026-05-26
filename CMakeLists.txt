@@ -95,3 +95,7 @@ elseif(APPLE)
         INCLUDE BY_TYPE platformthemes Qt6::QMacStylePlugin
     )
 endif()
+
+if(MINGW)
+    target_link_options(QTrans PRIVATE -static-libgcc -static-libstdc++ -static -mwindows)
+endif()
