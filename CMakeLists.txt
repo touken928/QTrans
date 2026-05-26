@@ -97,5 +97,6 @@ elseif(APPLE)
 endif()
 
 if(MINGW)
-    target_link_options(QTrans PRIVATE -static-libgcc -static-libstdc++ -static -mwindows)
+    # libgomp stays dynamic; release zip bundles OpenMP DLLs next to QTrans.exe.
+    target_link_options(QTrans PRIVATE -static-libgcc -static-libstdc++ -mwindows)
 endif()

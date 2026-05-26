@@ -33,9 +33,9 @@
 预编译二进制可在 [Releases](https://github.com/touken928/QTrans/releases) 页面获取：
 
 - `QTrans-<版本>-macos-arm64` — macOS ARM64
-- `QTrans-<版本>-mingw-x64.exe` — Windows x64
+- `QTrans-<版本>-mingw-x64.zip` — Windows x64（内含 `QTrans.exe` 及 OpenMP 运行库 DLL）
 
-下载对应平台的文件，在 macOS 上如需请先赋予可执行权限，然后运行。首次使用请打开 **Model** 页面下载模型，再点击 **Load**。
+下载对应平台的压缩包。Windows 请解压后运行 `QTrans.exe`；macOS 上如需请先赋予可执行权限，然后运行。首次使用请打开 **Model** 页面下载模型，再点击 **Load**。
 
 ## 从源码构建
 

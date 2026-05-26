@@ -122,42 +122,55 @@ jobs:
         shell: pwsh
         run: cmake --build --preset $env:CMAKE_PRESET --parallel $env:NUMBER_OF_PROCESSORS
 
-      - name: Validate binary
+      - name: Package
         shell: pwsh
         run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
           $binary = "build/$env:CMAKE_PRESET/QTrans.exe"
           $objdump = "$env:LLVM_MINGW/bin/llvm-objdump.exe"
+          $mingwBin = "$env:LLVM_MINGW/bin"
+          $stage = "dist/QTrans-$version-$env:DIST_SUFFIX"
+          $zip = "$stage.zip"
 
           & $objdump -p $binary | Out-Null
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Invalid PE binary"
           }
 
-          $unwanted = @(
-            "libstdc++-6.dll",
-            "libgcc_s_seh-1.dll",
-            "libgcc_s_sjlj-1.dll",
-            "libwinpthread-1.dll"
-          )
-          $imports = & $objdump -p $binary
-          foreach ($dll in $unwanted) {
-            if ($imports | Select-String -SimpleMatch "DLL Name: $dll" -Quiet) {
-              Write-Error "Unexpected dependency on $dll - static linking failed"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item $binary "$stage/QTrans.exe"
+
+          $imports = & $objdump -p $binary |
+            Select-String -SimpleMatch "DLL Name:" |
+            ForEach-Object { ($_ -split "DLL Name:\s+", 2)[1].Trim() }
+
+          Write-Host "Imported DLLs:"
+          $imports | ForEach-Object { Write-Host "  $_" }
+
+          $bundled = @()
+          foreach ($dll in $imports) {
+            $src = Join-Path $mingwBin $dll
+            if (Test-Path $src) {
+              Copy-Item $src $stage
+              $bundled += $dll
             }
           }
-          Write-Host "Binary validation passed - no MinGW runtime DLLs leaked"
 
-      - name: Package
-        shell: pwsh
-        run: |
-          $version = $env:GITHUB_REF_NAME -replace '^v', ''
-          $output = "dist/QTrans-$version-$env:DIST_SUFFIX.exe"
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item "build/$env:CMAKE_PRESET/QTrans.exe" $output
+          if ($bundled -notcontains "libgomp-1.dll") {
+            Write-Error "Expected libgomp-1.dll in PE imports for OpenMP-enabled build"
+          }
+
+          Write-Host "Bundled MinGW runtime DLLs:"
+          $bundled | ForEach-Object { Write-Host "  $_" }
+
+          if (Test-Path $zip) {
+            Remove-Item $zip -Force
+          }
+          Compress-Archive -Path "$stage/*" -DestinationPath $zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: qtrans-mingw-x64
-          path: dist/QTrans-*-mingw-x64.exe
+          path: dist/QTrans-*-mingw-x64.zip
           if-no-files-found: error

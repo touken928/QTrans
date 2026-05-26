@@ -33,9 +33,9 @@
 Prebuilt binaries are available on the [Releases](https://github.com/touken928/QTrans/releases) page:
 
 - `QTrans-<version>-macos-arm64` — macOS ARM64
-- `QTrans-<version>-mingw-x64.exe` — Windows x64
+- `QTrans-<version>-mingw-x64.zip` — Windows x64 (contains `QTrans.exe` and OpenMP runtime DLLs)
 
-Download the file for your platform, make it executable on macOS if needed, then run it. On first launch, open **Model**, download the model, and click **Load**.
+Download the archive for your platform. On Windows, unzip and run `QTrans.exe`. On macOS, make the app executable if needed, then run it. On first launch, open **Model**, download the model, and click **Load**.
 
 ## Build from Source
 
