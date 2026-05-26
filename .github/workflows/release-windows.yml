@@ -162,9 +162,7 @@ jobs:
           }
 
           # OpenMP may not appear in PE imports with -static, but llama.cpp still needs libgomp at runtime.
-          foreach ($dll in @("libgomp-1.dll", "libwinpthread-1.dll", "libgcc_s_seh-1.dll")) {
-            Add-BundledDll $dll
-          }
+          Add-BundledDll "libgomp-1.dll"
 
           if ($bundled -notcontains "libgomp-1.dll") {
             Write-Error "libgomp-1.dll not found in $mingwBin"
