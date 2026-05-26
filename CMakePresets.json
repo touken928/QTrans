@@ -39,7 +39,8 @@
       "description": "Release build for macOS arm64.",
       "inherits": "release",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "arm64-osx-release"
+        "VCPKG_TARGET_TRIPLET": "arm64-osx-release",
+        "VCPKG_HOST_TRIPLET": "arm64-osx-release"
       }
     },
     {
