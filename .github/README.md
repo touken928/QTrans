@@ -28,19 +28,17 @@ git fetch --prune
 git branch -d users/<GitHub用户名>/<主题>
 ```
 
-发版：`git tag v1.0.0 && git push origin v1.0.0`（触发 `release/` workflow）。
+发版：`git tag v1.0.0 && git push origin v1.0.0`（触发 `release.yml`）。
 
 ## `workflows/`
 
-| 目录 | 用途 |
-|------|------|
-| `ci/` | PR 检查：分支命名、代码格式 |
-| `release/` | 打 tag 后的多平台构建与 GitHub Release |
+Workflow 文件须放在 `.github/workflows/` **根目录**（不要放在子目录，否则 GitHub 可能无法识别）。
 
-| Workflow | 检查名（Ruleset ADD checks） | 触发 |
-|----------|------------------------------|------|
+| 文件 | 检查名（Ruleset ADD checks） | 触发 |
+|------|------------------------------|------|
 | `branch-policy.yml` | **Branch naming** | push 非 `main`；PR → `main` |
 | `format-check.yml` | **Code formatting** | PR → `main` |
+| `release.yml` | — | tag `v*` |
 
 ## 本地格式化
 
@@ -51,4 +49,4 @@ while IFS= read -r -d '' f; do clang-format -i "$f"; done \
 
 ## Ruleset（保护 `main`）
 
-见仓库 Wiki 或团队文档；首次配置前到 **Actions** 手动 Run 一次 workflow，或 push 功能分支并开 PR，以便 **ADD checks** 出现 **Branch naming** / **Code formatting**。
+CI 至少成功跑过一次后，在 **ADD checks** 中搜索 **Branch naming**、**Code formatting** 并添加。
