@@ -2,12 +2,11 @@
 
 namespace {
 
-bool is_normal_translate(const Task & task) {
-    return task.kind == TaskKind::TranslatePipeline
-        && task.priority == TaskPriority::Normal;
+bool is_normal_translate(const Task &task) {
+    return task.kind == TaskKind::TranslatePipeline && task.priority == TaskPriority::Normal;
 }
 
-} // namespace
+}  // namespace
 
 TaskId TaskQueue::enqueue(Task task) {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -75,7 +74,7 @@ std::vector<TaskId> TaskQueue::cancel_all_pending_normal_translate_tasks() {
     std::lock_guard<std::mutex> lock(mutex_);
 
     std::vector<TaskId> cancelled;
-    for (Task & task : pending_) {
+    for (Task &task : pending_) {
         if (is_normal_translate(task) && states_[task.id.value] == TaskState::Pending) {
             states_[task.id.value] = TaskState::Cancelled;
             cancelled.push_back(task.id);

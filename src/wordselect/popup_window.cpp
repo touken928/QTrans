@@ -8,13 +8,10 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
-PopupWindow::PopupWindow(QWidget* parent)
+PopupWindow::PopupWindow(QWidget *parent)
     : QWidget(parent) {
     setWindowFlags(
-        Qt::FramelessWindowHint
-        | Qt::WindowStaysOnTopHint
-        | Qt::ToolTip
-        | Qt::NoDropShadowWindowHint);
+        Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::ToolTip | Qt::NoDropShadowWindowHint);
     setAttribute(Qt::WA_ShowWithoutActivating, true);
     setAttribute(Qt::WA_DeleteOnClose, false);
 
@@ -32,7 +29,7 @@ void PopupWindow::setupUI() {
     m_frame = new QFrame(this);
     m_frame->setObjectName(QStringLiteral("popupFrame"));
 
-    auto* layout = new QVBoxLayout(m_frame);
+    auto *layout = new QVBoxLayout(m_frame);
     layout->setContentsMargins(14, 12, 14, 8);
     layout->setSpacing(6);
 
@@ -47,7 +44,7 @@ void PopupWindow::setupUI() {
     m_statusLabel->setObjectName(QStringLiteral("popupStatus"));
     layout->addWidget(m_statusLabel);
 
-    auto* outerLayout = new QVBoxLayout(this);
+    auto *outerLayout = new QVBoxLayout(this);
     outerLayout->setContentsMargins(0, 0, 0, 0);
     outerLayout->addWidget(m_frame);
 
@@ -76,7 +73,7 @@ void PopupWindow::setupUI() {
     )"));
 }
 
-void PopupWindow::showLoading(const QString& sourceText) {
+void PopupWindow::showLoading(const QString &sourceText) {
     Q_UNUSED(sourceText);
     m_isStreaming = true;
 
@@ -96,7 +93,7 @@ void PopupWindow::showLoading(const QString& sourceText) {
     raise();
 }
 
-void PopupWindow::appendChunk(const QString& chunk) {
+void PopupWindow::appendChunk(const QString &chunk) {
     if (!m_isStreaming) return;
 
     QString current = m_resultLabel->text();
@@ -127,7 +124,7 @@ void PopupWindow::finishStreaming() {
     startAutoClose();
 }
 
-void PopupWindow::showError(const QString& message) {
+void PopupWindow::showError(const QString &message) {
     m_isStreaming = false;
 
     m_resultLabel->setText(message);
@@ -157,19 +154,19 @@ bool PopupWindow::isStreaming() const {
     return m_isStreaming;
 }
 
-void PopupWindow::enterEvent(QEnterEvent* event) {
+void PopupWindow::enterEvent(QEnterEvent *event) {
     m_closeTimer->stop();
     QWidget::enterEvent(event);
 }
 
-void PopupWindow::leaveEvent(QEvent* event) {
+void PopupWindow::leaveEvent(QEvent *event) {
     if (!m_isStreaming) {
         startAutoClose();
     }
     QWidget::leaveEvent(event);
 }
 
-void PopupWindow::hideEvent(QHideEvent* event) {
+void PopupWindow::hideEvent(QHideEvent *event) {
     m_isStreaming = false;
     m_closeTimer->stop();
     emit dismissed();
@@ -178,7 +175,7 @@ void PopupWindow::hideEvent(QHideEvent* event) {
 
 void PopupWindow::positionNearCursor() {
     const QPoint cursorPos = QCursor::pos();
-    QScreen* screen = QApplication::screenAt(cursorPos);
+    QScreen *screen = QApplication::screenAt(cursorPos);
     if (!screen) {
         screen = QApplication::primaryScreen();
     }

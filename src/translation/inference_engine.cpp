@@ -8,7 +8,7 @@
 
 namespace {
 
-TranslateStepResult make_failure(const std::string & message) {
+TranslateStepResult make_failure(const std::string &message) {
     TranslateStepResult result{};
     result.outcome = InferenceOutcome::Failed;
     result.error_message = message;
@@ -28,17 +28,17 @@ TranslateStepResult make_completed(std::string text) {
     return result;
 }
 
-bool is_cancelled(const CancelToken * cancel_token) {
+bool is_cancelled(const CancelToken *cancel_token) {
     return cancel_token != nullptr && cancel_token->is_cancelled();
 }
 
-} // namespace
+}  // namespace
 
 bool InferenceEngine::is_loaded() const {
     return model_ != nullptr && model_->is_loaded();
 }
 
-void InferenceEngine::load(const std::string & model_path, const TranslationModelConfig & config) {
+void InferenceEngine::load(const std::string &model_path, const TranslationModelConfig &config) {
     if (!download_file_exists(model_path)) {
         throw std::runtime_error("model file not found: " + model_path);
     }
@@ -57,10 +57,10 @@ void InferenceEngine::unload() {
 }
 
 TranslateStepResult InferenceEngine::translate(
-    const std::string & text,
-    const std::string & target_language,
-    const std::function<void(const std::string &)> & on_token,
-    const CancelToken * cancel_token) {
+    const std::string &text,
+    const std::string &target_language,
+    const std::function<void(const std::string &)> &on_token,
+    const CancelToken *cancel_token) {
     if (!is_loaded()) {
         return make_failure("model is not loaded");
     }
@@ -83,16 +83,16 @@ TranslateStepResult InferenceEngine::translate(
         return make_completed(result);
     } catch (const TranslationCancelled &) {
         return make_cancelled();
-    } catch (const std::exception & ex) {
+    } catch (const std::exception &ex) {
         return make_failure(ex.what());
     }
 }
 
 TranslateStepResult InferenceEngine::run_translate_pipeline(
-    const TranslatePipelinePayload & payload,
-    const std::function<void(bool is_back_channel)> & on_reset,
-    const std::function<void(bool is_back_channel, const std::string & piece)> & on_token,
-    const CancelToken * cancel_token) {
+    const TranslatePipelinePayload &payload,
+    const std::function<void(bool is_back_channel)> &on_reset,
+    const std::function<void(bool is_back_channel, const std::string &piece)> &on_token,
+    const CancelToken *cancel_token) {
     if (on_reset) {
         on_reset(false);
     }
@@ -100,7 +100,7 @@ TranslateStepResult InferenceEngine::run_translate_pipeline(
     TranslateStepResult forward = translate(
         payload.source,
         payload.target_language,
-        [&](const std::string & piece) {
+        [&](const std::string &piece) {
             if (on_token) {
                 on_token(false, piece);
             }
@@ -130,7 +130,7 @@ TranslateStepResult InferenceEngine::run_translate_pipeline(
     return translate(
         forward.text,
         payload.source_language,
-        [&](const std::string & piece) {
+        [&](const std::string &piece) {
             if (on_token) {
                 on_token(true, piece);
             }

@@ -6,13 +6,11 @@
 
 namespace {
 
-bool colorsSimilar(const QColor & a, const QColor & b, int tolerance) {
-    return qAbs(a.red() - b.red()) <= tolerance
-        && qAbs(a.green() - b.green()) <= tolerance
-        && qAbs(a.blue() - b.blue()) <= tolerance;
+bool colorsSimilar(const QColor &a, const QColor &b, int tolerance) {
+    return qAbs(a.red() - b.red()) <= tolerance && qAbs(a.green() - b.green()) <= tolerance && qAbs(a.blue() - b.blue()) <= tolerance;
 }
 
-bool rowIsBorder(const QImage & image, int y, const QColor & background, int tolerance) {
+bool rowIsBorder(const QImage &image, int y, const QColor &background, int tolerance) {
     for (int x = 0; x < image.width(); ++x) {
         if (!colorsSimilar(image.pixelColor(x, y), background, tolerance)) {
             return false;
@@ -21,7 +19,7 @@ bool rowIsBorder(const QImage & image, int y, const QColor & background, int tol
     return true;
 }
 
-bool columnIsBorder(const QImage & image, int x, const QColor & background, int tolerance) {
+bool columnIsBorder(const QImage &image, int x, const QColor &background, int tolerance) {
     for (int y = 0; y < image.height(); ++y) {
         if (!colorsSimilar(image.pixelColor(x, y), background, tolerance)) {
             return false;
@@ -30,9 +28,9 @@ bool columnIsBorder(const QImage & image, int x, const QColor & background, int 
     return true;
 }
 
-} // namespace
+}  // namespace
 
-QImage trimNearSolidBorder(const QImage & image, int tolerance) {
+QImage trimNearSolidBorder(const QImage &image, int tolerance) {
     if (image.isNull()) {
         return image;
     }
@@ -65,7 +63,7 @@ QImage trimNearSolidBorder(const QImage & image, int tolerance) {
     return source.copy(left, top, right - left + 1, bottom - top + 1);
 }
 
-QPixmap scaledPixmapForWidth(const QImage & image, int logical_width, qreal device_pixel_ratio) {
+QPixmap scaledPixmapForWidth(const QImage &image, int logical_width, qreal device_pixel_ratio) {
     if (image.isNull() || logical_width <= 0 || device_pixel_ratio <= 0.0) {
         return QPixmap();
     }

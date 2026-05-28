@@ -6,7 +6,7 @@
 #include <QGuiApplication>
 #include <QThread>
 
-int main(int argc, char * argv[]) {
+int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
     app.setQuitOnLastWindowClosed(false);
 
@@ -21,11 +21,11 @@ int main(int argc, char * argv[]) {
 
     MainWindow window(&task_service, &worker_thread);
     QObject::connect(&app, &QGuiApplication::applicationStateChanged, &window,
-        [&window](Qt::ApplicationState state) {
-            if (state == Qt::ApplicationActive && !window.isVisible()) {
-                window.bringToForeground();
-            }
-        });
+                     [&window](Qt::ApplicationState state) {
+                         if (state == Qt::ApplicationActive && !window.isVisible()) {
+                             window.bringToForeground();
+                         }
+                     });
     window.show();
 
     const int result = app.exec();

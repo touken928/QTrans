@@ -7,14 +7,14 @@
 #include <QVBoxLayout>
 
 ModelMissingPanel::ModelMissingPanel(
-    const QString & mode_label,
-    const QString & model_path,
-    QWidget * parent)
+    const QString &mode_label,
+    const QString &model_path,
+    QWidget *parent)
     : QWidget(parent) {
-    auto * layout = new QVBoxLayout(this);
+    auto *layout = new QVBoxLayout(this);
     layout->setSpacing(12);
 
-    auto * title = new QLabel(QStringLiteral("Model Not Found"), this);
+    auto *title = new QLabel(QStringLiteral("Model Not Found"), this);
     QFont title_font = title->font();
     title_font.setBold(true);
     title_font.setPointSize(title_font.pointSize() + 2);
@@ -25,16 +25,16 @@ ModelMissingPanel::ModelMissingPanel(
                                 "The model file was not found in %1 mode:\n%2\n\nDownload and load it now?")
                                 .arg(mode_label)
                                 .arg(model_path);
-    auto * body = new QLabel(message, this);
+    auto *body = new QLabel(message, this);
     body->setWordWrap(true);
     body->setTextInteractionFlags(Qt::TextSelectableByMouse);
     layout->addWidget(body);
 
-    auto * buttons = new QHBoxLayout();
+    auto *buttons = new QHBoxLayout();
     buttons->addStretch(1);
 
-    auto * later_button = new QPushButton(QStringLiteral("Not Now"), this);
-    auto * download_button = new QPushButton(QStringLiteral("Download"), this);
+    auto *later_button = new QPushButton(QStringLiteral("Not Now"), this);
+    auto *download_button = new QPushButton(QStringLiteral("Download"), this);
     download_button->setObjectName(QStringLiteral("primaryButton"));
 
     buttons->addWidget(later_button);

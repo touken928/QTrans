@@ -15,6 +15,6 @@ struct ModelLoadRequest {
     TranslationModelConfig config{};
 };
 
-std::vector<std::uint8_t> read_file_bytes(const std::string & path);
+std::vector<std::uint8_t> read_file_bytes(const std::string &path);
 
-void resolve_model_path(ModelLoadRequest & request);
+void resolve_model_path(ModelLoadRequest &request);

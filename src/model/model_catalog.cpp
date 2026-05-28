@@ -14,15 +14,15 @@ const ModelCatalogEntry k_models[] = {
     },
 };
 
-} // namespace
+}  // namespace
 
-const std::vector<ModelCatalogEntry> & model_catalog() {
+const std::vector<ModelCatalogEntry> &model_catalog() {
     static const std::vector<ModelCatalogEntry> entries(std::begin(k_models), std::end(k_models));
     return entries;
 }
 
-const ModelCatalogEntry * find_model_by_id(const std::string & id) {
-    for (const ModelCatalogEntry & entry : model_catalog()) {
+const ModelCatalogEntry *find_model_by_id(const std::string &id) {
+    for (const ModelCatalogEntry &entry : model_catalog()) {
         if (entry.id == id) {
             return &entry;
         }
@@ -30,9 +30,9 @@ const ModelCatalogEntry * find_model_by_id(const std::string & id) {
     return nullptr;
 }
 
-const ModelCatalogEntry * find_model_by_filename(const std::string & filename) {
+const ModelCatalogEntry *find_model_by_filename(const std::string &filename) {
     const std::string leaf = std::filesystem::path(filename).filename().string();
-    for (const ModelCatalogEntry & entry : model_catalog()) {
+    for (const ModelCatalogEntry &entry : model_catalog()) {
         if (entry.filename == leaf) {
             return &entry;
         }
@@ -40,6 +40,6 @@ const ModelCatalogEntry * find_model_by_filename(const std::string & filename) {
     return nullptr;
 }
 
-const ModelCatalogEntry * default_model() {
+const ModelCatalogEntry *default_model() {
     return &model_catalog().front();
 }

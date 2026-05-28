@@ -6,9 +6,9 @@
 
 namespace {
 
-FILE * open_memory_buffer_as_file(std::vector<std::uint8_t> & buffer) {
+FILE *open_memory_buffer_as_file(std::vector<std::uint8_t> &buffer) {
 #if defined(_WIN32)
-    FILE * file = std::tmpfile();
+    FILE *file = std::tmpfile();
     if (file == nullptr) {
         return nullptr;
     }
@@ -26,7 +26,7 @@ FILE * open_memory_buffer_as_file(std::vector<std::uint8_t> & buffer) {
 #endif
 }
 
-} // namespace
+}  // namespace
 
 LlamaModelFromMemory::~LlamaModelFromMemory() {
     if (model != nullptr) {
@@ -39,7 +39,7 @@ LlamaModelFromMemory::~LlamaModelFromMemory() {
     }
 }
 
-LlamaModelFromMemory::LlamaModelFromMemory(LlamaModelFromMemory && other) noexcept
+LlamaModelFromMemory::LlamaModelFromMemory(LlamaModelFromMemory &&other) noexcept
     : buffer(std::move(other.buffer)),
       file(other.file),
       model(other.model) {
@@ -47,7 +47,7 @@ LlamaModelFromMemory::LlamaModelFromMemory(LlamaModelFromMemory && other) noexce
     other.model = nullptr;
 }
 
-LlamaModelFromMemory & LlamaModelFromMemory::operator=(LlamaModelFromMemory && other) noexcept {
+LlamaModelFromMemory &LlamaModelFromMemory::operator=(LlamaModelFromMemory &&other) noexcept {
     if (this != &other) {
         this->~LlamaModelFromMemory();
         buffer = std::move(other.buffer);
@@ -60,8 +60,8 @@ LlamaModelFromMemory & LlamaModelFromMemory::operator=(LlamaModelFromMemory && o
 }
 
 LlamaModelFromMemory load_llama_model_from_memory(
-    const std::vector<std::uint8_t> & data,
-    const llama_model_params & params) {
+    const std::vector<std::uint8_t> &data,
+    const llama_model_params &params) {
     if (data.empty()) {
         throw std::invalid_argument("gguf data is empty");
     }

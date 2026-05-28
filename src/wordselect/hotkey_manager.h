@@ -10,12 +10,11 @@
 #include <Carbon/Carbon.h>
 #endif
 
-class HotkeyManager : public QObject, public QAbstractNativeEventFilter
-{
+class HotkeyManager : public QObject, public QAbstractNativeEventFilter {
     Q_OBJECT
 
 public:
-    explicit HotkeyManager(QObject* parent = nullptr);
+    explicit HotkeyManager(QObject *parent = nullptr);
     ~HotkeyManager() override;
 
     bool registerHotkey(int id, Qt::KeyboardModifiers modifiers, Qt::Key key);
@@ -23,8 +22,8 @@ public:
     void unregisterAll();
     bool isRegistered(int id) const;
 
-    bool nativeEventFilter(const QByteArray& eventType, void* message,
-                           qintptr* result) override;
+    bool nativeEventFilter(const QByteArray &eventType, void *message,
+                           qintptr *result) override;
 
 signals:
     void hotkeyTriggered(int id);

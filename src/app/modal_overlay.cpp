@@ -8,7 +8,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
-ModalOverlay::ModalOverlay(QWidget * parent)
+ModalOverlay::ModalOverlay(QWidget *parent)
     : QWidget(parent) {
     setObjectName(QStringLiteral("modalOverlay"));
     setAttribute(Qt::WA_StyledBackground, true);
@@ -30,7 +30,7 @@ ModalOverlay::ModalOverlay(QWidget * parent)
     }
 }
 
-void ModalOverlay::setContent(QWidget * content, const QSize & preferred_size) {
+void ModalOverlay::setContent(QWidget *content, const QSize &preferred_size) {
     preferred_size_ = preferred_size;
 
     if (content_widget_ != nullptr) {
@@ -74,12 +74,12 @@ void ModalOverlay::hideModal() {
     hide();
 }
 
-void ModalOverlay::resizeEvent(QResizeEvent * event) {
+void ModalOverlay::resizeEvent(QResizeEvent *event) {
     QWidget::resizeEvent(event);
     repositionPanel();
 }
 
-bool ModalOverlay::eventFilter(QObject * watched, QEvent * event) {
+bool ModalOverlay::eventFilter(QObject *watched, QEvent *event) {
     if (watched == parentWidget() && event->type() == QEvent::Resize) {
         setGeometry(parentWidget()->rect());
         repositionPanel();

@@ -21,7 +21,7 @@ BOOL CALLBACK findMainWindow(HWND hwnd, LPARAM) {
     return FALSE;
 }
 
-} // namespace
+}  // namespace
 
 void activateExistingApplication() {
     EnumWindows(findMainWindow, 0);

@@ -5,7 +5,7 @@
 #include <QMetaObject>
 #include <QThread>
 
-TaskService::TaskService(QObject * parent)
+TaskService::TaskService(QObject *parent)
     : QObject(parent) {
     wireCallbacks();
 }
@@ -13,13 +13,13 @@ TaskService::TaskService(QObject * parent)
 void TaskService::wireCallbacks() {
     TaskOrchestratorCallbacks callbacks{};
 
-    callbacks.on_status = [this](const std::string & message, bool busy) {
+    callbacks.on_status = [this](const std::string &message, bool busy) {
         emit statusChanged(
             QString::fromUtf8(message.c_str(), static_cast<int>(message.size())),
             busy);
     };
 
-    callbacks.on_model_load_finished = [this](bool success, const std::string & error_message) {
+    callbacks.on_model_load_finished = [this](bool success, const std::string &error_message) {
         emit modelLoadFinished(
             success,
             QString::fromUtf8(error_message.c_str(), static_cast<int>(error_message.size())));
@@ -58,7 +58,7 @@ void TaskService::wireCallbacks() {
         emit targetReset(task_id);
     };
 
-    callbacks.on_target_appended = [this](std::uint64_t task_id, const std::string & piece) {
+    callbacks.on_target_appended = [this](std::uint64_t task_id, const std::string &piece) {
         fprintf(stderr, "[TaskService] targetAppended task:%llu piece:'%s'\n",
                 static_cast<unsigned long long>(task_id), piece.c_str());
         emit targetAppended(
@@ -70,7 +70,7 @@ void TaskService::wireCallbacks() {
         emit backTranslateReset(task_id);
     };
 
-    callbacks.on_back_translate_appended = [this](std::uint64_t task_id, const std::string & piece) {
+    callbacks.on_back_translate_appended = [this](std::uint64_t task_id, const std::string &piece) {
         emit backTranslateAppended(
             task_id,
             QString::fromUtf8(piece.c_str(), static_cast<int>(piece.size())));
@@ -79,11 +79,11 @@ void TaskService::wireCallbacks() {
     orchestrator_.set_callbacks(std::move(callbacks));
 }
 
-void TaskService::setModelPath(const QString & path) {
+void TaskService::setModelPath(const QString &path) {
     orchestrator_.set_model_path(path.toUtf8().constData());
 }
 
-void TaskService::setRemoteSpec(const QString & spec) {
+void TaskService::setRemoteSpec(const QString &spec) {
     orchestrator_.set_remote_spec(spec.toUtf8().constData());
 }
 
@@ -114,7 +114,7 @@ TaskId TaskService::submitUnloadModel(TaskPriority priority) {
 }
 
 TaskId TaskService::submitTranslatePipeline(
-    const TranslatePipelinePayload & payload,
+    const TranslatePipelinePayload &payload,
     TaskPriority priority) {
     const TaskId id = orchestrator_.submit_translate_pipeline(payload, priority);
     scheduleProcessNext();
@@ -156,9 +156,9 @@ void TaskService::cancelTask(quint64 task_id) {
 }
 
 void TaskService::translateInteractive(
-    const QString & source,
-    const QString & target_language,
-    const QString & source_language,
+    const QString &source,
+    const QString &target_language,
+    const QString &source_language,
     bool back_translate) {
     TranslatePipelinePayload payload{};
     payload.source = source.toUtf8().constData();

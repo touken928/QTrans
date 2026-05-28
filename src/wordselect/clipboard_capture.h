@@ -7,4 +7,4 @@ namespace ClipboardCapture {
 void simulateCopy();
 QString captureSelectedText(int timeoutMs = 300);
 
-} // namespace ClipboardCapture
+}  // namespace ClipboardCapture

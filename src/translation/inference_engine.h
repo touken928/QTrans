@@ -12,20 +12,20 @@ class InferenceEngine {
 public:
     bool is_loaded() const;
 
-    void load(const std::string & model_path, const TranslationModelConfig & config);
+    void load(const std::string &model_path, const TranslationModelConfig &config);
     void unload();
 
     TranslateStepResult translate(
-        const std::string & text,
-        const std::string & target_language,
-        const std::function<void(const std::string &)> & on_token,
-        const CancelToken * cancel_token);
+        const std::string &text,
+        const std::string &target_language,
+        const std::function<void(const std::string &)> &on_token,
+        const CancelToken *cancel_token);
 
     TranslateStepResult run_translate_pipeline(
-        const TranslatePipelinePayload & payload,
-        const std::function<void(bool is_back_channel)> & on_reset,
-        const std::function<void(bool is_back_channel, const std::string & piece)> & on_token,
-        const CancelToken * cancel_token);
+        const TranslatePipelinePayload &payload,
+        const std::function<void(bool is_back_channel)> &on_reset,
+        const std::function<void(bool is_back_channel, const std::string &piece)> &on_token,
+        const CancelToken *cancel_token);
 
 private:
     TranslationModelConfig config_{};

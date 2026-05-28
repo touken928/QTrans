@@ -14,15 +14,11 @@
 #endif
 
 SessionController::SessionController(
-    HotkeyManager* hotkeyMgr,
-    TaskService* taskService,
-    PopupWindow* popup,
-    QObject* parent)
-    : QObject(parent)
-    , m_hotkeyManager(hotkeyMgr)
-    , m_taskService(taskService)
-    , m_popup(popup) {
-
+    HotkeyManager *hotkeyMgr,
+    TaskService *taskService,
+    PopupWindow *popup,
+    QObject *parent)
+    : QObject(parent), m_hotkeyManager(hotkeyMgr), m_taskService(taskService), m_popup(popup) {
     connect(m_hotkeyManager, &HotkeyManager::hotkeyTriggered,
             this, &SessionController::onHotkeyTriggered);
 
@@ -46,12 +42,12 @@ void SessionController::initialize() {
     m_targetLanguage = QStringLiteral("Chinese");
 }
 
-void SessionController::setTranslateLanguages(const QString & source, const QString & target) {
+void SessionController::setTranslateLanguages(const QString &source, const QString &target) {
     m_sourceLanguage = source;
     m_targetLanguage = target;
 }
 
-void SessionController::setHotkey(const QString& shortcut) {
+void SessionController::setHotkey(const QString &shortcut) {
     m_hotkeyStr = shortcut.trimmed();
     const QKeySequence ks(m_hotkeyStr);
     if (ks.isEmpty()) {
@@ -172,7 +168,7 @@ void SessionController::onTargetReset(quint64 taskId) {
     }
 }
 
-void SessionController::onTargetAppended(quint64 taskId, const QString& piece) {
+void SessionController::onTargetAppended(quint64 taskId, const QString &piece) {
     if (taskId != m_activeTaskId || m_state != PopupState::Translating) {
         return;
     }

@@ -16,14 +16,14 @@ struct AppSettings {
     std::string wordselect_target_language = "Auto";
     bool wordselect_enabled = true;
 
-    void load(const AppPaths & paths);
-    void save(const AppPaths & paths) const;
-    void ensureStorage(const AppPaths & paths) const;
+    void load(const AppPaths &paths);
+    void save(const AppPaths &paths) const;
+    void ensureStorage(const AppPaths &paths) const;
 
-    const ModelCatalogEntry * selectedModel() const;
-    std::string effectiveModelsDir(const AppPaths & paths) const;
-    std::string effectiveModelPath(const AppPaths & paths) const;
+    const ModelCatalogEntry *selectedModel() const;
+    std::string effectiveModelsDir(const AppPaths &paths) const;
+    std::string effectiveModelPath(const AppPaths &paths) const;
 
-    void setEffectiveModelsDir(const AppPaths & paths, const std::string & dir);
-    void setSelectedModelId(const std::string & id);
+    void setEffectiveModelsDir(const AppPaths &paths, const std::string &dir);
+    void setSelectedModelId(const std::string &id);
 };

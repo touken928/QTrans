@@ -8,14 +8,13 @@
 #include <QListView>
 #include <QtGlobal>
 
-
 QString comboBoxStyleSheet() {
     return AppTheme::applicationStyleSheet();
 }
 
 namespace {
 
-int comboPopupWidth(const QComboBox * combo) {
+int comboPopupWidth(const QComboBox *combo) {
     int width = combo->minimumWidth();
     const QFontMetrics metrics(combo->font());
     for (int i = 0; i < combo->count(); ++i) {
@@ -24,9 +23,9 @@ int comboPopupWidth(const QComboBox * combo) {
     return width;
 }
 
-} // namespace
+}  // namespace
 
-void configureComboBox(QComboBox * combo, int minimum_width) {
+void configureComboBox(QComboBox *combo, int minimum_width) {
     if (combo == nullptr) {
         return;
     }
@@ -40,7 +39,7 @@ void configureComboBox(QComboBox * combo, int minimum_width) {
         combo->setMinimumWidth(minimum_width);
     }
 
-    if (auto * list = qobject_cast<QListView *>(combo->view())) {
+    if (auto *list = qobject_cast<QListView *>(combo->view())) {
         list->setTextElideMode(Qt::ElideNone);
         list->setSpacing(2);
         list->setUniformItemSizes(false);

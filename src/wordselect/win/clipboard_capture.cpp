@@ -14,4 +14,4 @@ void simulateCopy() {
     ::keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
 }
 
-} // namespace ClipboardCapture
+}  // namespace ClipboardCapture

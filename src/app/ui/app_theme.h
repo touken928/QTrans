@@ -10,6 +10,6 @@ QString applicationStyleSheet();
 QString modalOverlayStyleSheet();
 QString modalPanelStyleSheet();
 
-void apply(QWidget * widget);
+void apply(QWidget *widget);
 
-} // namespace AppTheme
+}  // namespace AppTheme

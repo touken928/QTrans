@@ -26,11 +26,8 @@
 #include <QStackedWidget>
 #include <QThread>
 
-MainWindow::MainWindow(TaskService * task_service, QThread * worker_thread, QWidget * parent)
-    : QMainWindow(parent)
-    , task_service_(task_service)
-    , worker_thread_(worker_thread)
-    , paths_(AppPaths::detect(QCoreApplication::applicationDirPath().toStdString())) {
+MainWindow::MainWindow(TaskService *task_service, QThread *worker_thread, QWidget *parent)
+    : QMainWindow(parent), task_service_(task_service), worker_thread_(worker_thread), paths_(AppPaths::detect(QCoreApplication::applicationDirPath().toStdString())) {
     setWindowTitle(QStringLiteral("QTrans"));
     resize(960, 600);
     setMinimumSize(720, 480);
@@ -42,7 +39,7 @@ MainWindow::MainWindow(TaskService * task_service, QThread * worker_thread, QWid
 
     central_root_ = new QWidget(this);
     central_root_->setObjectName(QStringLiteral("centralRoot"));
-    auto * shell = new QHBoxLayout(central_root_);
+    auto *shell = new QHBoxLayout(central_root_);
     shell->setContentsMargins(0, 0, 0, 0);
     shell->setSpacing(0);
 
@@ -134,13 +131,13 @@ void MainWindow::bringToForeground() {
     activateWindow();
 }
 
-void MainWindow::closeEvent(QCloseEvent * event) {
+void MainWindow::closeEvent(QCloseEvent *event) {
     Q_UNUSED(event);
     hide();
     event->ignore();
 }
 
-void MainWindow::showEvent(QShowEvent * event) {
+void MainWindow::showEvent(QShowEvent *event) {
     QMainWindow::showEvent(event);
 
     if (!startup_checked_) {
@@ -178,7 +175,7 @@ QString MainWindow::currentModelPath() const {
 }
 
 void MainWindow::syncSettingsToTaskService() {
-    const ModelCatalogEntry * model = settings_.selectedModel();
+    const ModelCatalogEntry *model = settings_.selectedModel();
     task_service_->setModelPath(currentModelPath());
     task_service_->setRemoteSpec(QString::fromStdString(model->remote_spec));
     task_service_->setDownloadHub(model->download_hub);
@@ -214,7 +211,7 @@ void MainWindow::onWordSelectSettingsChanged() {
 void MainWindow::saveSettings() {
     try {
         settings_.save(paths_);
-    } catch (const std::exception & ex) {
+    } catch (const std::exception &ex) {
         translate_page_->setStatus(QString::fromUtf8(ex.what()));
     }
 }
@@ -274,7 +271,7 @@ void MainWindow::hideModal() {
 }
 
 void MainWindow::showModelMissingDialog() {
-    auto * panel = new ModelMissingPanel(
+    auto *panel = new ModelMissingPanel(
         QString::fromStdString(paths_.modeLabel()),
         currentModelPath());
     connect(panel, &ModelMissingPanel::dismissed, this, [this]() {
@@ -293,8 +290,8 @@ void MainWindow::showDownloadDialog() {
     modal_->showModal();
 }
 
-void MainWindow::showAlertDialog(const QString & title, const QString & message) {
-    auto * panel = new AlertPanel(title, message);
+void MainWindow::showAlertDialog(const QString &title, const QString &message) {
+    auto *panel = new AlertPanel(title, message);
     connect(panel, &AlertPanel::dismissed, this, &MainWindow::hideModal);
 
     modal_->setContent(panel, QSize(500, 220));
@@ -313,9 +310,9 @@ void MainWindow::startLoadModel() {
 }
 
 void MainWindow::onTranslateRequested(
-    const QString & source,
-    const QString & target_language,
-    const QString & source_language,
+    const QString &source,
+    const QString &target_language,
+    const QString &source_language,
     bool back_translate) {
     active_translate_task_id_ = 0;
     own_translation_active_ = true;
@@ -368,7 +365,7 @@ void MainWindow::onTranslationFinished(quint64 task_id, int state) {
     translate_page_->setTranslating(false);
 }
 
-void MainWindow::onStatusChanged(const QString & message, bool busy) {
+void MainWindow::onStatusChanged(const QString &message, bool busy) {
     translate_page_->setStatus(busy ? message + QStringLiteral(" ...") : message);
     setUiBusy(busy);
 }
@@ -381,7 +378,7 @@ void MainWindow::onTargetReset(quint64 task_id) {
     translate_page_->resetTarget();
 }
 
-void MainWindow::onTargetAppended(quint64 task_id, const QString & piece) {
+void MainWindow::onTargetAppended(quint64 task_id, const QString &piece) {
     if (!isActiveTranslateTask(task_id)) {
         return;
     }
@@ -389,7 +386,7 @@ void MainWindow::onTargetAppended(quint64 task_id, const QString & piece) {
     translate_page_->appendTarget(piece);
 }
 
-void MainWindow::onModelLoadFinished(bool success, const QString & error_message) {
+void MainWindow::onModelLoadFinished(bool success, const QString &error_message) {
     model_loaded_ = success;
     translate_page_->setModelLoaded(success);
     model_page_->setModelLoaded(success);
@@ -452,7 +449,7 @@ void MainWindow::onBackTranslateReset(quint64 task_id) {
     translate_page_->resetBackTranslate();
 }
 
-void MainWindow::onBackTranslateAppended(quint64 task_id, const QString & piece) {
+void MainWindow::onBackTranslateAppended(quint64 task_id, const QString &piece) {
     if (!isActiveTranslateTask(task_id)) {
         return;
     }

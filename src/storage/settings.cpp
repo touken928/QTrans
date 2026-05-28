@@ -6,7 +6,7 @@
 
 namespace {
 
-std::string trim(const std::string & value) {
+std::string trim(const std::string &value) {
     const auto start = value.find_first_not_of(" \t\r\n");
     if (start == std::string::npos) {
         return {};
@@ -15,7 +15,7 @@ std::string trim(const std::string & value) {
     return value.substr(start, end - start + 1);
 }
 
-void migrate_legacy_settings(AppSettings & settings, const AppPaths & paths) {
+void migrate_legacy_settings(AppSettings &settings, const AppPaths &paths) {
     if (find_model_by_id(settings.model_id) == nullptr) {
         settings.model_id = default_model()->id;
     }
@@ -54,14 +54,14 @@ void migrate_legacy_settings(AppSettings & settings, const AppPaths & paths) {
         settings.models_dir = configured.parent_path().string();
     }
 
-    if (const ModelCatalogEntry * entry = find_model_by_filename(configured.string())) {
+    if (const ModelCatalogEntry *entry = find_model_by_filename(configured.string())) {
         settings.model_id = entry->id;
     }
 }
 
-} // namespace
+}  // namespace
 
-void AppSettings::load(const AppPaths & paths) {
+void AppSettings::load(const AppPaths &paths) {
     paths.ensureDirectories();
 
     std::ifstream input(paths.settings_file);
@@ -108,7 +108,7 @@ void AppSettings::load(const AppPaths & paths) {
     migrate_legacy_settings(*this, paths);
 }
 
-void AppSettings::save(const AppPaths & paths) const {
+void AppSettings::save(const AppPaths &paths) const {
     paths.ensureDirectories();
 
     std::ofstream output(paths.settings_file, std::ios::trunc);
@@ -127,21 +127,21 @@ void AppSettings::save(const AppPaths & paths) const {
     output << "wordselect_enabled=" << (wordselect_enabled ? "true" : "false") << '\n';
 }
 
-void AppSettings::ensureStorage(const AppPaths & paths) const {
+void AppSettings::ensureStorage(const AppPaths &paths) const {
     paths.ensureDirectories();
 
     std::error_code ec;
     std::filesystem::create_directories(effectiveModelsDir(paths), ec);
 }
 
-const ModelCatalogEntry * AppSettings::selectedModel() const {
-    if (const ModelCatalogEntry * entry = find_model_by_id(model_id)) {
+const ModelCatalogEntry *AppSettings::selectedModel() const {
+    if (const ModelCatalogEntry *entry = find_model_by_id(model_id)) {
         return entry;
     }
     return default_model();
 }
 
-std::string AppSettings::effectiveModelsDir(const AppPaths & paths) const {
+std::string AppSettings::effectiveModelsDir(const AppPaths &paths) const {
     if (models_dir.empty()) {
         return paths.models_dir.string();
     }
@@ -154,12 +154,12 @@ std::string AppSettings::effectiveModelsDir(const AppPaths & paths) const {
     return (paths.data_root / configured).string();
 }
 
-std::string AppSettings::effectiveModelPath(const AppPaths & paths) const {
-    const ModelCatalogEntry * entry = selectedModel();
+std::string AppSettings::effectiveModelPath(const AppPaths &paths) const {
+    const ModelCatalogEntry *entry = selectedModel();
     return (std::filesystem::path(effectiveModelsDir(paths)) / entry->filename).string();
 }
 
-void AppSettings::setEffectiveModelsDir(const AppPaths & paths, const std::string & dir) {
+void AppSettings::setEffectiveModelsDir(const AppPaths &paths, const std::string &dir) {
     const std::string trimmed = trim(dir);
     if (trimmed.empty() || trimmed == paths.models_dir.string()) {
         models_dir.clear();
@@ -175,7 +175,7 @@ void AppSettings::setEffectiveModelsDir(const AppPaths & paths, const std::strin
     models_dir = configured.string();
 }
 
-void AppSettings::setSelectedModelId(const std::string & id) {
+void AppSettings::setSelectedModelId(const std::string &id) {
     if (find_model_by_id(id) != nullptr) {
         model_id = id;
     }

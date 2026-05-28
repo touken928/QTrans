@@ -15,9 +15,9 @@ void simulateCopy() {
     }
 
     CGEventRef cmdDown = CGEventCreateKeyboardEvent(source, (CGKeyCode)55, true);
-    CGEventRef cDown   = CGEventCreateKeyboardEvent(source, (CGKeyCode)8, true);
-    CGEventRef cUp     = CGEventCreateKeyboardEvent(source, (CGKeyCode)8, false);
-    CGEventRef cmdUp   = CGEventCreateKeyboardEvent(source, (CGKeyCode)55, false);
+    CGEventRef cDown = CGEventCreateKeyboardEvent(source, (CGKeyCode)8, true);
+    CGEventRef cUp = CGEventCreateKeyboardEvent(source, (CGKeyCode)8, false);
+    CGEventRef cmdUp = CGEventCreateKeyboardEvent(source, (CGKeyCode)55, false);
 
     if (!cmdDown || !cDown || !cUp || !cmdUp) {
         fprintf(stderr, "[ClipboardCapture] CGEventCreate failed\n");
@@ -42,4 +42,4 @@ void simulateCopy() {
     CFRelease(source);
 }
 
-} // namespace ClipboardCapture
+}  // namespace ClipboardCapture

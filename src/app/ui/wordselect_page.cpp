@@ -12,7 +12,7 @@
 
 namespace {
 
-int findLanguageIndex(const QString & model_name) {
+int findLanguageIndex(const QString &model_name) {
     for (int i = 0; i < translation_language_count(); ++i) {
         if (QString::fromUtf8(translation_languages()[i].model_name) == model_name) {
             return i;
@@ -21,7 +21,7 @@ int findLanguageIndex(const QString & model_name) {
     return 0;
 }
 
-QString modelNameAt(const QComboBox * combo) {
+QString modelNameAt(const QComboBox *combo) {
     const int index = combo->currentIndex();
     if (index < 0 || index >= translation_language_count()) {
         return QStringLiteral("English");
@@ -29,11 +29,11 @@ QString modelNameAt(const QComboBox * combo) {
     return QString::fromUtf8(translation_languages()[index].model_name);
 }
 
-} // namespace
+}  // namespace
 
-WordSelectPage::WordSelectPage(QWidget * parent)
+WordSelectPage::WordSelectPage(QWidget *parent)
     : QWidget(parent) {
-    auto * form = new QFormLayout(this);
+    auto *form = new QFormLayout(this);
     form->setContentsMargins(16, 16, 16, 16);
     form->setSpacing(10);
 
@@ -72,14 +72,14 @@ void WordSelectPage::setEnabled(bool enabled) {
     enabled_checkbox_->setChecked(enabled);
 }
 
-void WordSelectPage::setTargetLanguage(const QString & model_name) {
+void WordSelectPage::setTargetLanguage(const QString &model_name) {
     const int idx = findLanguageIndex(model_name);
     if (idx >= 0) {
         target_lang_combo_->setCurrentIndex(idx);
     }
 }
 
-void WordSelectPage::setHotkey(const QString & shortcut) {
+void WordSelectPage::setHotkey(const QString &shortcut) {
     hotkey_edit_->setText(shortcut);
 }
 

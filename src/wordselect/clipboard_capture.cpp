@@ -10,7 +10,7 @@
 namespace ClipboardCapture {
 
 QString captureSelectedText(int timeoutMs) {
-    QClipboard* clipboard = QApplication::clipboard();
+    QClipboard *clipboard = QApplication::clipboard();
     if (!clipboard) {
         return {};
     }
@@ -48,7 +48,7 @@ QString captureSelectedText(int timeoutMs) {
     }
 
     QTimer::singleShot(200, qApp, [oldText]() {
-        QClipboard* cb = QApplication::clipboard();
+        QClipboard *cb = QApplication::clipboard();
         if (cb && !oldText.isEmpty()) {
             cb->setText(oldText);
         }
@@ -61,4 +61,4 @@ QString captureSelectedText(int timeoutMs) {
     return captured.trimmed();
 }
 
-} // namespace ClipboardCapture
+}  // namespace ClipboardCapture

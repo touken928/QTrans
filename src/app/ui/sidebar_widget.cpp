@@ -19,14 +19,14 @@ namespace {
 constexpr int kSidebarWidth = 180;
 constexpr int kHorizontalMargin = 12;
 
-} // namespace
+}  // namespace
 
-SidebarWidget::SidebarWidget(QWidget * parent)
+SidebarWidget::SidebarWidget(QWidget *parent)
     : QWidget(parent) {
     setObjectName(QStringLiteral("sidebar"));
     setFixedWidth(kSidebarWidth);
 
-    auto * layout = new QVBoxLayout(this);
+    auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(kHorizontalMargin, 16, kHorizontalMargin, 16);
     layout->setSpacing(8);
 
@@ -53,7 +53,7 @@ SidebarWidget::SidebarWidget(QWidget * parent)
     model_button_->setCheckable(true);
     layout->addWidget(model_button_);
 
-    auto * nav_group = new QButtonGroup(this);
+    auto *nav_group = new QButtonGroup(this);
     nav_group->setExclusive(true);
     nav_group->addButton(translate_button_, 0);
     nav_group->addButton(wordselect_button_, 1);
@@ -77,12 +77,12 @@ void SidebarWidget::setNavigationEnabled(bool enabled) {
     model_button_->setEnabled(enabled);
 }
 
-void SidebarWidget::resizeEvent(QResizeEvent * event) {
+void SidebarWidget::resizeEvent(QResizeEvent *event) {
     QWidget::resizeEvent(event);
     refreshLogo();
 }
 
-bool SidebarWidget::event(QEvent * event) {
+bool SidebarWidget::event(QEvent *event) {
     if (event->type() == QEvent::Show || event->type() == QEvent::ScreenChangeInternal) {
         refreshLogo();
     }
@@ -114,8 +114,8 @@ void SidebarWidget::refreshLogo() {
 }
 
 qreal SidebarWidget::currentDevicePixelRatio() const {
-    const QWindow * native_window = windowHandle();
-    const QScreen * screen = native_window != nullptr ? native_window->screen() : nullptr;
+    const QWindow *native_window = windowHandle();
+    const QScreen *screen = native_window != nullptr ? native_window->screen() : nullptr;
     if (screen == nullptr) {
         screen = QGuiApplication::primaryScreen();
     }

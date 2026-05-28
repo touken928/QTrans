@@ -16,7 +16,7 @@ constexpr TranslationLanguage kLanguages[] = {
     {"ru", "Russian", "俄语", "Russian"},
 };
 
-bool equals_ignore_case(const char * a, const char * b) {
+bool equals_ignore_case(const char *a, const char *b) {
     if (a == nullptr || b == nullptr) {
         return false;
     }
@@ -33,9 +33,9 @@ bool equals_ignore_case(const char * a, const char * b) {
     return *a == '\0' && *b == '\0';
 }
 
-} // namespace
+}  // namespace
 
-const TranslationLanguage * translation_languages() {
+const TranslationLanguage *translation_languages() {
     return kLanguages;
 }
 
@@ -43,8 +43,8 @@ int translation_language_count() {
     return static_cast<int>(sizeof(kLanguages) / sizeof(kLanguages[0]));
 }
 
-const TranslationLanguage * find_translation_language_by_model_name(const std::string & model_name) {
-    for (const TranslationLanguage & language : kLanguages) {
+const TranslationLanguage *find_translation_language_by_model_name(const std::string &model_name) {
+    for (const TranslationLanguage &language : kLanguages) {
         if (equals_ignore_case(language.model_name, model_name.c_str())) {
             return &language;
         }
@@ -52,16 +52,16 @@ const TranslationLanguage * find_translation_language_by_model_name(const std::s
     return nullptr;
 }
 
-std::string translation_chinese_name(const std::string & model_name) {
-    const TranslationLanguage * language = find_translation_language_by_model_name(model_name);
+std::string translation_chinese_name(const std::string &model_name) {
+    const TranslationLanguage *language = find_translation_language_by_model_name(model_name);
     if (language != nullptr) {
         return language->chinese_name;
     }
     return model_name;
 }
 
-bool is_chinese_language_name(const std::string & model_name) {
-    const TranslationLanguage * language = find_translation_language_by_model_name(model_name);
+bool is_chinese_language_name(const std::string &model_name) {
+    const TranslationLanguage *language = find_translation_language_by_model_name(model_name);
     if (language != nullptr && std::strcmp(language->id, "zh") == 0) {
         return true;
     }

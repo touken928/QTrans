@@ -1,0 +1,35 @@
+name: Format check
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  clang-format:
+    name: Code formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format-18
+
+      - name: Verify C/C++/ObjC++ formatting
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          found=0
+          while IFS= read -r -d '' file; do
+            found=1
+            clang-format-18 --dry-run --Werror "$file"
+          done < <(find src -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.mm' \) -print0 | sort -z)
+          if [ "$found" -eq 0 ]; then
+            echo "No source files under src/ to check."
+          fi

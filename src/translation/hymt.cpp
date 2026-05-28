@@ -16,17 +16,15 @@ constexpr const char k_hy_bos[] = u8"<\xEF\xBD\x9Chy_begin\xe2\x96\x81of\xe2\x96
 constexpr const char k_hy_user[] = u8"<\xEF\xBD\x9Chy_User\xEF\xBD\x9C>";
 constexpr const char k_hy_assistant[] = u8"<\xEF\xBD\x9Chy_Assistant\xEF\xBD\x9C>";
 
-bool is_chinese_target(const std::string & target_language) {
+bool is_chinese_target(const std::string &target_language) {
     return is_chinese_language_name(target_language);
 }
 
-bool contains_chinese(const std::string & text) {
-    for (size_t i = 0; i < text.size(); ) {
+bool contains_chinese(const std::string &text) {
+    for (size_t i = 0; i < text.size();) {
         const unsigned char b = static_cast<unsigned char>(text[i]);
         if (b >= 0xE0 && b <= 0xEF && i + 2 < text.size()) {
-            const uint32_t cp = ((b & 0x0F) << 12)
-                | ((static_cast<unsigned char>(text[i + 1]) & 0x3F) << 6)
-                | (static_cast<unsigned char>(text[i + 2]) & 0x3F);
+            const uint32_t cp = ((b & 0x0F) << 12) | ((static_cast<unsigned char>(text[i + 1]) & 0x3F) << 6) | (static_cast<unsigned char>(text[i + 2]) & 0x3F);
             if (cp >= 0x4E00 && cp <= 0x9FFF) {
                 return true;
             }
@@ -39,16 +37,17 @@ bool contains_chinese(const std::string & text) {
 }
 
 void set_log_callback() {
-    llama_log_set([](ggml_log_level level, const char * text, void *) {
+    llama_log_set([](ggml_log_level level, const char *text, void *) {
         if (level >= GGML_LOG_LEVEL_ERROR) {
             std::fputs(text, stderr);
         }
-    }, nullptr);
+    },
+                  nullptr);
 }
 
 // Official inference params: https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF
-llama_sampler * create_sampler(const TranslationModelConfig & config) {
-    llama_sampler * chain = llama_sampler_chain_init(llama_sampler_chain_default_params());
+llama_sampler *create_sampler(const TranslationModelConfig &config) {
+    llama_sampler *chain = llama_sampler_chain_init(llama_sampler_chain_default_params());
     llama_sampler_chain_add(chain, llama_sampler_init_penalties(-1, config.repeat_penalty, 0.0f, 0.0f));
     llama_sampler_chain_add(chain, llama_sampler_init_top_k(config.top_k));
     llama_sampler_chain_add(chain, llama_sampler_init_top_p(config.top_p, 1));
@@ -57,15 +56,15 @@ llama_sampler * create_sampler(const TranslationModelConfig & config) {
     return chain;
 }
 
-bool abort_callback(void * data) {
+bool abort_callback(void *data) {
     if (data == nullptr) {
         return false;
     }
-    const auto * should_cancel = static_cast<const std::function<bool()> *>(data);
+    const auto *should_cancel = static_cast<const std::function<bool()> *>(data);
     return (*should_cancel)();
 }
 
-} // namespace
+}  // namespace
 
 Hymt::~Hymt() {
     if (sampler_ != nullptr) {
@@ -90,7 +89,7 @@ void Hymt::ensure_backend() {
     }
 }
 
-void Hymt::load(const std::vector<std::uint8_t> & data, const TranslationModelConfig & config) {
+void Hymt::load(const std::vector<std::uint8_t> &data, const TranslationModelConfig &config) {
     if (data.empty()) {
         throw std::invalid_argument("model data is empty");
     }
@@ -129,10 +128,10 @@ void Hymt::load(const std::vector<std::uint8_t> & data, const TranslationModelCo
 }
 
 std::string Hymt::translate(
-    const std::string & text,
-    const std::string & target_language,
-    const std::function<void(const std::string &)> & on_token,
-    const std::function<bool()> & should_cancel) {
+    const std::string &text,
+    const std::string &target_language,
+    const std::function<void(const std::string &)> &on_token,
+    const std::function<bool()> &should_cancel) {
     if (!is_loaded()) {
         throw std::runtime_error("model is not loaded");
     }
@@ -145,7 +144,7 @@ std::string Hymt::translate(
     return generate(format_chat_prompt(user_prompt), on_token, should_cancel);
 }
 
-std::string Hymt::build_user_prompt(const std::string & text, const std::string & target_language) {
+std::string Hymt::build_user_prompt(const std::string &text, const std::string &target_language) {
     // https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF
     if (target_language == "Auto") {
         return "Translate the following segment:\n\n" + text;
@@ -162,21 +161,23 @@ std::string Hymt::build_user_prompt(const std::string & text, const std::string 
            text;
 }
 
-std::string Hymt::format_chat_prompt(const std::string & user_prompt) {
+std::string Hymt::format_chat_prompt(const std::string &user_prompt) {
     // Official chat template: https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF
     return std::string(k_hy_bos) + k_hy_user + user_prompt + k_hy_assistant;
 }
 
 std::string Hymt::generate(
-    const std::string & prompt,
-    const std::function<void(const std::string &)> & on_token,
-    const std::function<bool()> & should_cancel) {
+    const std::string &prompt,
+    const std::function<void(const std::string &)> &on_token,
+    const std::function<bool()> &should_cancel) {
     std::function<bool()> cancel_fn = should_cancel ? should_cancel : []() { return false; };
     llama_set_abort_callback(ctx_, abort_callback, &cancel_fn);
 
     struct AbortGuard {
-        llama_context* ctx;
-        ~AbortGuard() { llama_set_abort_callback(ctx, nullptr, nullptr); }
+        llama_context *ctx;
+        ~AbortGuard() {
+            llama_set_abort_callback(ctx, nullptr, nullptr);
+        }
     } guard{ctx_};
 
     fprintf(stderr, "[Hymt] generate start, clearing memory\n");
@@ -185,7 +186,7 @@ std::string Hymt::generate(
     fprintf(stderr, "[Hymt] memory cleared, resetting sampler\n");
     llama_sampler_reset(sampler_);
 
-    const llama_vocab * vocab = llama_model_get_vocab(model_holder_->model);
+    const llama_vocab *vocab = llama_model_get_vocab(model_holder_->model);
     fprintf(stderr, "[Hymt] vocab obtained, tokenizing prompt (len=%d)\n",
             static_cast<int>(prompt.size()));
 
@@ -269,7 +270,7 @@ std::string Hymt::generate(
         char log_path[512];
         snprintf(log_path, sizeof(log_path), "%s/qtrans_ai_output_%s.log",
                  getenv("TEMP") ? getenv("TEMP") : ".", time_buf);
-        FILE * logf = fopen(log_path, "wb");
+        FILE *logf = fopen(log_path, "wb");
         if (logf) {
             fprintf(logf, "=== prompt ===\n%s\n\n=== response ===\n%s\n",
                     prompt.c_str(), response.c_str());

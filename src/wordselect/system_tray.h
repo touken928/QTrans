@@ -5,12 +5,11 @@
 class QMenu;
 class QAction;
 
-class SystemTray : public QSystemTrayIcon
-{
+class SystemTray : public QSystemTrayIcon {
     Q_OBJECT
 
 public:
-    explicit SystemTray(QObject* parent = nullptr);
+    explicit SystemTray(QObject *parent = nullptr);
     ~SystemTray() override;
 
     void setupMenu();
@@ -24,8 +23,8 @@ signals:
     void quitApp();
 
 private:
-    QMenu* m_menu = nullptr;
-    QAction* m_openAction = nullptr;
-    QAction* m_toggleAction = nullptr;
-    QAction* m_quitAction = nullptr;
+    QMenu *m_menu = nullptr;
+    QAction *m_openAction = nullptr;
+    QAction *m_toggleAction = nullptr;
+    QAction *m_quitAction = nullptr;
 };

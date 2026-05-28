@@ -20,7 +20,7 @@
 
 namespace {
 
-int defaultLanguageIndex(const char * id) {
+int defaultLanguageIndex(const char *id) {
     for (int i = 0; i < translation_language_count(); ++i) {
         if (QString::fromUtf8(translation_languages()[i].id) == QString::fromUtf8(id)) {
             return i;
@@ -29,7 +29,7 @@ int defaultLanguageIndex(const char * id) {
     return 0;
 }
 
-QString languageNameAt(QComboBox * combo) {
+QString languageNameAt(QComboBox *combo) {
     const int index = combo->currentIndex();
     if (index < 0 || index >= translation_language_count()) {
         return QStringLiteral("English");
@@ -37,17 +37,17 @@ QString languageNameAt(QComboBox * combo) {
     return QString::fromUtf8(translation_languages()[index].model_name);
 }
 
-} // namespace
+}  // namespace
 
-TranslatePage::TranslatePage(QWidget * parent)
+TranslatePage::TranslatePage(QWidget *parent)
     : QWidget(parent) {
     setObjectName(QStringLiteral("page"));
 
-    auto * root = new QVBoxLayout(this);
+    auto *root = new QVBoxLayout(this);
     root->setContentsMargins(16, 16, 16, 16);
     root->setSpacing(10);
 
-    auto * toolbar = new QHBoxLayout();
+    auto *toolbar = new QHBoxLayout();
     source_lang_combo_ = new QComboBox(this);
     for (int i = 0; i < translation_language_count(); ++i) {
         source_lang_combo_->addItem(QString::fromUtf8(translation_languages()[i].label));
@@ -74,9 +74,9 @@ TranslatePage::TranslatePage(QWidget * parent)
         width_probe.setObjectName(translate_button_->objectName());
         width_probe.setFont(translate_button_->font());
         const int action_width = qMax(
-            translate_button_->sizeHint().width(),
-            width_probe.sizeHint().width())
-            + 16;
+                                     translate_button_->sizeHint().width(),
+                                     width_probe.sizeHint().width()) +
+                                 16;
         translate_button_->setFixedWidth(action_width);
     }
     toolbar->addWidget(translate_button_);
@@ -85,20 +85,20 @@ TranslatePage::TranslatePage(QWidget * parent)
 
     splitter_ = new QSplitter(Qt::Horizontal, this);
 
-    auto * source_panel = new QWidget(splitter_);
-    auto * source_layout = new QVBoxLayout(source_panel);
+    auto *source_panel = new QWidget(splitter_);
+    auto *source_layout = new QVBoxLayout(source_panel);
     source_layout->setContentsMargins(0, 0, 0, 0);
-    auto * source_label = new QLabel(QStringLiteral("Source"), source_panel);
+    auto *source_label = new QLabel(QStringLiteral("Source"), source_panel);
     source_label->setObjectName(QStringLiteral("panelLabel"));
     source_layout->addWidget(source_label);
     source_edit_ = new QPlainTextEdit(source_panel);
     source_edit_->setPlaceholderText(QStringLiteral("Enter text to translate..."));
     source_layout->addWidget(source_edit_, 1);
 
-    auto * target_panel = new QWidget(splitter_);
-    auto * target_layout = new QVBoxLayout(target_panel);
+    auto *target_panel = new QWidget(splitter_);
+    auto *target_layout = new QVBoxLayout(target_panel);
     target_layout->setContentsMargins(0, 0, 0, 0);
-    auto * target_label = new QLabel(QStringLiteral("Target"), target_panel);
+    auto *target_label = new QLabel(QStringLiteral("Target"), target_panel);
     target_label->setObjectName(QStringLiteral("panelLabel"));
     target_layout->addWidget(target_label);
     target_edit_ = new QPlainTextEdit(target_panel);
@@ -106,9 +106,9 @@ TranslatePage::TranslatePage(QWidget * parent)
     target_layout->addWidget(target_edit_, 1);
 
     back_panel_ = new QWidget(splitter_);
-    auto * back_layout = new QVBoxLayout(back_panel_);
+    auto *back_layout = new QVBoxLayout(back_panel_);
     back_layout->setContentsMargins(0, 0, 0, 0);
-    auto * back_label = new QLabel(QStringLiteral("Back-translate"), back_panel_);
+    auto *back_label = new QLabel(QStringLiteral("Back-translate"), back_panel_);
     back_label->setObjectName(QStringLiteral("panelLabel"));
     back_layout->addWidget(back_label);
     back_edit_ = new QPlainTextEdit(back_panel_);
@@ -123,7 +123,7 @@ TranslatePage::TranslatePage(QWidget * parent)
     splitter_->setStretchFactor(2, 1);
     root->addWidget(splitter_, 1);
 
-    auto * footer = new QHBoxLayout();
+    auto *footer = new QHBoxLayout();
     status_label_ = new QLabel(QStringLiteral("Ready"), this);
     status_label_->setObjectName(QStringLiteral("statusLabel"));
     footer->addWidget(status_label_, 1);
@@ -172,7 +172,7 @@ void TranslatePage::setModelLoaded(bool loaded) {
     updateActions();
 }
 
-void TranslatePage::setStatus(const QString & status) {
+void TranslatePage::setStatus(const QString &status) {
     status_label_->setText(status);
 }
 
@@ -184,7 +184,7 @@ void TranslatePage::resetBackTranslate() {
     back_edit_->clear();
 }
 
-void TranslatePage::appendTarget(const QString & piece) {
+void TranslatePage::appendTarget(const QString &piece) {
     qDebug() << "[TranslatePage] appendTarget len:" << piece.size() << "thread:" << QThread::currentThread();
     target_edit_->moveCursor(QTextCursor::End);
     target_edit_->insertPlainText(piece);
@@ -192,7 +192,7 @@ void TranslatePage::appendTarget(const QString & piece) {
     target_edit_->ensureCursorVisible();
 }
 
-void TranslatePage::appendBackTranslate(const QString & piece) {
+void TranslatePage::appendBackTranslate(const QString &piece) {
     back_edit_->moveCursor(QTextCursor::End);
     back_edit_->insertPlainText(piece);
     back_edit_->moveCursor(QTextCursor::End);
@@ -275,14 +275,14 @@ QString TranslatePage::sourceLanguageName() const {
     return languageNameAt(source_lang_combo_);
 }
 
-void TranslatePage::setSourceLanguage(const QString & model_name) {
+void TranslatePage::setSourceLanguage(const QString &model_name) {
     const int idx = source_lang_combo_->findText(model_name);
     if (idx >= 0) {
         source_lang_combo_->setCurrentIndex(idx);
     }
 }
 
-void TranslatePage::setTargetLanguage(const QString & model_name) {
+void TranslatePage::setTargetLanguage(const QString &model_name) {
     const int idx = target_lang_combo_->findText(model_name);
     if (idx >= 0) {
         target_lang_combo_->setCurrentIndex(idx);

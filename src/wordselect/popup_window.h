@@ -7,17 +7,16 @@ class QLabel;
 class QTimer;
 class QVBoxLayout;
 
-class PopupWindow : public QWidget
-{
+class PopupWindow : public QWidget {
     Q_OBJECT
 
 public:
-    explicit PopupWindow(QWidget* parent = nullptr);
+    explicit PopupWindow(QWidget *parent = nullptr);
 
-    void showLoading(const QString& sourceText);
-    void appendChunk(const QString& chunk);
+    void showLoading(const QString &sourceText);
+    void appendChunk(const QString &chunk);
     void finishStreaming();
-    void showError(const QString& message);
+    void showError(const QString &message);
 
     void setAutoCloseMs(int ms);
     int autoCloseMs() const;
@@ -28,9 +27,9 @@ signals:
     void dismissed();
 
 protected:
-    void enterEvent(QEnterEvent* event) override;
-    void leaveEvent(QEvent* event) override;
-    void hideEvent(QHideEvent* event) override;
+    void enterEvent(QEnterEvent *event) override;
+    void leaveEvent(QEvent *event) override;
+    void hideEvent(QHideEvent *event) override;
 
 private:
     void setupUI();
@@ -38,10 +37,10 @@ private:
     void startAutoClose();
     void adjustPopupSize();
 
-    QFrame* m_frame = nullptr;
-    QLabel* m_resultLabel = nullptr;
-    QLabel* m_statusLabel = nullptr;
-    QTimer* m_closeTimer = nullptr;
+    QFrame *m_frame = nullptr;
+    QLabel *m_resultLabel = nullptr;
+    QLabel *m_statusLabel = nullptr;
+    QTimer *m_closeTimer = nullptr;
 
     int m_autoCloseMs = 5000;
     bool m_isStreaming = false;

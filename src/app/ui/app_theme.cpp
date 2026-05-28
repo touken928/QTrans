@@ -147,7 +147,7 @@ QString tabStyleSheet() {
     )");
 }
 
-} // namespace
+}  // namespace
 
 namespace AppTheme {
 
@@ -211,7 +211,8 @@ QString applicationStyleSheet() {
         QLabel#mutedLabel {
             color: #6e6e73;
         }
-    )") + buttonStyleSheet() + comboBoxStyleSheet() + tabStyleSheet();
+    )") + buttonStyleSheet() +
+           comboBoxStyleSheet() + tabStyleSheet();
 }
 
 QString modalOverlayStyleSheet() {
@@ -233,13 +234,14 @@ QString modalPanelStyleSheet() {
         QFrame#modalPanel QLabel#mutedLabel {
             color: #6e6e73;
         }
-    )") + buttonStyleSheet() + comboBoxStyleSheet() + tabStyleSheet();
+    )") + buttonStyleSheet() +
+           comboBoxStyleSheet() + tabStyleSheet();
 }
 
-void apply(QWidget * widget) {
+void apply(QWidget *widget) {
     if (widget != nullptr) {
         widget->setStyleSheet(applicationStyleSheet());
     }
 }
 
-} // namespace AppTheme
+}  // namespace AppTheme

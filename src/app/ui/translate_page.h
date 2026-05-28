@@ -14,24 +14,24 @@ class TranslatePage : public QWidget {
     Q_OBJECT
 
 public:
-    explicit TranslatePage(QWidget * parent = nullptr);
+    explicit TranslatePage(QWidget *parent = nullptr);
 
     void setBusy(bool busy);
     void setTranslating(bool translating);
     void setModelLoaded(bool loaded);
-    void setStatus(const QString & status);
+    void setStatus(const QString &status);
     void resetTarget();
     void resetBackTranslate();
-    void appendTarget(const QString & piece);
-    void appendBackTranslate(const QString & piece);
+    void appendTarget(const QString &piece);
+    void appendBackTranslate(const QString &piece);
     QString targetText() const;
     void prepareForTranslation(bool back_translate);
 
 signals:
     void translateRequested(
-        const QString & source,
-        const QString & target_language,
-        const QString & source_language,
+        const QString &source,
+        const QString &target_language,
+        const QString &source_language,
         bool back_translate);
     void cancelRequested();
     void languageChanged();
@@ -44,8 +44,8 @@ private slots:
     void onBackTranslateToggled(bool enabled);
 
 public:
-    void setSourceLanguage(const QString & model_name);
-    void setTargetLanguage(const QString & model_name);
+    void setSourceLanguage(const QString &model_name);
+    void setTargetLanguage(const QString &model_name);
     QString targetLanguageName() const;
     QString sourceLanguageName() const;
 
@@ -53,19 +53,19 @@ private:
     void setBackTranslateVisible(bool visible);
     void updateActions();
 
-    QComboBox * source_lang_combo_ = nullptr;
-    QComboBox * target_lang_combo_ = nullptr;
-    QPushButton * translate_button_ = nullptr;
-    QPushButton * swap_button_ = nullptr;
-    QPushButton * clear_button_ = nullptr;
-    QPushButton * copy_button_ = nullptr;
-    QCheckBox * back_translate_checkbox_ = nullptr;
-    QSplitter * splitter_ = nullptr;
-    QWidget * back_panel_ = nullptr;
-    QPlainTextEdit * source_edit_ = nullptr;
-    QPlainTextEdit * target_edit_ = nullptr;
-    QPlainTextEdit * back_edit_ = nullptr;
-    QLabel * status_label_ = nullptr;
+    QComboBox *source_lang_combo_ = nullptr;
+    QComboBox *target_lang_combo_ = nullptr;
+    QPushButton *translate_button_ = nullptr;
+    QPushButton *swap_button_ = nullptr;
+    QPushButton *clear_button_ = nullptr;
+    QPushButton *copy_button_ = nullptr;
+    QCheckBox *back_translate_checkbox_ = nullptr;
+    QSplitter *splitter_ = nullptr;
+    QWidget *back_panel_ = nullptr;
+    QPlainTextEdit *source_edit_ = nullptr;
+    QPlainTextEdit *target_edit_ = nullptr;
+    QPlainTextEdit *back_edit_ = nullptr;
+    QLabel *status_label_ = nullptr;
 
     bool busy_ = false;
     bool translating_ = false;

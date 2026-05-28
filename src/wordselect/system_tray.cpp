@@ -4,7 +4,7 @@
 #include <QApplication>
 #include <QMenu>
 
-SystemTray::SystemTray(QObject* parent)
+SystemTray::SystemTray(QObject *parent)
     : QSystemTrayIcon(parent) {
     setIcon(QIcon(QStringLiteral(":/branding/logo.png")));
     setToolTip(QStringLiteral("QTrans"));

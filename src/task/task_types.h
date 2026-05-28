@@ -9,9 +9,15 @@
 struct TaskId {
     std::uint64_t value = 0;
 
-    bool operator==(const TaskId & other) const { return value == other.value; }
-    bool operator!=(const TaskId & other) const { return value != other.value; }
-    bool is_valid() const { return value != 0; }
+    bool operator==(const TaskId &other) const {
+        return value == other.value;
+    }
+    bool operator!=(const TaskId &other) const {
+        return value != other.value;
+    }
+    bool is_valid() const {
+        return value != 0;
+    }
 };
 
 enum class TaskKind {
@@ -80,7 +86,5 @@ inline bool is_translate_kind(TaskKind kind) {
 }
 
 inline bool is_system_kind(TaskKind kind) {
-    return kind == TaskKind::DownloadModel
-        || kind == TaskKind::LoadModel
-        || kind == TaskKind::UnloadModel;
+    return kind == TaskKind::DownloadModel || kind == TaskKind::LoadModel || kind == TaskKind::UnloadModel;
 }

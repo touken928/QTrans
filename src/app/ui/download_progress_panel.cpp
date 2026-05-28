@@ -43,14 +43,14 @@ QString formatEta(double seconds) {
         .arg(secs, 2, 10, QChar('0'));
 }
 
-} // namespace
+}  // namespace
 
-DownloadProgressPanel::DownloadProgressPanel(QWidget * parent)
+DownloadProgressPanel::DownloadProgressPanel(QWidget *parent)
     : QWidget(parent) {
-    auto * layout = new QVBoxLayout(this);
+    auto *layout = new QVBoxLayout(this);
     layout->setSpacing(12);
 
-    auto * title = new QLabel(QStringLiteral("Downloading Model"), this);
+    auto *title = new QLabel(QStringLiteral("Downloading Model"), this);
     QFont title_font = title->font();
     title_font.setBold(true);
     title_font.setPointSize(title_font.pointSize() + 2);

@@ -10,19 +10,19 @@ constexpr const char kDefaultModelFile[] = "Hy-MT2-1.8B-1.25Bit.gguf";
 
 std::filesystem::path homeDirectory() {
 #ifdef _WIN32
-    if (const char * userprofile = std::getenv("USERPROFILE"); userprofile != nullptr && userprofile[0] != '\0') {
+    if (const char *userprofile = std::getenv("USERPROFILE"); userprofile != nullptr && userprofile[0] != '\0') {
         return std::filesystem::path(userprofile);
     }
 #endif
-    if (const char * home = std::getenv("HOME"); home != nullptr && home[0] != '\0') {
+    if (const char *home = std::getenv("HOME"); home != nullptr && home[0] != '\0') {
         return std::filesystem::path(home);
     }
     return std::filesystem::current_path();
 }
 
-} // namespace
+}  // namespace
 
-AppPaths AppPaths::detect(const std::filesystem::path & executable_dir) {
+AppPaths AppPaths::detect(const std::filesystem::path &executable_dir) {
     AppPaths paths{};
     paths.app_dir = std::filesystem::absolute(executable_dir);
 

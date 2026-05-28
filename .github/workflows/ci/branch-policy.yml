@@ -1,0 +1,38 @@
+name: Branch policy
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  branch-name:
+    name: Branch naming
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    steps:
+      - name: Validate branch name
+        env:
+          BRANCH: ${{ github.head_ref }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+
+          # users/<github-username>/<topic> — topic must be non-empty
+          pattern='^users/[^/]+/.+$'
+          if ! [[ "$BRANCH" =~ $pattern ]]; then
+            echo "::error::Branch '$BRANCH' must match users/<github-username>/<topic> (example: users/${AUTHOR}/my-change)."
+            exit 1
+          fi
+
+          owner="${BRANCH#users/}"
+          owner="${owner%%/*}"
+          if [[ "$owner" != "$AUTHOR" ]]; then
+            echo "::error::Branch owner '$owner' must match PR author '$AUTHOR'."
+            exit 1
+          fi
+
+          echo "Branch name OK: $BRANCH"

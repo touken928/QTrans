@@ -5,7 +5,7 @@
 void activateExistingApplication() {
     @autoreleasepool {
         const pid_t self_pid = getpid();
-        for (NSRunningApplication * app in NSWorkspace.sharedWorkspace.runningApplications) {
+        for (NSRunningApplication *app in NSWorkspace.sharedWorkspace.runningApplications) {
             if (app.processIdentifier == self_pid) {
                 continue;
             }

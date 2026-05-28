@@ -3,7 +3,7 @@
 #include <fstream>
 #include <stdexcept>
 
-std::vector<std::uint8_t> read_file_bytes(const std::string & path) {
+std::vector<std::uint8_t> read_file_bytes(const std::string &path) {
     std::ifstream input(path, std::ios::binary);
     if (!input) {
         throw std::runtime_error("failed to open model file: " + path);
@@ -24,7 +24,7 @@ std::vector<std::uint8_t> read_file_bytes(const std::string & path) {
     return data;
 }
 
-void resolve_model_path(ModelLoadRequest & request) {
+void resolve_model_path(ModelLoadRequest &request) {
     DownloadSpec remote_spec = request.remote_spec;
     bool has_remote_source = request.has_remote_source;
 

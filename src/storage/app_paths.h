@@ -16,7 +16,7 @@ struct AppPaths {
     std::filesystem::path settings_dir;
     std::filesystem::path settings_file;
 
-    static AppPaths detect(const std::filesystem::path & executable_dir);
+    static AppPaths detect(const std::filesystem::path &executable_dir);
 
     std::string modeLabel() const;
     std::string defaultModelPath() const;

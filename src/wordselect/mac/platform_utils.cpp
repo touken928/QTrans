@@ -22,7 +22,7 @@ void macRelease(ObjcId obj) {
     ((MsgSend_id_id_SEL)objc_msgSend)(obj, sel_getUid("release"));
 }
 
-} // namespace
+}  // namespace
 
 void macSaveFrontApp() {
     savedFrontApp = nil;

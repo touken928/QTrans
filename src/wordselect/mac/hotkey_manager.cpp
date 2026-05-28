@@ -7,8 +7,8 @@ namespace {
 EventHandlerUPP gHotkeyHandlerUPP = nullptr;
 EventHandlerRef gHotkeyHandlerRef = nullptr;
 
-OSStatus hotkeyHandler(EventHandlerCallRef /*next*/, EventRef event, void* userData) {
-    auto* mgr = static_cast<HotkeyManager*>(userData);
+OSStatus hotkeyHandler(EventHandlerCallRef /*next*/, EventRef event, void *userData) {
+    auto *mgr = static_cast<HotkeyManager *>(userData);
     if (!mgr) return eventNotHandledErr;
 
     EventHotKeyID hotkeyId;
@@ -19,15 +19,14 @@ OSStatus hotkeyHandler(EventHandlerCallRef /*next*/, EventRef event, void* userD
     }
     return eventNotHandledErr;
 }
-}
+}  // namespace
 
-HotkeyManager::HotkeyManager(QObject* parent)
+HotkeyManager::HotkeyManager(QObject *parent)
     : QObject(parent) {
     qApp->installNativeEventFilter(this);
 
     EventTypeSpec eventTypes[] = {
-        {kEventClassKeyboard, kEventHotKeyPressed}
-    };
+        {kEventClassKeyboard, kEventHotKeyPressed}};
     gHotkeyHandlerUPP = NewEventHandlerUPP(hotkeyHandler);
     InstallApplicationEventHandler(gHotkeyHandlerUPP, 1, eventTypes, this, &gHotkeyHandlerRef);
 }
@@ -59,7 +58,7 @@ bool HotkeyManager::registerHotkey(int id, Qt::KeyboardModifiers modifiers, Qt::
 
     EventHotKeyRef ref = nullptr;
     const OSStatus status = RegisterEventHotKey(vk, mod, hotkeyId,
-                                                 GetApplicationEventTarget(), 0, &ref);
+                                                GetApplicationEventTarget(), 0, &ref);
     if (status != noErr) {
         return false;
     }
@@ -84,14 +83,14 @@ void HotkeyManager::unregisterHotkey(int id) {
 }
 
 void HotkeyManager::unregisterAll() {
-    for (const auto& binding : m_bindings) {
+    for (const auto &binding : m_bindings) {
         UnregisterEventHotKey(binding.ref);
     }
     m_bindings.clear();
 }
 
 bool HotkeyManager::isRegistered(int id) const {
-    for (const auto& binding : m_bindings) {
+    for (const auto &binding : m_bindings) {
         if (binding.id == id) {
             return true;
         }
@@ -99,7 +98,7 @@ bool HotkeyManager::isRegistered(int id) const {
     return false;
 }
 
-bool HotkeyManager::nativeEventFilter(const QByteArray& eventType, void* /*message*/, qintptr* /*result*/) {
+bool HotkeyManager::nativeEventFilter(const QByteArray &eventType, void * /*message*/, qintptr * /*result*/) {
     Q_UNUSED(eventType);
     return false;
 }
@@ -132,33 +131,59 @@ UInt32 HotkeyManager::carbonKey(Qt::Key key) {
         return kVK_F1 + static_cast<UInt32>(key - Qt::Key_F1);
     }
     switch (key) {
-    case Qt::Key_Return:
-    case Qt::Key_Enter:      return kVK_Return;
-    case Qt::Key_Tab:        return kVK_Tab;
-    case Qt::Key_Space:      return kVK_Space;
-    case Qt::Key_Backspace:  return kVK_Delete;
-    case Qt::Key_Escape:     return kVK_Escape;
-    case Qt::Key_Delete:     return kVK_ForwardDelete;
-    case Qt::Key_Home:       return kVK_Home;
-    case Qt::Key_End:        return kVK_End;
-    case Qt::Key_PageUp:     return kVK_PageUp;
-    case Qt::Key_PageDown:   return kVK_PageDown;
-    case Qt::Key_Left:       return kVK_LeftArrow;
-    case Qt::Key_Right:      return kVK_RightArrow;
-    case Qt::Key_Up:         return kVK_UpArrow;
-    case Qt::Key_Down:       return kVK_DownArrow;
-    case Qt::Key_QuoteLeft:  return kVK_ANSI_Grave;
-    case Qt::Key_Minus:      return kVK_ANSI_Minus;
-    case Qt::Key_Equal:      return kVK_ANSI_Equal;
-    case Qt::Key_BracketLeft:  return kVK_ANSI_LeftBracket;
-    case Qt::Key_BracketRight: return kVK_ANSI_RightBracket;
-    case Qt::Key_Backslash:  return kVK_ANSI_Backslash;
-    case Qt::Key_Semicolon:  return kVK_ANSI_Semicolon;
-    case Qt::Key_Apostrophe: return kVK_ANSI_Quote;
-    case Qt::Key_Comma:      return kVK_ANSI_Comma;
-    case Qt::Key_Period:     return kVK_ANSI_Period;
-    case Qt::Key_Slash:      return kVK_ANSI_Slash;
-    default: break;
+        case Qt::Key_Return:
+        case Qt::Key_Enter:
+            return kVK_Return;
+        case Qt::Key_Tab:
+            return kVK_Tab;
+        case Qt::Key_Space:
+            return kVK_Space;
+        case Qt::Key_Backspace:
+            return kVK_Delete;
+        case Qt::Key_Escape:
+            return kVK_Escape;
+        case Qt::Key_Delete:
+            return kVK_ForwardDelete;
+        case Qt::Key_Home:
+            return kVK_Home;
+        case Qt::Key_End:
+            return kVK_End;
+        case Qt::Key_PageUp:
+            return kVK_PageUp;
+        case Qt::Key_PageDown:
+            return kVK_PageDown;
+        case Qt::Key_Left:
+            return kVK_LeftArrow;
+        case Qt::Key_Right:
+            return kVK_RightArrow;
+        case Qt::Key_Up:
+            return kVK_UpArrow;
+        case Qt::Key_Down:
+            return kVK_DownArrow;
+        case Qt::Key_QuoteLeft:
+            return kVK_ANSI_Grave;
+        case Qt::Key_Minus:
+            return kVK_ANSI_Minus;
+        case Qt::Key_Equal:
+            return kVK_ANSI_Equal;
+        case Qt::Key_BracketLeft:
+            return kVK_ANSI_LeftBracket;
+        case Qt::Key_BracketRight:
+            return kVK_ANSI_RightBracket;
+        case Qt::Key_Backslash:
+            return kVK_ANSI_Backslash;
+        case Qt::Key_Semicolon:
+            return kVK_ANSI_Semicolon;
+        case Qt::Key_Apostrophe:
+            return kVK_ANSI_Quote;
+        case Qt::Key_Comma:
+            return kVK_ANSI_Comma;
+        case Qt::Key_Period:
+            return kVK_ANSI_Period;
+        case Qt::Key_Slash:
+            return kVK_ANSI_Slash;
+        default:
+            break;
     }
     return 0;
 }

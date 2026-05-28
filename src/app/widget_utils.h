@@ -6,5 +6,4 @@ class QComboBox;
 
 QString comboBoxStyleSheet();
 
-void configureComboBox(QComboBox * combo, int minimum_width = 0);
-
+void configureComboBox(QComboBox *combo, int minimum_width = 0);
