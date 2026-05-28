@@ -72,6 +72,10 @@ Configure with the `default` preset to generate `compile_commands.json` for clan
 cmake --preset default
 ```
 
+## Development
+
+See [docs/develop/](docs/develop/) (Chinese) for workflow, CI, branch protection, and releases.
+
 ## License
 
 [GPL-3.0](LICENSE)

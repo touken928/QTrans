@@ -72,6 +72,10 @@ cmake --build --preset debug
 cmake --preset default
 ```
 
+## 开发
+
+参与贡献、分支规范、CI、发版等说明见 **[开发文档](develop/README.md)**。
+
 ## 许可证
 
 [GPL-3.0](../LICENSE)
