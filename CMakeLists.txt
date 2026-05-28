@@ -31,6 +31,8 @@ target_link_libraries(qtrans_engine PUBLIC llama CURL::libcurl)
 
 set(QTRANS_SOURCES_COMMON
     src/app/main.cpp
+    src/app/single_instance.cpp
+    src/app/single_instance.h
     src/app/mainwindow.cpp
     src/app/mainwindow.h
     src/app/task_service.cpp
@@ -86,10 +88,10 @@ add_executable(QTrans ${QTRANS_SOURCES_COMMON})
 target_link_libraries(QTrans PRIVATE qtrans_engine Qt6::Widgets)
 
 if(WIN32)
-    target_sources(QTrans PRIVATE ${QTRANS_SOURCES_WIN})
+    target_sources(QTrans PRIVATE ${QTRANS_SOURCES_WIN} src/app/win/single_instance_activate.cpp)
 elseif(APPLE)
-    target_sources(QTrans PRIVATE ${QTRANS_SOURCES_MAC})
-    target_link_libraries(QTrans PRIVATE "-framework Carbon" "-framework CoreGraphics")
+    target_sources(QTrans PRIVATE ${QTRANS_SOURCES_MAC} src/app/mac/single_instance.mm)
+    target_link_libraries(QTrans PRIVATE "-framework AppKit" "-framework Carbon" "-framework CoreGraphics")
     qt_import_plugins(QTrans
         INCLUDE BY_TYPE platforms Qt6::QCocoaIntegrationPlugin
         INCLUDE BY_TYPE platformthemes Qt6::QMacStylePlugin

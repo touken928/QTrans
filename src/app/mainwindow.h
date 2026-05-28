@@ -26,6 +26,8 @@ public:
     explicit MainWindow(TaskService * task_service, QThread * worker_thread, QWidget * parent = nullptr);
     ~MainWindow() override;
 
+    void bringToForeground();
+
 protected:
     void showEvent(QShowEvent * event) override;
     void closeEvent(QCloseEvent * event) override;

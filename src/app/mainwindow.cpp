@@ -115,11 +115,7 @@ MainWindow::MainWindow(TaskService * task_service, QThread * worker_thread, QWid
             this, &MainWindow::onWordSelectSettingsChanged);
 
     system_tray_ = new SystemTray(this);
-    connect(system_tray_, &SystemTray::openMainWindow, this, [this]() {
-        show();
-        raise();
-        activateWindow();
-    });
+    connect(system_tray_, &SystemTray::openMainWindow, this, &MainWindow::bringToForeground);
     connect(system_tray_, &SystemTray::toggleTranslation,
             session_controller_, &SessionController::setEnabled);
     connect(system_tray_, &SystemTray::quitApp, qApp, &QCoreApplication::quit);
@@ -130,6 +126,12 @@ MainWindow::~MainWindow() {
         worker_thread_->quit();
         worker_thread_->wait();
     }
+}
+
+void MainWindow::bringToForeground() {
+    show();
+    raise();
+    activateWindow();
 }
 
 void MainWindow::closeEvent(QCloseEvent * event) {
