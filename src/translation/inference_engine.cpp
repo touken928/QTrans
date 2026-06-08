@@ -47,13 +47,8 @@ bool prompt_fits_context(int prompt_tokens, const TranslationModelConfig &config
     return prompt_tokens > 0 && prompt_tokens + kTranslationOutputReserve <= config.n_ctx;
 }
 
-std::string context_limit_error(bool wordselect, int prompt_tokens, const TranslationModelConfig &config) {
-    if (wordselect) {
-        return "selected text exceeds the model context limit; select a shorter passage";
-    }
-    return "text exceeds the model context limit (" + std::to_string(prompt_tokens) + " prompt tokens, limit " +
-           std::to_string(config.n_ctx) +
-           "); shorten the input or enable automatic splitting on the translate page";
+std::string context_limit_error() {
+    return "selected text exceeds the model context limit; select a shorter passage";
 }
 
 TranslateStepResult translate_single_chunk(
@@ -112,7 +107,6 @@ void InferenceEngine::unload() {
 TranslateStepResult InferenceEngine::translate(
     const std::string &text,
     const std::string &target_language,
-    bool auto_chunk,
     bool wordselect,
     const std::function<void(const std::string &)> &on_token,
     const CancelToken *cancel_token) {
@@ -138,8 +132,8 @@ TranslateStepResult InferenceEngine::translate(
         return translate_single_chunk(hymt, text, target_language, on_token, cancel_token);
     }
 
-    if (!auto_chunk) {
-        return make_failure(context_limit_error(wordselect, prompt_tokens, config_));
+    if (wordselect) {
+        return make_failure(context_limit_error());
     }
 
     const int max_chunk_tokens = max_chunk_prompt_tokens(config_);
@@ -207,7 +201,6 @@ TranslateStepResult InferenceEngine::run_translate_pipeline(
     TranslateStepResult forward = translate(
         payload.source,
         payload.target_language,
-        payload.auto_chunk_long_text,
         payload.wordselect,
         [&](const std::string &piece) {
             if (on_token) {
@@ -239,7 +232,6 @@ TranslateStepResult InferenceEngine::run_translate_pipeline(
     return translate(
         forward.text,
         payload.source_language,
-        payload.auto_chunk_long_text,
         false,
         [&](const std::string &piece) {
             if (on_token) {

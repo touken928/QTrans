@@ -44,7 +44,6 @@ private slots:
         bool back_translate);
     void onCancelRequested();
     void onLanguageChanged();
-    void onAutoChunkSettingChanged(bool enabled);
     void onWordSelectSettingsChanged();
     void onTranslateTaskStarted(quint64 task_id);
     void onTranslationFinished(quint64 task_id, int state);

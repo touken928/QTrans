@@ -160,23 +160,20 @@ void TaskService::translateInteractive(
     const QString &target_language,
     const QString &source_language,
     bool back_translate,
-    bool auto_chunk_long_text,
     bool wordselect) {
     TranslatePipelinePayload payload{};
     payload.source = source.toUtf8().constData();
     payload.target_language = target_language.toUtf8().constData();
     payload.source_language = source_language.toUtf8().constData();
     payload.back_translate = back_translate;
-    payload.auto_chunk_long_text = auto_chunk_long_text;
     payload.wordselect = wordselect;
     const TaskId task_id = submitTranslatePipeline(payload, TaskPriority::Interactive);
     fprintf(stderr,
-            "[TaskService] translateInteractive task:%llu src_len:%d target:'%s' back:%d chunk:%d wordselect:%d\n",
+            "[TaskService] translateInteractive task:%llu src_len:%d target:'%s' back:%d wordselect:%d\n",
             static_cast<unsigned long long>(task_id.value),
             static_cast<int>(source.size()),
             payload.target_language.c_str(),
             payload.back_translate ? 1 : 0,
-            payload.auto_chunk_long_text ? 1 : 0,
             payload.wordselect ? 1 : 0);
     emit translateTaskStarted(task_id.value);
 }

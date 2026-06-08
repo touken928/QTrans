@@ -179,7 +179,6 @@ void SessionController::doTranslate() {
         Q_ARG(QString, m_targetLanguage),
         Q_ARG(QString, m_sourceLanguage),
         Q_ARG(bool, false),
-        Q_ARG(bool, false),
         Q_ARG(bool, true));
 }
 
