@@ -71,6 +71,7 @@ MainWindow::MainWindow(TaskService *task_service, QThread *worker_thread, QWidge
     connect(translate_page_, &TranslatePage::translateRequested, this, &MainWindow::onTranslateRequested);
     connect(translate_page_, &TranslatePage::cancelRequested, this, &MainWindow::onCancelRequested);
     connect(translate_page_, &TranslatePage::languageChanged, this, &MainWindow::onLanguageChanged);
+    connect(translate_page_, &TranslatePage::autoChunkSettingChanged, this, &MainWindow::onAutoChunkSettingChanged);
 
     connect(task_service_, &TaskService::statusChanged, this, &MainWindow::onStatusChanged);
     connect(task_service_, &TaskService::modelLoadFinished, this, &MainWindow::onModelLoadFinished);
@@ -102,6 +103,7 @@ MainWindow::MainWindow(TaskService *task_service, QThread *worker_thread, QWidge
 
     translate_page_->setSourceLanguage(QString::fromStdString(settings_.source_language));
     translate_page_->setTargetLanguage(QString::fromStdString(settings_.target_language));
+    translate_page_->setAutoChunkLongText(settings_.auto_chunk_long_text);
     syncLanguagesToSettings();
 
     wordselect_page_->setEnabled(settings_.wordselect_enabled);
@@ -324,7 +326,9 @@ void MainWindow::onTranslateRequested(
         Q_ARG(QString, source),
         Q_ARG(QString, target_language),
         Q_ARG(QString, source_language),
-        Q_ARG(bool, back_translate));
+        Q_ARG(bool, back_translate),
+        Q_ARG(bool, translate_page_->autoChunkLongText()),
+        Q_ARG(bool, false));
 
     translate_page_->setTranslating(true);
 }
@@ -347,6 +351,12 @@ void MainWindow::onCancelRequested() {
 
 void MainWindow::onLanguageChanged() {
     syncLanguagesToSettings();
+}
+
+void MainWindow::onAutoChunkSettingChanged(bool enabled) {
+    settings_.auto_chunk_long_text = enabled;
+    settings_.auto_chunk_long_text_disabled = !enabled;
+    saveSettings();
 }
 
 bool MainWindow::isActiveTranslateTask(quint64 task_id) const {

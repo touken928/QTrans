@@ -17,6 +17,8 @@ public:
         const std::function<void(const std::string &)> &on_token = nullptr,
         const std::function<bool()> &should_cancel = nullptr) override;
 
+    int count_prompt_tokens(const std::string &text, const std::string &target_language) const;
+
 private:
     static std::string build_user_prompt(const std::string &text, const std::string &target_language);
     static std::string format_chat_prompt(const std::string &user_prompt);

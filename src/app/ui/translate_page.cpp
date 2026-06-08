@@ -12,6 +12,7 @@
 #include <QLabel>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QSplitter>
 #include <QString>
 #include <QTextCursor>
@@ -138,6 +139,12 @@ TranslatePage::TranslatePage(QWidget *parent)
         QStringLiteral("Show a third column and translate the result back to the source language"));
     footer->addWidget(back_translate_checkbox_);
 
+    auto_chunk_checkbox_ = new QCheckBox(QStringLiteral("Split long text"), this);
+    auto_chunk_checkbox_->setToolTip(
+        QStringLiteral("Automatically split text that exceeds the model context and translate in parts"));
+    auto_chunk_checkbox_->setChecked(true);
+    footer->addWidget(auto_chunk_checkbox_);
+
     root->addLayout(footer);
 
     connect(translate_button_, &QPushButton::clicked, this, &TranslatePage::onTranslate);
@@ -145,6 +152,7 @@ TranslatePage::TranslatePage(QWidget *parent)
     connect(clear_button_, &QPushButton::clicked, this, &TranslatePage::onClear);
     connect(copy_button_, &QPushButton::clicked, this, &TranslatePage::onCopyResult);
     connect(back_translate_checkbox_, &QCheckBox::toggled, this, &TranslatePage::onBackTranslateToggled);
+    connect(auto_chunk_checkbox_, &QCheckBox::toggled, this, &TranslatePage::autoChunkSettingChanged);
     connect(source_lang_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &TranslatePage::languageChanged);
     connect(target_lang_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -201,6 +209,15 @@ void TranslatePage::appendBackTranslate(const QString &piece) {
 
 QString TranslatePage::targetText() const {
     return target_edit_->toPlainText();
+}
+
+void TranslatePage::setAutoChunkLongText(bool enabled) {
+    const QSignalBlocker blocker(auto_chunk_checkbox_);
+    auto_chunk_checkbox_->setChecked(enabled);
+}
+
+bool TranslatePage::autoChunkLongText() const {
+    return auto_chunk_checkbox_->isChecked();
 }
 
 void TranslatePage::prepareForTranslation(bool back_translate) {
@@ -301,4 +318,5 @@ void TranslatePage::updateActions() {
     source_lang_combo_->setEnabled(!busy_ && !translating_);
     target_lang_combo_->setEnabled(!busy_ && !translating_);
     back_translate_checkbox_->setEnabled(!busy_ && !translating_);
+    auto_chunk_checkbox_->setEnabled(!busy_ && !translating_);
 }

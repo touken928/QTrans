@@ -57,6 +57,7 @@ TEST_F(AppSettingsTest, LoadOnMissingFileKeepsDefaults) {
     EXPECT_EQ(settings.source_language, "English");
     EXPECT_EQ(settings.target_language, "Chinese");
     EXPECT_TRUE(settings.wordselect_enabled);
+    EXPECT_TRUE(settings.auto_chunk_long_text);
     EXPECT_TRUE(settings.models_dir.empty());
     EXPECT_EQ(settings.model_id, default_model()->id);
 }
@@ -72,6 +73,8 @@ TEST_F(AppSettingsTest, SaveAndLoadRoundTrip) {
     out.wordselect_source_language = "German";
     out.wordselect_target_language = "Korean";
     out.wordselect_enabled = false;
+    out.auto_chunk_long_text = true;
+    out.auto_chunk_long_text_disabled = false;
     out.save(paths_);
 
     AppSettings in;
@@ -84,6 +87,30 @@ TEST_F(AppSettingsTest, SaveAndLoadRoundTrip) {
     EXPECT_EQ(in.wordselect_source_language, "German");
     EXPECT_EQ(in.wordselect_target_language, "Korean");
     EXPECT_FALSE(in.wordselect_enabled);
+    EXPECT_TRUE(in.auto_chunk_long_text);
+    EXPECT_FALSE(in.auto_chunk_long_text_disabled);
+}
+
+TEST_F(AppSettingsTest, LegacyAutoChunkFalseMigratesToEnabled) {
+    paths_.ensureDirectories();
+    std::ofstream(paths_.settings_file) << "auto_chunk_long_text=false\n";
+
+    AppSettings settings;
+    settings.load(paths_);
+    EXPECT_TRUE(settings.auto_chunk_long_text);
+    EXPECT_FALSE(settings.auto_chunk_long_text_disabled);
+}
+
+TEST_F(AppSettingsTest, AutoChunkDisabledFlagIsHonored) {
+    paths_.ensureDirectories();
+    std::ofstream(paths_.settings_file)
+        << "auto_chunk_long_text=false\n"
+        << "auto_chunk_long_text_disabled=true\n";
+
+    AppSettings settings;
+    settings.load(paths_);
+    EXPECT_FALSE(settings.auto_chunk_long_text);
+    EXPECT_TRUE(settings.auto_chunk_long_text_disabled);
 }
 
 TEST_F(AppSettingsTest, LoadSkipsCommentsAndBlankLines) {

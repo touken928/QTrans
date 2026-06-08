@@ -4,5 +4,6 @@
 
 void macSaveFrontApp();
 void macRestoreFrontApp();
+bool macEnsureAccessibilityTrusted(bool prompt);
 
 #endif

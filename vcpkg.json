@@ -18,6 +18,7 @@
         "png"
       ]
     },
-    "gtest"
+    "gtest",
+    "icu"
   ]
 }

@@ -49,7 +49,11 @@ WordSelectPage::WordSelectPage(QWidget *parent)
     form->addRow(QStringLiteral("Target language:"), target_lang_combo_);
 
     hotkey_edit_ = new QLineEdit(this);
+#ifdef Q_OS_MACOS
+    hotkey_edit_->setPlaceholderText(QStringLiteral("e.g. Control+`"));
+#else
     hotkey_edit_->setPlaceholderText(QStringLiteral("e.g. Ctrl+`"));
+#endif
     hotkey_edit_->setClearButtonEnabled(false);
     form->addRow(QStringLiteral("Shortcut:"), hotkey_edit_);
 
