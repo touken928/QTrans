@@ -20,6 +20,7 @@ public:
 private:
     static std::string build_user_prompt(const std::string &text, const std::string &target_language);
     static std::string format_chat_prompt(const std::string &user_prompt);
+    static bool contains_chinese(const std::string &text);
 
     static void ensure_backend();
     std::string generate(
@@ -31,4 +32,6 @@ private:
     std::unique_ptr<LlamaModelFromMemory> model_holder_;
     struct llama_context *ctx_ = nullptr;
     struct llama_sampler *sampler_ = nullptr;
+
+    friend struct HymtTestAccess;
 };

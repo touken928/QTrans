@@ -20,22 +20,6 @@ bool is_chinese_target(const std::string &target_language) {
     return is_chinese_language_name(target_language);
 }
 
-bool contains_chinese(const std::string &text) {
-    for (size_t i = 0; i < text.size();) {
-        const unsigned char b = static_cast<unsigned char>(text[i]);
-        if (b >= 0xE0 && b <= 0xEF && i + 2 < text.size()) {
-            const uint32_t cp = ((b & 0x0F) << 12) | ((static_cast<unsigned char>(text[i + 1]) & 0x3F) << 6) | (static_cast<unsigned char>(text[i + 2]) & 0x3F);
-            if (cp >= 0x4E00 && cp <= 0x9FFF) {
-                return true;
-            }
-            i += 3;
-        } else {
-            ++i;
-        }
-    }
-    return false;
-}
-
 void set_log_callback() {
     llama_log_set([](ggml_log_level level, const char *text, void *) {
         if (level >= GGML_LOG_LEVEL_ERROR) {
@@ -164,6 +148,24 @@ std::string Hymt::build_user_prompt(const std::string &text, const std::string &
 std::string Hymt::format_chat_prompt(const std::string &user_prompt) {
     // Official chat template: https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF
     return std::string(k_hy_bos) + k_hy_user + user_prompt + k_hy_assistant;
+}
+
+bool Hymt::contains_chinese(const std::string &text) {
+    for (size_t i = 0; i < text.size();) {
+        const unsigned char b = static_cast<unsigned char>(text[i]);
+        if (b >= 0xE0 && b <= 0xEF && i + 2 < text.size()) {
+            const uint32_t cp = ((b & 0x0F) << 12) |
+                                ((static_cast<unsigned char>(text[i + 1]) & 0x3F) << 6) |
+                                (static_cast<unsigned char>(text[i + 2]) & 0x3F);
+            if (cp >= 0x4E00 && cp <= 0x9FFF) {
+                return true;
+            }
+            i += 3;
+        } else {
+            ++i;
+        }
+    }
+    return false;
 }
 
 std::string Hymt::generate(
