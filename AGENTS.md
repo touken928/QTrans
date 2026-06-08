@@ -24,7 +24,7 @@ src/
   translation/   # Hy-MT, inference engine, languages
   model/         # Catalog, files
   network/       # Model download (libcurl)
-  storage/       # Paths, settings
+  storage/       # Paths, settings, debug AI logs
   task/          # Queue, orchestrator (worker thread)
   wordselect/    # Hotkey, clipboard, popup, session; mac/ win/ platform code
 .github/workflows/   # CI + release (YAML at root of workflows/, not subdirs)
@@ -33,6 +33,12 @@ resources/       # Qt resources (icons)
 ```
 
 `qtrans_engine` static library: core logic under `src/` except app shell and wordselect UI wiring. Executable target: `QTrans`.
+
+## Storage & translation
+
+- **AppPaths** (`src/storage/app_paths.h`): portable mode uses `<app>/data/`; system mode uses `~/.qtrans/`. Subdirs: `models/`, `settings/`, `logs/`. Resolve paths via `AppPaths::detect` + `ensureDirectories()`; do not write app data or diagnostics to the process cwd.
+- **Debug AI logs** (`src/storage/debug_ai_log.*`): prompt/response dumps only in **Debug** builds, written to `logs_dir` as `ai_output_*.log`. Release builds are no-ops.
+- **Long text** (`src/translation/text_chunker.*`, ICU): main-window translate and back-translate auto-split when input exceeds context. **Word-select** must fail with an explicit error instead of auto-splitting.
 
 ## Build (local)
 
