@@ -54,7 +54,6 @@ struct TranslatePipelinePayload {
     std::string target_language;
     std::string source_language;
     bool back_translate = false;
-    bool auto_chunk_long_text = true;
     bool wordselect = false;
 };
 

@@ -69,9 +69,6 @@ void AppSettings::load(const AppPaths &paths) {
         return;
     }
 
-    bool found_auto_chunk = false;
-    bool found_auto_chunk_disabled = false;
-
     std::string line;
     while (std::getline(input, line)) {
         line = trim(line);
@@ -105,21 +102,7 @@ void AppSettings::load(const AppPaths &paths) {
             wordselect_target_language = value;
         } else if (key == "wordselect_enabled") {
             wordselect_enabled = (value == "1" || value == "true");
-        } else if (key == "auto_chunk_long_text") {
-            found_auto_chunk = true;
-            auto_chunk_long_text = (value == "1" || value == "true");
-        } else if (key == "auto_chunk_long_text_disabled") {
-            found_auto_chunk_disabled = true;
-            auto_chunk_long_text_disabled = (value == "1" || value == "true");
         }
-    }
-
-    if (found_auto_chunk_disabled) {
-        auto_chunk_long_text = !auto_chunk_long_text_disabled;
-    } else if (!found_auto_chunk || !auto_chunk_long_text) {
-        // Default on: older settings files may have persisted false from a prior default.
-        auto_chunk_long_text = true;
-        auto_chunk_long_text_disabled = false;
     }
 
     migrate_legacy_settings(*this, paths);
@@ -142,9 +125,6 @@ void AppSettings::save(const AppPaths &paths) const {
     output << "wordselect_source_language=" << wordselect_source_language << '\n';
     output << "wordselect_target_language=" << wordselect_target_language << '\n';
     output << "wordselect_enabled=" << (wordselect_enabled ? "true" : "false") << '\n';
-    output << "auto_chunk_long_text=" << (auto_chunk_long_text ? "true" : "false") << '\n';
-    output << "auto_chunk_long_text_disabled=" << (auto_chunk_long_text_disabled ? "true" : "false")
-           << '\n';
 }
 
 void AppSettings::ensureStorage(const AppPaths &paths) const {

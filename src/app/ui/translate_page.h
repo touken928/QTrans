@@ -26,8 +26,6 @@ public:
     void appendBackTranslate(const QString &piece);
     QString targetText() const;
     void prepareForTranslation(bool back_translate);
-    void setAutoChunkLongText(bool enabled);
-    bool autoChunkLongText() const;
 
 signals:
     void translateRequested(
@@ -35,7 +33,6 @@ signals:
         const QString &target_language,
         const QString &source_language,
         bool back_translate);
-    void autoChunkSettingChanged(bool enabled);
     void cancelRequested();
     void languageChanged();
 
@@ -63,7 +60,6 @@ private:
     QPushButton *clear_button_ = nullptr;
     QPushButton *copy_button_ = nullptr;
     QCheckBox *back_translate_checkbox_ = nullptr;
-    QCheckBox *auto_chunk_checkbox_ = nullptr;
     QSplitter *splitter_ = nullptr;
     QWidget *back_panel_ = nullptr;
     QPlainTextEdit *source_edit_ = nullptr;

@@ -18,7 +18,6 @@ public:
     TranslateStepResult translate(
         const std::string &text,
         const std::string &target_language,
-        bool auto_chunk,
         bool wordselect,
         const std::function<void(const std::string &)> &on_token,
         const CancelToken *cancel_token);

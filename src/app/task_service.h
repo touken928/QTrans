@@ -38,7 +38,6 @@ public slots:
         const QString &target_language,
         const QString &source_language,
         bool back_translate,
-        bool auto_chunk_long_text,
         bool wordselect);
 
 signals:
