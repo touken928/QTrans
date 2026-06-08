@@ -101,3 +101,10 @@ endif()
 if(MINGW)
     target_link_options(QTrans PRIVATE -static-libgcc -static-libstdc++ -static -mwindows)
 endif()
+
+option(QTRANS_BUILD_TESTS "Build unit tests" OFF)
+
+if(QTRANS_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

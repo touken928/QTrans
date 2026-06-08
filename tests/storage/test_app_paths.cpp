@@ -1,0 +1,119 @@
+#include "storage/app_paths.h"
+
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+
+#include <gtest/gtest.h>
+
+#ifdef _WIN32
+namespace {
+constexpr const char kHomeEnv[] = "USERPROFILE";
+constexpr const char kHomeAltEnv[] = "HOME";
+}  // namespace
+#else
+namespace {
+constexpr const char kHomeEnv[] = "HOME";
+constexpr const char kHomeAltEnv[] = "USERPROFILE";
+}  // namespace
+#endif
+
+class AppPathsDetect : public ::testing::Test {
+protected:
+    void SetUp() override {
+        saved_home_ = std::getenv(kHomeEnv);
+        saved_alt_ = std::getenv(kHomeAltEnv);
+    }
+
+    void TearDown() override {
+        if (saved_home_) {
+            ::setenv(kHomeEnv, saved_home_, 1);
+        } else {
+            ::unsetenv(kHomeEnv);
+        }
+        if (saved_alt_) {
+            ::setenv(kHomeAltEnv, saved_alt_, 1);
+        } else {
+            ::unsetenv(kHomeAltEnv);
+        }
+    }
+
+    const char *saved_home_ = nullptr;
+    const char *saved_alt_ = nullptr;
+};
+
+TEST_F(AppPathsDetect, PortableModeWhenMarkerExists) {
+    auto tmp = std::filesystem::temp_directory_path() /
+               ("qtrans_app_paths_portable_" + std::to_string(::getpid()));
+    std::filesystem::remove_all(tmp);
+    std::filesystem::create_directories(tmp);
+    std::ofstream(tmp / ".portable").close();
+
+    const AppPaths paths = AppPaths::detect(tmp);
+    EXPECT_EQ(paths.mode, AppMode::Portable);
+    EXPECT_EQ(paths.data_root, std::filesystem::absolute(tmp) / "data");
+    EXPECT_EQ(paths.models_dir, std::filesystem::absolute(tmp) / "data" / "models");
+    EXPECT_EQ(paths.settings_dir, std::filesystem::absolute(tmp) / "data" / "settings");
+    EXPECT_EQ(paths.settings_file.filename(), "settings.ini");
+
+    std::filesystem::remove_all(tmp);
+}
+
+TEST_F(AppPathsDetect, SystemModeUsesHomeDirectory) {
+    const auto home = std::filesystem::temp_directory_path() / "qtrans_test_home";
+    std::filesystem::remove_all(home);
+    std::filesystem::create_directories(home);
+    ::setenv(kHomeEnv, home.string().c_str(), 1);
+    ::setenv(kHomeAltEnv, home.string().c_str(), 1);
+
+    const auto exec_dir = std::filesystem::temp_directory_path() / "qtrans_exec_dir";
+    std::filesystem::remove_all(exec_dir);
+    std::filesystem::create_directories(exec_dir);
+
+    const AppPaths paths = AppPaths::detect(exec_dir);
+    EXPECT_EQ(paths.mode, AppMode::System);
+    EXPECT_EQ(paths.data_root, home / ".qtrans");
+    EXPECT_EQ(paths.models_dir, home / ".qtrans" / "models");
+    EXPECT_EQ(paths.settings_file, home / ".qtrans" / "settings" / "settings.ini");
+
+    std::filesystem::remove_all(home);
+    std::filesystem::remove_all(exec_dir);
+}
+
+TEST_F(AppPathsDetect, DefaultModelPathUnderModelsDir) {
+    const auto home = std::filesystem::temp_directory_path() / "qtrans_test_home2";
+    std::filesystem::remove_all(home);
+    std::filesystem::create_directories(home);
+    ::setenv(kHomeEnv, home.string().c_str(), 1);
+    ::setenv(kHomeAltEnv, home.string().c_str(), 1);
+
+    const auto exec_dir = std::filesystem::temp_directory_path() / "qtrans_exec_dir2";
+    std::filesystem::remove_all(exec_dir);
+    std::filesystem::create_directories(exec_dir);
+
+    const AppPaths paths = AppPaths::detect(exec_dir);
+    EXPECT_EQ(paths.defaultModelFilename(), "Hy-MT2-1.8B-1.25Bit.gguf");
+    EXPECT_EQ(paths.defaultModelPath(), (paths.models_dir / "Hy-MT2-1.8B-1.25Bit.gguf").string());
+    EXPECT_EQ(paths.modeLabel(), "System");
+
+    std::filesystem::remove_all(home);
+    std::filesystem::remove_all(exec_dir);
+}
+
+TEST(AppPaths, EnsureDirectoriesIsIdempotent) {
+    const auto base = std::filesystem::temp_directory_path() /
+                      ("qtrans_ensure_" + std::to_string(::getpid()));
+    std::filesystem::remove_all(base);
+    AppPaths paths{};
+    paths.models_dir = base / "models";
+    paths.settings_dir = base / "settings";
+    paths.settings_file = paths.settings_dir / "settings.ini";
+
+    paths.ensureDirectories();
+    paths.ensureDirectories();  // must not throw
+
+    EXPECT_TRUE(std::filesystem::exists(paths.models_dir));
+    EXPECT_TRUE(std::filesystem::exists(paths.settings_dir));
+
+    std::filesystem::remove_all(base);
+}

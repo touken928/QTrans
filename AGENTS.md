@@ -47,6 +47,19 @@ cmake --preset x64-mingw-release && cmake --build --preset x64-mingw-release   #
 
 Presets: `CMakePresets.json`. Do not add dependencies without updating `vcpkg.json`.
 
+## Tests
+
+Unit tests live in `tests/`, mirrored under `src/` directories (`task/`, `storage/`, `network/`, `model/`, `translation/`). One gtest binary per directory, linked to `qtrans_engine`. Framework: **GoogleTest** via vcpkg (`gtest` in `vcpkg.json`).
+
+```bash
+cmake --preset arm64-osx-release-user -DQTRANS_BUILD_TESTS=ON
+cmake --build --preset arm64-osx-release-user
+ctest --test-dir build/arm64-osx-release-user --output-on-failure
+ctest --test-dir build/arm64-osx-release-user -L dir:task   # filter by directory
+```
+
+Default is `QTRANS_BUILD_TESTS=OFF`. Pure-logic modules (parsers, state machines, INI I/O) are in scope; Qt-widget / platform-API code is not. To make a private static testable, add a `friend struct XxxTestAccess;` in the class header and define the accessor in `tests/<dir>/xxx_test_access.h`.
+
 ## Code style
 
 - Format with repo root [`.clang-format`](.clang-format) (Google-based, 4 spaces, pointer right alignment).
