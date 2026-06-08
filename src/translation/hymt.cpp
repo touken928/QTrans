@@ -3,6 +3,7 @@
 #include "translation/translation_languages.h"
 #include "llama.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <ctime>
 #include <functional>
@@ -109,6 +110,24 @@ void Hymt::load(const std::vector<std::uint8_t> &data, const TranslationModelCon
 
     sampler_ = create_sampler(config_);
     set_loaded(true);
+}
+
+int Hymt::count_prompt_tokens(const std::string &text, const std::string &target_language) const {
+    if (!is_loaded()) {
+        return 0;
+    }
+
+    const std::string prompt = format_chat_prompt(build_user_prompt(text, target_language));
+    const llama_vocab *vocab = llama_model_get_vocab(model_holder_->model);
+    const int n_prompt = -llama_tokenize(
+        vocab,
+        prompt.c_str(),
+        static_cast<int32_t>(prompt.size()),
+        nullptr,
+        0,
+        true,
+        true);
+    return n_prompt > 0 ? n_prompt : 0;
 }
 
 std::string Hymt::translate(
@@ -220,10 +239,20 @@ std::string Hymt::generate(
     llama_batch batch = llama_batch_get_one(prompt_tokens.data(), static_cast<int32_t>(prompt_tokens.size()));
     std::string response;
 
-    fprintf(stderr, "[Hymt] starting decode loop, max_tokens=%d\n", config_.max_tokens);
-    for (int i = 0; i < config_.max_tokens; ++i) {
+    const int ctx_room = config_.n_ctx - n_prompt;
+    if (ctx_room <= 0) {
+        throw std::runtime_error("prompt exceeds model context");
+    }
+    const int max_gen = std::min(config_.max_tokens, ctx_room);
+
+    fprintf(stderr,
+            "[Hymt] starting decode loop, max_gen=%d prompt_tokens=%d n_ctx=%d\n",
+            max_gen,
+            n_prompt,
+            config_.n_ctx);
+    for (int i = 0; i < max_gen; ++i) {
         if (i > 0 && i % 10 == 0) {
-            fprintf(stderr, "[Hymt] token %d/%d\n", i, config_.max_tokens);
+            fprintf(stderr, "[Hymt] token %d/%d\n", i, max_gen);
         }
         if (cancel_fn()) {
             fprintf(stderr, "[Hymt] cancelled at token %d\n", i);

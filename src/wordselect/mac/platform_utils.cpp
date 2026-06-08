@@ -1,5 +1,6 @@
 #include "platform_utils.h"
 
+#include <ApplicationServices/ApplicationServices.h>
 #include <objc/runtime.h>
 #include <objc/message.h>
 
@@ -39,8 +40,31 @@ void macSaveFrontApp() {
 void macRestoreFrontApp() {
     if (!savedFrontApp) return;
 
+    // NSApplicationActivateIgnoringOtherApps
     ((MsgSend_void_id_SEL_long)objc_msgSend)(
-        savedFrontApp, sel_getUid("activateWithOptions:"), (long)1);
+        savedFrontApp, sel_getUid("activateWithOptions:"), (long)2);
     macRelease(savedFrontApp);
     savedFrontApp = nil;
+}
+
+bool macEnsureAccessibilityTrusted(bool prompt) {
+    if (AXIsProcessTrusted()) {
+        return true;
+    }
+    if (!prompt) {
+        return false;
+    }
+
+    const void *keys[] = {kAXTrustedCheckOptionPrompt};
+    const void *values[] = {kCFBooleanTrue};
+    CFDictionaryRef options = CFDictionaryCreate(
+        kCFAllocatorDefault,
+        keys,
+        values,
+        1,
+        &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks);
+    const bool trusted = AXIsProcessTrustedWithOptions(options);
+    CFRelease(options);
+    return trusted;
 }

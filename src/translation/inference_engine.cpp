@@ -3,7 +3,10 @@
 #include "model/model_files.h"
 #include "network/download.h"
 #include "translation/hymt.h"
+#include "translation/text_chunker.h"
 
+#include <algorithm>
+#include <cstdio>
 #include <stdexcept>
 
 namespace {
@@ -30,6 +33,56 @@ TranslateStepResult make_completed(std::string text) {
 
 bool is_cancelled(const CancelToken *cancel_token) {
     return cancel_token != nullptr && cancel_token->is_cancelled();
+}
+
+int max_chunk_prompt_tokens(const TranslationModelConfig &config) {
+    // Translation output is often similar in length to the source; reserve ~half of
+    // n_ctx for generation so a chunk does not fill the window with prompt alone.
+    const int output_room = std::max(kTranslationOutputReserve, config.n_ctx / 2);
+    const int budget = config.n_ctx - output_room;
+    return budget > 0 ? budget : 1;
+}
+
+bool prompt_fits_context(int prompt_tokens, const TranslationModelConfig &config) {
+    return prompt_tokens > 0 && prompt_tokens + kTranslationOutputReserve <= config.n_ctx;
+}
+
+std::string context_limit_error(bool wordselect, int prompt_tokens, const TranslationModelConfig &config) {
+    if (wordselect) {
+        return "selected text exceeds the model context limit; select a shorter passage";
+    }
+    return "text exceeds the model context limit (" + std::to_string(prompt_tokens) + " prompt tokens, limit " +
+           std::to_string(config.n_ctx) +
+           "); shorten the input or enable automatic splitting on the translate page";
+}
+
+TranslateStepResult translate_single_chunk(
+    Hymt *model,
+    const std::string &text,
+    const std::string &target_language,
+    const std::function<void(const std::string &)> &on_token,
+    const CancelToken *cancel_token) {
+    if (is_cancelled(cancel_token)) {
+        return make_cancelled();
+    }
+
+    try {
+        const std::string result = model->translate(
+            text,
+            target_language,
+            on_token,
+            cancel_token != nullptr ? cancel_token->checker() : std::function<bool()>());
+
+        if (is_cancelled(cancel_token)) {
+            return make_cancelled();
+        }
+
+        return make_completed(result);
+    } catch (const TranslationCancelled &) {
+        return make_cancelled();
+    } catch (const std::exception &ex) {
+        return make_failure(ex.what());
+    }
 }
 
 }  // namespace
@@ -59,6 +112,8 @@ void InferenceEngine::unload() {
 TranslateStepResult InferenceEngine::translate(
     const std::string &text,
     const std::string &target_language,
+    bool auto_chunk,
+    bool wordselect,
     const std::function<void(const std::string &)> &on_token,
     const CancelToken *cancel_token) {
     if (!is_loaded()) {
@@ -69,23 +124,75 @@ TranslateStepResult InferenceEngine::translate(
         return make_cancelled();
     }
 
-    try {
-        const std::string result = model_->translate(
-            text,
-            target_language,
-            on_token,
-            cancel_token != nullptr ? cancel_token->checker() : std::function<bool()>());
+    Hymt *hymt = dynamic_cast<Hymt *>(model_.get());
+    if (hymt == nullptr) {
+        return make_failure("unsupported translation model");
+    }
 
+    const int prompt_tokens = hymt->count_prompt_tokens(text, target_language);
+    if (prompt_tokens <= 0) {
+        return make_failure("failed to measure prompt tokens");
+    }
+
+    if (prompt_fits_context(prompt_tokens, config_)) {
+        return translate_single_chunk(hymt, text, target_language, on_token, cancel_token);
+    }
+
+    if (!auto_chunk) {
+        return make_failure(context_limit_error(wordselect, prompt_tokens, config_));
+    }
+
+    const int max_chunk_tokens = max_chunk_prompt_tokens(config_);
+    const auto token_counter = [&](const std::string &segment) {
+        return hymt->count_prompt_tokens(segment, target_language);
+    };
+
+    std::vector<std::string> chunks;
+    try {
+        chunks = chunk_text_by_token_budget(text, max_chunk_tokens, token_counter);
+    } catch (const std::exception &ex) {
+        return make_failure(ex.what());
+    }
+
+    if (chunks.empty()) {
+        return make_failure("failed to split text for translation");
+    }
+
+    if (chunks.size() == 1) {
+        return translate_single_chunk(hymt, chunks.front(), target_language, on_token, cancel_token);
+    }
+
+    std::string combined;
+    for (size_t i = 0; i < chunks.size(); ++i) {
         if (is_cancelled(cancel_token)) {
             return make_cancelled();
         }
 
-        return make_completed(result);
-    } catch (const TranslationCancelled &) {
-        return make_cancelled();
-    } catch (const std::exception &ex) {
-        return make_failure(ex.what());
+        fprintf(stderr,
+                "[InferenceEngine] translating chunk %zu/%zu\n",
+                i + 1,
+                chunks.size());
+
+        // Each chunk streams through the same on_token callback; no reset between chunks.
+        TranslateStepResult chunk_result = translate_single_chunk(
+            hymt,
+            chunks[i],
+            target_language,
+            on_token,
+            cancel_token);
+
+        if (chunk_result.outcome != InferenceOutcome::Completed) {
+            if (chunk_result.outcome == InferenceOutcome::Failed) {
+                chunk_result.error_message = "translation failed at chunk " + std::to_string(i + 1) + "/" +
+                                             std::to_string(chunks.size()) + ": " + chunk_result.error_message;
+            }
+            return chunk_result;
+        }
+
+        combined += chunk_result.text;
     }
+
+    return make_completed(std::move(combined));
 }
 
 TranslateStepResult InferenceEngine::run_translate_pipeline(
@@ -100,6 +207,8 @@ TranslateStepResult InferenceEngine::run_translate_pipeline(
     TranslateStepResult forward = translate(
         payload.source,
         payload.target_language,
+        payload.auto_chunk_long_text,
+        payload.wordselect,
         [&](const std::string &piece) {
             if (on_token) {
                 on_token(false, piece);
@@ -130,6 +239,8 @@ TranslateStepResult InferenceEngine::run_translate_pipeline(
     return translate(
         forward.text,
         payload.source_language,
+        payload.auto_chunk_long_text,
+        false,
         [&](const std::string &piece) {
             if (on_token) {
                 on_token(true, piece);

@@ -15,6 +15,8 @@ struct AppSettings {
     std::string wordselect_source_language = "English";
     std::string wordselect_target_language = "Auto";
     bool wordselect_enabled = true;
+    bool auto_chunk_long_text = true;
+    bool auto_chunk_long_text_disabled = false;
 
     void load(const AppPaths &paths);
     void save(const AppPaths &paths) const;

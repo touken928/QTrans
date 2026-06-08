@@ -1,5 +1,6 @@
 #include "../clipboard_capture.h"
 
+#include <Carbon/Carbon.h>
 #include <CoreGraphics/CoreGraphics.h>
 #include <chrono>
 #include <cstdio>
@@ -14,31 +15,26 @@ void simulateCopy() {
         return;
     }
 
-    CGEventRef cmdDown = CGEventCreateKeyboardEvent(source, (CGKeyCode)55, true);
-    CGEventRef cDown = CGEventCreateKeyboardEvent(source, (CGKeyCode)8, true);
-    CGEventRef cUp = CGEventCreateKeyboardEvent(source, (CGKeyCode)8, false);
-    CGEventRef cmdUp = CGEventCreateKeyboardEvent(source, (CGKeyCode)55, false);
+    CGEventRef cDown = CGEventCreateKeyboardEvent(source, kVK_ANSI_C, true);
+    CGEventRef cUp = CGEventCreateKeyboardEvent(source, kVK_ANSI_C, false);
 
-    if (!cmdDown || !cDown || !cUp || !cmdUp) {
+    if (!cDown || !cUp) {
         fprintf(stderr, "[ClipboardCapture] CGEventCreate failed\n");
-        if (cmdDown) CFRelease(cmdDown);
         if (cDown) CFRelease(cDown);
         if (cUp) CFRelease(cUp);
-        if (cmdUp) CFRelease(cmdUp);
         CFRelease(source);
         return;
     }
 
-    CGEventPost(kCGHIDEventTap, cmdDown);
+    CGEventSetFlags(cDown, kCGEventFlagMaskCommand);
+    CGEventSetFlags(cUp, kCGEventFlagMaskCommand);
+
     CGEventPost(kCGHIDEventTap, cDown);
-    std::this_thread::sleep_for(std::chrono::milliseconds(15));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
     CGEventPost(kCGHIDEventTap, cUp);
-    CGEventPost(kCGHIDEventTap, cmdUp);
 
     CFRelease(cUp);
     CFRelease(cDown);
-    CFRelease(cmdUp);
-    CFRelease(cmdDown);
     CFRelease(source);
 }
 
