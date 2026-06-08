@@ -43,7 +43,9 @@ void write_debug_ai_output(const std::string &prompt, const std::string &respons
         return;
     }
 
-    logf << "=== prompt ===\n" << prompt << "\n\n=== response ===\n" << response << '\n';
+    logf << "=== prompt ===\n"
+         << prompt << "\n\n=== response ===\n"
+         << response << '\n';
     fprintf(stderr, "[Hymt] debug log written to: %s\n", log_path.string().c_str());
 #endif
 }
