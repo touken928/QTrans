@@ -55,4 +55,4 @@ cmake --preset default
 
 ## 与 CI 的关系
 
-Release 流水线在 GitHub Actions 中执行与 preset 对应的构建（见 [release.md](release.md)）。本地构建用于开发调试；**合并 PR 不要求** 本地 Release 构建通过。
+Release 流水线在 GitHub Actions 中执行与 preset 对应的构建（见 [release.md](release.md)）。PR 会在 CI 中执行全量单元测试（见 [ci.md](ci.md)）。本地构建用于开发调试；**合并 PR 不要求** 本地 Release 构建通过。
