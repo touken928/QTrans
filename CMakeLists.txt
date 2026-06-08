@@ -15,6 +15,7 @@ set(CMAKE_AUTORCC ON)
 
 add_library(qtrans_engine STATIC
     src/storage/app_paths.cpp
+    src/storage/debug_ai_log.cpp
     src/storage/settings.cpp
     src/model/model_catalog.cpp
     src/model/model_files.cpp

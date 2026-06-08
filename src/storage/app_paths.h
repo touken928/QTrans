@@ -15,6 +15,7 @@ struct AppPaths {
     std::filesystem::path models_dir;
     std::filesystem::path settings_dir;
     std::filesystem::path settings_file;
+    std::filesystem::path logs_dir;
 
     static AppPaths detect(const std::filesystem::path &executable_dir);
 

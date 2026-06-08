@@ -1,11 +1,11 @@
 #include "translation/hymt.h"
 
+#include "storage/debug_ai_log.h"
 #include "translation/translation_languages.h"
 #include "llama.h"
 
 #include <algorithm>
 #include <cstdio>
-#include <ctime>
 #include <functional>
 #include <memory>
 #include <stdexcept>
@@ -393,21 +393,7 @@ std::string Hymt::generate(
     fprintf(stderr, "[Hymt] generate done, response_len=%zu response:'%s'\n",
             response.size(), response.c_str());
 
-    {
-        time_t now = time(nullptr);
-        char time_buf[32];
-        strftime(time_buf, sizeof(time_buf), "%Y%m%d_%H%M%S", localtime(&now));
-        char log_path[512];
-        snprintf(log_path, sizeof(log_path), "%s/qtrans_ai_output_%s.log",
-                 getenv("TEMP") ? getenv("TEMP") : ".", time_buf);
-        FILE *logf = fopen(log_path, "wb");
-        if (logf) {
-            fprintf(logf, "=== prompt ===\n%s\n\n=== response ===\n%s\n",
-                    prompt.c_str(), response.c_str());
-            fclose(logf);
-            fprintf(stderr, "[Hymt] log written to: %s\n", log_path);
-        }
-    }
+    write_debug_ai_output(prompt, response);
 
     return response;
 }

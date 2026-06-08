@@ -12,6 +12,7 @@
 #include "app/ui/wordselect_page.h"
 #include "network/download.h"
 #include "model/model_catalog.h"
+#include "storage/debug_ai_log.h"
 #include "wordselect/hotkey_manager.h"
 #include "wordselect/popup_window.h"
 #include "wordselect/session_controller.h"
@@ -33,6 +34,7 @@ MainWindow::MainWindow(TaskService *task_service, QThread *worker_thread, QWidge
     setMinimumSize(720, 480);
 
     paths_.ensureDirectories();
+    register_app_logs_dir(paths_.logs_dir);
     settings_.load(paths_);
     settings_.ensureStorage(paths_);
     syncSettingsToTaskService();
