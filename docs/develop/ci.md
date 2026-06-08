@@ -8,6 +8,7 @@ Workflow 文件位于 [`.github/workflows/`](../../.github/workflows/) **根目�
 |---------------|---------------------------|----------|
 | `branch-policy.yml` | **Branch naming** | push 到非 `main` 分支；PR → `main` |
 | `format-check.yml` | **Code formatting** | PR → `main` |
+| `unit-tests.yml` | **Unit tests** | PR → `main` |
 | `release.yml` | （无 PR 检查） | push tag `v*` |
 
 Dependabot 的提交会跳过 **Branch naming**。
@@ -26,13 +27,19 @@ users/<GitHub 用户名>/<非空主题>
 
 对 `src/` 下 C/C++/ObjC++ 源文件执行 `clang-format --dry-run --Werror`。
 
+## Unit tests
+
+在 `macos-14` 上使用 preset `arm64-osx-release` 配置并构建（`-DQTRANS_BUILD_TESTS=ON`），随后执行全量 `ctest`（`tests/` 下各目录的 gtest 二进制）。
+
+首次运行或依赖变更时可能较慢（vcpkg 编译 Qt / llama.cpp 等）；与 Release 工作流共用相同的 vcpkg 缓存键。
+
 ## Release
 
 打 tag `v*`（如 `v0.2.1`）后构建 macOS / Windows 产物并发布到 [GitHub Releases](https://github.com/touken928/QTrans/releases)。不参与 PR 合并门禁。详见 [release.md](release.md)。
 
 ## 手动触发
 
-`branch-policy.yml` 与 `format-check.yml` 支持 **workflow_dispatch**，可在 Actions 页手动 Run workflow（用于首次在 Ruleset 中登记检查名）。
+`branch-policy.yml`、`format-check.yml` 与 `unit-tests.yml` 支持 **workflow_dispatch**，可在 Actions 页手动 Run workflow（用于首次在 Ruleset 中登记检查名）。
 
 ## 查看结果
 
@@ -41,4 +48,4 @@ users/<GitHub 用户名>/<非空主题>
 
 ## 与分支保护的关系
 
-若 `main` 的 Ruleset 启用了 **Require status checks**，须勾选 **Branch naming** 与 **Code formatting**（名称须与 Job 完全一致）。配置说明见 [branch-protection.md](branch-protection.md)。
+若 `main` 的 Ruleset 启用了 **Require status checks**，须勾选 **Branch naming**、**Code formatting** 与 **Unit tests**（名称须与 Job 完全一致）。配置说明见 [branch-protection.md](branch-protection.md)。

@@ -66,6 +66,8 @@ ctest --test-dir build/arm64-osx-release-user -L dir:task   # filter by director
 
 Default is `QTRANS_BUILD_TESTS=OFF`. Pure-logic modules (parsers, state machines, INI I/O) are in scope; Qt-widget / platform-API code is not. To make a private static testable, add a `friend struct XxxTestAccess;` in the class header and define the accessor in `tests/<dir>/xxx_test_access.h`.
 
+PRs to `main` run the full `ctest` suite in CI (workflow `unit-tests.yml`, job **Unit tests**).
+
 ## Code style
 
 - Format with repo root [`.clang-format`](.clang-format) (Google-based, 4 spaces, pointer right alignment).
