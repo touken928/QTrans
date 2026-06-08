@@ -37,7 +37,8 @@ public slots:
         const QString &source,
         const QString &target_language,
         const QString &source_language,
-        bool back_translate);
+        bool back_translate,
+        bool wordselect);
 
 signals:
     void translateTaskStarted(quint64 task_id);

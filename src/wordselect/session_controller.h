@@ -42,6 +42,7 @@ public slots:
     void onTargetAppended(quint64 taskId, const QString &piece);
     void onTranslationFinished(quint64 taskId, int state);
     void onPopupDismissed();
+    void onStatusChanged(const QString &message, bool busy);
 
 private slots:
     void doTranslate();
@@ -64,4 +65,5 @@ private:
     QString m_hotkeyStr;
     QString m_sourceLanguage;
     QString m_targetLanguage;
+    QString m_lastErrorMessage;
 };

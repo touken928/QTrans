@@ -54,6 +54,7 @@ TEST_F(AppPathsDetect, PortableModeWhenMarkerExists) {
     EXPECT_EQ(paths.data_root, std::filesystem::absolute(tmp) / "data");
     EXPECT_EQ(paths.models_dir, std::filesystem::absolute(tmp) / "data" / "models");
     EXPECT_EQ(paths.settings_dir, std::filesystem::absolute(tmp) / "data" / "settings");
+    EXPECT_EQ(paths.logs_dir, std::filesystem::absolute(tmp) / "data" / "logs");
     EXPECT_EQ(paths.settings_file.filename(), "settings.ini");
 
     std::filesystem::remove_all(tmp);
@@ -74,6 +75,7 @@ TEST_F(AppPathsDetect, SystemModeUsesHomeDirectory) {
     EXPECT_EQ(paths.mode, AppMode::System);
     EXPECT_EQ(paths.data_root, home / ".qtrans");
     EXPECT_EQ(paths.models_dir, home / ".qtrans" / "models");
+    EXPECT_EQ(paths.logs_dir, home / ".qtrans" / "logs");
     EXPECT_EQ(paths.settings_file, home / ".qtrans" / "settings" / "settings.ini");
 
     std::filesystem::remove_all(home);
@@ -107,6 +109,7 @@ TEST(AppPaths, EnsureDirectoriesIsIdempotent) {
     AppPaths paths{};
     paths.models_dir = base / "models";
     paths.settings_dir = base / "settings";
+    paths.logs_dir = base / "logs";
     paths.settings_file = paths.settings_dir / "settings.ini";
 
     paths.ensureDirectories();
@@ -114,6 +117,7 @@ TEST(AppPaths, EnsureDirectoriesIsIdempotent) {
 
     EXPECT_TRUE(std::filesystem::exists(paths.models_dir));
     EXPECT_TRUE(std::filesystem::exists(paths.settings_dir));
+    EXPECT_TRUE(std::filesystem::exists(paths.logs_dir));
 
     std::filesystem::remove_all(base);
 }

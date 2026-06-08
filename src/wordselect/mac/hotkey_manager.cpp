@@ -2,6 +2,7 @@
 
 #include <Carbon/Carbon.h>
 #include <QCoreApplication>
+#include <cstdio>
 
 namespace {
 EventHandlerUPP gHotkeyHandlerUPP = nullptr;
@@ -60,8 +61,20 @@ bool HotkeyManager::registerHotkey(int id, Qt::KeyboardModifiers modifiers, Qt::
     const OSStatus status = RegisterEventHotKey(vk, mod, hotkeyId,
                                                 GetApplicationEventTarget(), 0, &ref);
     if (status != noErr) {
+        fprintf(stderr,
+                "[HotkeyManager] RegisterEventHotKey failed id=%d vk=0x%x mod=0x%x status=%d\n",
+                id,
+                vk,
+                mod,
+                static_cast<int>(status));
         return false;
     }
+
+    fprintf(stderr,
+            "[HotkeyManager] registered hotkey id=%d vk=0x%x mod=0x%x\n",
+            id,
+            vk,
+            mod);
 
     HotkeyBinding binding{};
     binding.id = id;
@@ -105,8 +118,11 @@ bool HotkeyManager::nativeEventFilter(const QByteArray &eventType, void * /*mess
 
 UInt32 HotkeyManager::carbonModifiers(Qt::KeyboardModifiers modifiers) {
     UInt32 mod = 0;
+    // Match Qt semantics: Control = physical Control, Meta = Command (⌘).
+    // Previously Control was mapped to cmdKey, so default "Ctrl+`" became Cmd+`
+    // and conflicted with the system "cycle windows" shortcut.
     if (modifiers & Qt::ControlModifier) {
-        mod |= cmdKey;
+        mod |= controlKey;
     }
     if (modifiers & Qt::ShiftModifier) {
         mod |= shiftKey;
@@ -115,22 +131,88 @@ UInt32 HotkeyManager::carbonModifiers(Qt::KeyboardModifiers modifiers) {
         mod |= optionKey;
     }
     if (modifiers & Qt::MetaModifier) {
-        mod |= controlKey;
+        mod |= cmdKey;
     }
     return mod;
 }
 
 UInt32 HotkeyManager::carbonKey(Qt::Key key) {
-    if (key >= Qt::Key_A && key <= Qt::Key_Z) {
-        return static_cast<UInt32>(key);
-    }
-    if (key >= Qt::Key_0 && key <= Qt::Key_9) {
-        return static_cast<UInt32>(key);
-    }
     if (key >= Qt::Key_F1 && key <= Qt::Key_F12) {
         return kVK_F1 + static_cast<UInt32>(key - Qt::Key_F1);
     }
     switch (key) {
+        case Qt::Key_A:
+            return kVK_ANSI_A;
+        case Qt::Key_B:
+            return kVK_ANSI_B;
+        case Qt::Key_C:
+            return kVK_ANSI_C;
+        case Qt::Key_D:
+            return kVK_ANSI_D;
+        case Qt::Key_E:
+            return kVK_ANSI_E;
+        case Qt::Key_F:
+            return kVK_ANSI_F;
+        case Qt::Key_G:
+            return kVK_ANSI_G;
+        case Qt::Key_H:
+            return kVK_ANSI_H;
+        case Qt::Key_I:
+            return kVK_ANSI_I;
+        case Qt::Key_J:
+            return kVK_ANSI_J;
+        case Qt::Key_K:
+            return kVK_ANSI_K;
+        case Qt::Key_L:
+            return kVK_ANSI_L;
+        case Qt::Key_M:
+            return kVK_ANSI_M;
+        case Qt::Key_N:
+            return kVK_ANSI_N;
+        case Qt::Key_O:
+            return kVK_ANSI_O;
+        case Qt::Key_P:
+            return kVK_ANSI_P;
+        case Qt::Key_Q:
+            return kVK_ANSI_Q;
+        case Qt::Key_R:
+            return kVK_ANSI_R;
+        case Qt::Key_S:
+            return kVK_ANSI_S;
+        case Qt::Key_T:
+            return kVK_ANSI_T;
+        case Qt::Key_U:
+            return kVK_ANSI_U;
+        case Qt::Key_V:
+            return kVK_ANSI_V;
+        case Qt::Key_W:
+            return kVK_ANSI_W;
+        case Qt::Key_X:
+            return kVK_ANSI_X;
+        case Qt::Key_Y:
+            return kVK_ANSI_Y;
+        case Qt::Key_Z:
+            return kVK_ANSI_Z;
+        case Qt::Key_0:
+            return kVK_ANSI_0;
+        case Qt::Key_1:
+            return kVK_ANSI_1;
+        case Qt::Key_2:
+            return kVK_ANSI_2;
+        case Qt::Key_3:
+            return kVK_ANSI_3;
+        case Qt::Key_4:
+            return kVK_ANSI_4;
+        case Qt::Key_5:
+            return kVK_ANSI_5;
+        case Qt::Key_6:
+            return kVK_ANSI_6;
+        case Qt::Key_7:
+            return kVK_ANSI_7;
+        case Qt::Key_8:
+            return kVK_ANSI_8;
+        case Qt::Key_9:
+            return kVK_ANSI_9;
         case Qt::Key_Return:
         case Qt::Key_Enter:
             return kVK_Return;

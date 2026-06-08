@@ -12,6 +12,7 @@
 #include "app/ui/wordselect_page.h"
 #include "network/download.h"
 #include "model/model_catalog.h"
+#include "storage/debug_ai_log.h"
 #include "wordselect/hotkey_manager.h"
 #include "wordselect/popup_window.h"
 #include "wordselect/session_controller.h"
@@ -33,6 +34,7 @@ MainWindow::MainWindow(TaskService *task_service, QThread *worker_thread, QWidge
     setMinimumSize(720, 480);
 
     paths_.ensureDirectories();
+    register_app_logs_dir(paths_.logs_dir);
     settings_.load(paths_);
     settings_.ensureStorage(paths_);
     syncSettingsToTaskService();
@@ -71,7 +73,6 @@ MainWindow::MainWindow(TaskService *task_service, QThread *worker_thread, QWidge
     connect(translate_page_, &TranslatePage::translateRequested, this, &MainWindow::onTranslateRequested);
     connect(translate_page_, &TranslatePage::cancelRequested, this, &MainWindow::onCancelRequested);
     connect(translate_page_, &TranslatePage::languageChanged, this, &MainWindow::onLanguageChanged);
-
     connect(task_service_, &TaskService::statusChanged, this, &MainWindow::onStatusChanged);
     connect(task_service_, &TaskService::modelLoadFinished, this, &MainWindow::onModelLoadFinished);
     connect(task_service_, &TaskService::modelUnloadFinished, this, &MainWindow::onModelUnloadFinished);
@@ -324,7 +325,8 @@ void MainWindow::onTranslateRequested(
         Q_ARG(QString, source),
         Q_ARG(QString, target_language),
         Q_ARG(QString, source_language),
-        Q_ARG(bool, back_translate));
+        Q_ARG(bool, back_translate),
+        Q_ARG(bool, false));
 
     translate_page_->setTranslating(true);
 }

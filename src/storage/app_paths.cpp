@@ -38,6 +38,7 @@ AppPaths AppPaths::detect(const std::filesystem::path &executable_dir) {
     paths.models_dir = paths.data_root / "models";
     paths.settings_dir = paths.data_root / "settings";
     paths.settings_file = paths.settings_dir / "settings.ini";
+    paths.logs_dir = paths.data_root / "logs";
     return paths;
 }
 
@@ -57,4 +58,5 @@ void AppPaths::ensureDirectories() const {
     std::error_code ec;
     std::filesystem::create_directories(models_dir, ec);
     std::filesystem::create_directories(settings_dir, ec);
+    std::filesystem::create_directories(logs_dir, ec);
 }

@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(llama CONFIG REQUIRED)
 find_package(CURL REQUIRED)
+find_package(ICU REQUIRED COMPONENTS uc i18n data)
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
 set(CMAKE_AUTOMOC ON)
@@ -14,6 +15,7 @@ set(CMAKE_AUTORCC ON)
 
 add_library(qtrans_engine STATIC
     src/storage/app_paths.cpp
+    src/storage/debug_ai_log.cpp
     src/storage/settings.cpp
     src/model/model_catalog.cpp
     src/model/model_files.cpp
@@ -21,13 +23,14 @@ add_library(qtrans_engine STATIC
     src/translation/translation_languages.cpp
     src/translation/translation_model.cpp
     src/translation/hymt.cpp
+    src/translation/text_chunker.cpp
     src/translation/inference_engine.cpp
     src/task/task_queue.cpp
     src/task/task_orchestrator.cpp
 )
 
 target_include_directories(qtrans_engine PUBLIC src)
-target_link_libraries(qtrans_engine PUBLIC llama CURL::libcurl)
+target_link_libraries(qtrans_engine PUBLIC llama CURL::libcurl ICU::uc ICU::i18n ICU::data)
 
 set(QTRANS_SOURCES_COMMON
     src/app/main.cpp
@@ -91,7 +94,7 @@ if(WIN32)
     target_sources(QTrans PRIVATE ${QTRANS_SOURCES_WIN} src/app/win/single_instance_activate.cpp)
 elseif(APPLE)
     target_sources(QTrans PRIVATE ${QTRANS_SOURCES_MAC} src/app/mac/single_instance.mm)
-    target_link_libraries(QTrans PRIVATE "-framework AppKit" "-framework Carbon" "-framework CoreGraphics")
+    target_link_libraries(QTrans PRIVATE "-framework AppKit" "-framework ApplicationServices" "-framework Carbon" "-framework CoreGraphics")
     qt_import_plugins(QTrans
         INCLUDE BY_TYPE platforms Qt6::QCocoaIntegrationPlugin
         INCLUDE BY_TYPE platformthemes Qt6::QMacStylePlugin

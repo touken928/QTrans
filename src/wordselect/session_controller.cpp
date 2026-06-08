@@ -6,6 +6,7 @@
 #include "wordselect/popup_window.h"
 
 #include <QMetaObject>
+#include <QThread>
 #include <QTimer>
 #include <cstdio>
 
@@ -30,6 +31,8 @@ SessionController::SessionController(
             this, &SessionController::onTargetAppended);
     connect(m_taskService, &TaskService::translationFinished,
             this, &SessionController::onTranslationFinished);
+    connect(m_taskService, &TaskService::statusChanged,
+            this, &SessionController::onStatusChanged);
 
     connect(m_popup, &PopupWindow::dismissed,
             this, &SessionController::onPopupDismissed);
@@ -59,7 +62,13 @@ void SessionController::setHotkey(const QString &shortcut) {
     const Qt::Key key = static_cast<Qt::Key>(ks[0].key());
 
     m_hotkeyManager->unregisterHotkey(m_translateHotkeyId);
-    m_hotkeyManager->registerHotkey(m_translateHotkeyId, mods, key);
+    if (!m_hotkeyManager->registerHotkey(m_translateHotkeyId, mods, key)) {
+        fprintf(stderr,
+                "[SessionCtrl] failed to register hotkey '%s' (mods=%d key=%d)\n",
+                m_hotkeyStr.toUtf8().constData(),
+                static_cast<int>(mods),
+                static_cast<int>(key));
+    }
 }
 
 QString SessionController::hotkey() const {
@@ -75,7 +84,12 @@ bool SessionController::isEnabled() const {
 }
 
 void SessionController::onHotkeyTriggered(int hotkeyId) {
-    if (hotkeyId != m_translateHotkeyId || !m_enabled) {
+    if (hotkeyId != m_translateHotkeyId) {
+        return;
+    }
+
+    if (!m_enabled) {
+        fprintf(stderr, "[SessionCtrl] hotkey ignored: word select disabled\n");
         return;
     }
 
@@ -124,12 +138,28 @@ void SessionController::doTranslate() {
     }
 
     fprintf(stderr, "[SessionCtrl] capturing clipboard text\n");
-    const QString text = ClipboardCapture::captureSelectedText(300);
+#ifdef Q_OS_MACOS
+    if (!macEnsureAccessibilityTrusted(true)) {
+        fprintf(stderr, "[SessionCtrl] accessibility permission not granted\n");
+        m_popup->showError(QStringLiteral(
+            "Accessibility permission is required to copy selected text. "
+            "Enable QTrans in System Settings → Privacy & Security → Accessibility, then try again."));
+        m_state = PopupState::Showing;
+        resetSession();
+        return;
+    }
+
+    macRestoreFrontApp();
+    QThread::msleep(120);
+#endif
+
+    const QString text = ClipboardCapture::captureSelectedText(500);
     if (text.isEmpty()) {
         fprintf(stderr, "[SessionCtrl] captured text is empty, resetting session\n");
-#ifdef Q_OS_MACOS
-        macRestoreFrontApp();
-#endif
+        m_popup->showError(QStringLiteral(
+            "Could not copy selected text. Select text in the front app first, "
+            "then press the shortcut again."));
+        m_state = PopupState::Showing;
         resetSession();
         return;
     }
@@ -139,6 +169,7 @@ void SessionController::doTranslate() {
 
     m_state = PopupState::Translating;
     m_activeTaskId = 0;
+    m_lastErrorMessage.clear();
 
     QMetaObject::invokeMethod(
         m_taskService,
@@ -147,7 +178,8 @@ void SessionController::doTranslate() {
         Q_ARG(QString, text),
         Q_ARG(QString, m_targetLanguage),
         Q_ARG(QString, m_sourceLanguage),
-        Q_ARG(bool, false));
+        Q_ARG(bool, false),
+        Q_ARG(bool, true));
 }
 
 void SessionController::onTranslateTaskStarted(quint64 taskId) {
@@ -188,8 +220,24 @@ void SessionController::onTranslationFinished(quint64 taskId, int state) {
         m_popup->hide();
         resetSession();
     } else {
-        m_popup->showError(QStringLiteral("Translation failed"));
+        QString message = m_lastErrorMessage.trimmed();
+        if (message.startsWith(QStringLiteral("Error:"))) {
+            message = message.mid(6).trimmed();
+        }
+        if (message.isEmpty()) {
+            message = QStringLiteral("Translation failed");
+        }
+        m_popup->showError(message);
         m_state = PopupState::Showing;
+    }
+}
+
+void SessionController::onStatusChanged(const QString &message, bool busy) {
+    if (m_state != PopupState::Translating || busy) {
+        return;
+    }
+    if (message.startsWith(QStringLiteral("Error:"))) {
+        m_lastErrorMessage = message;
     }
 }
 
@@ -209,4 +257,5 @@ bool SessionController::checkDebounce() {
 void SessionController::resetSession() {
     m_state = PopupState::Idle;
     m_activeTaskId = 0;
+    m_lastErrorMessage.clear();
 }
