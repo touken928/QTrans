@@ -9,6 +9,7 @@
 #include <functional>
 #include <memory>
 #include <stdexcept>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -47,6 +48,98 @@ bool abort_callback(void *data) {
     }
     const auto *should_cancel = static_cast<const std::function<bool()> *>(data);
     return (*should_cancel)();
+}
+
+bool is_utf8_continuation(unsigned char byte) {
+    return (byte & 0xC0) == 0x80;
+}
+
+size_t utf8_sequence_length(unsigned char lead) {
+    if ((lead & 0x80) == 0) {
+        return 1;
+    }
+    if ((lead & 0xE0) == 0xC0) {
+        return 2;
+    }
+    if ((lead & 0xF0) == 0xE0) {
+        return 3;
+    }
+    if ((lead & 0xF8) == 0xF0) {
+        return 4;
+    }
+    return 0;
+}
+
+// Returns the length of the longest prefix that ends on complete UTF-8 code points.
+size_t utf8_complete_prefix_length(const std::string &text) {
+    size_t index = 0;
+    size_t complete = 0;
+    while (index < text.size()) {
+        const unsigned char lead = static_cast<unsigned char>(text[index]);
+        const size_t sequence_len = utf8_sequence_length(lead);
+        if (sequence_len == 0) {
+            complete = index + 1;
+            index += 1;
+            continue;
+        }
+        if (index + sequence_len > text.size()) {
+            break;
+        }
+        bool valid = true;
+        for (size_t offset = 1; offset < sequence_len; ++offset) {
+            if (!is_utf8_continuation(static_cast<unsigned char>(text[index + offset]))) {
+                valid = false;
+                break;
+            }
+        }
+        if (!valid) {
+            complete = index + 1;
+            index += 1;
+            continue;
+        }
+        complete = index + sequence_len;
+        index += sequence_len;
+    }
+    return complete;
+}
+
+// BPE tokens may split UTF-8 code points; only emit complete characters to the UI.
+class Utf8StreamBuffer {
+public:
+    std::string push(std::string_view piece) {
+        pending_.append(piece);
+        const size_t complete_len = utf8_complete_prefix_length(pending_);
+        if (complete_len == 0) {
+            return {};
+        }
+        std::string emit = pending_.substr(0, complete_len);
+        pending_.erase(0, complete_len);
+        return emit;
+    }
+
+    std::string flush() {
+        std::string emit = std::move(pending_);
+        pending_.clear();
+        return emit;
+    }
+
+private:
+    std::string pending_;
+};
+
+std::string token_to_text(const llama_vocab *vocab, llama_token token) {
+    char buffer[256];
+    int piece_len = llama_token_to_piece(vocab, token, buffer, sizeof(buffer), 0, true);
+    if (piece_len < 0) {
+        std::vector<char> large_buffer(static_cast<size_t>(-piece_len));
+        piece_len = llama_token_to_piece(vocab, token, large_buffer.data(),
+                                         static_cast<int32_t>(large_buffer.size()), 0, true);
+        if (piece_len < 0) {
+            throw std::runtime_error("failed to convert token to text");
+        }
+        return std::string(large_buffer.data(), static_cast<size_t>(piece_len));
+    }
+    return std::string(buffer, static_cast<size_t>(piece_len));
 }
 
 }  // namespace
@@ -250,6 +343,7 @@ std::string Hymt::generate(
             max_gen,
             n_prompt,
             config_.n_ctx);
+    Utf8StreamBuffer utf8_stream;
     for (int i = 0; i < max_gen; ++i) {
         if (i > 0 && i % 10 == 0) {
             fprintf(stderr, "[Hymt] token %d/%d\n", i, max_gen);
@@ -273,22 +367,27 @@ std::string Hymt::generate(
             break;
         }
 
-        char piece[256];
-        const int piece_len = llama_token_to_piece(vocab, token, piece, sizeof(piece), 0, true);
-        if (piece_len < 0) {
-            throw std::runtime_error("failed to convert token to text");
-        }
-
-        response.append(piece, static_cast<size_t>(piece_len));
-        fprintf(stderr, "[Hymt] token %d:'%s'\n", i, std::string(piece, static_cast<size_t>(piece_len)).c_str());
+        const std::string piece = token_to_text(vocab, token);
+        response.append(piece);
+        fprintf(stderr, "[Hymt] token %d:'%s'\n", i, piece.c_str());
         if (on_token) {
-            on_token(std::string(piece, static_cast<size_t>(piece_len)));
+            const std::string emit = utf8_stream.push(piece);
+            if (!emit.empty()) {
+                on_token(emit);
+            }
         }
         if (cancel_fn()) {
             fprintf(stderr, "[Hymt] cancelled at token %d\n", i);
             throw TranslationCancelled();
         }
         batch = llama_batch_get_one(const_cast<llama_token *>(&token), 1);
+    }
+
+    if (on_token) {
+        const std::string tail = utf8_stream.flush();
+        if (!tail.empty()) {
+            on_token(tail);
+        }
     }
 
     fprintf(stderr, "[Hymt] generate done, response_len=%zu response:'%s'\n",
