@@ -253,10 +253,6 @@ void TranslatePage::onSwap() {
     source_lang_combo_->setCurrentIndex(target_lang_combo_->currentIndex());
     target_lang_combo_->setCurrentIndex(source_index);
 
-    const QString source_text = source_edit_->toPlainText();
-    source_edit_->setPlainText(target_edit_->toPlainText());
-    target_edit_->setPlainText(source_text);
-
     emit languageChanged();
 }
 
