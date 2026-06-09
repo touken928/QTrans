@@ -8,7 +8,7 @@ Workflow 文件位于 [`.github/workflows/`](../../.github/workflows/) **根目�
 |---------------|---------------------------|----------|
 | `branch-policy.yml` | **Branch naming** | push 到非 `main` 分支；PR → `main` |
 | `format-check.yml` | **Code formatting** | PR → `main` |
-| `unit-tests.yml` | **Unit tests** | PR → `main` |
+| `unit-tests.yml` | **Unit tests** | PR → `main`；push `main`（缓存预热） |
 | `release.yml` | （无 PR 检查） | push tag `v*` |
 
 Dependabot 的提交会跳过 **Branch naming**。
@@ -31,7 +31,9 @@ users/<GitHub 用户名>/<非空主题>
 
 在 `macos-14` 上使用 preset `arm64-osx-release` 配置并构建（`-DQTRANS_BUILD_TESTS=ON`），随后执行全量 `ctest`（`tests/` 下各目录的 gtest 二进制）。
 
-首次运行或依赖变更时可能较慢（vcpkg 编译 Qt / llama.cpp 等）；与 Release 工作流共用相同的 vcpkg 缓存键。
+合并到 `main` 后会再跑一次本 workflow，将 vcpkg 二进制缓存与 `vcpkg_installed` 写入 **default branch** 作用域，后续 PR（未改 `vcpkg.json` / overlay 时）可命中缓存。依赖变更后首次仍会冷启动；`vcpkg_installed` 与 binary artifacts 设有 `restore-keys` 前缀，小改依赖时有机会部分复用。
+
+与 Release 工作流共用相同的 vcpkg 缓存键（仅 binary artifacts + `vcpkg_installed`，不缓存 `downloads`）。
 
 ## Release
 
