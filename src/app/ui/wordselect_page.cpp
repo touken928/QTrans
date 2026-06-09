@@ -1,5 +1,6 @@
 #include "app/ui/wordselect_page.h"
 
+#include "app/string_bridge.h"
 #include "app/widget_utils.h"
 #include "translation/translation_languages.h"
 
@@ -14,7 +15,7 @@ namespace {
 
 int findLanguageIndex(const QString &model_name) {
     for (int i = 0; i < translation_language_count(); ++i) {
-        if (QString::fromUtf8(translation_languages()[i].model_name) == model_name) {
+        if (qtrans::app::from_utf8(translation_languages()[i].model_name) == model_name) {
             return i;
         }
     }
@@ -26,7 +27,7 @@ QString modelNameAt(const QComboBox *combo) {
     if (index < 0 || index >= translation_language_count()) {
         return QStringLiteral("English");
     }
-    return QString::fromUtf8(translation_languages()[index].model_name);
+    return qtrans::app::from_utf8(translation_languages()[index].model_name);
 }
 
 }  // namespace
@@ -42,7 +43,7 @@ WordSelectPage::WordSelectPage(QWidget *parent)
 
     target_lang_combo_ = new QComboBox(this);
     for (int i = 0; i < translation_language_count(); ++i) {
-        target_lang_combo_->addItem(QString::fromUtf8(translation_languages()[i].label));
+        target_lang_combo_->addItem(qtrans::app::from_utf8(translation_languages()[i].label));
     }
     target_lang_combo_->setCurrentIndex(findLanguageIndex(QStringLiteral("Chinese")));
     configureComboBox(target_lang_combo_, 180);

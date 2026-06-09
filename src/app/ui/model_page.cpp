@@ -1,5 +1,6 @@
 #include "app/ui/model_page.h"
 
+#include "app/string_bridge.h"
 #include "app/widget_utils.h"
 #include "model/model_catalog.h"
 
@@ -24,8 +25,8 @@ ModelPage::ModelPage(QWidget *parent)
     model_combo_ = new QComboBox(this);
     for (const ModelCatalogEntry &entry : model_catalog()) {
         model_combo_->addItem(
-            QString::fromStdString(entry.display_name),
-            QString::fromStdString(entry.id));
+            qtrans::app::from_utf8(entry.display_name),
+            qtrans::app::from_utf8(entry.id));
     }
     configureComboBox(model_combo_, 320);
     model_form->addRow(QStringLiteral("Model"), model_combo_);
@@ -72,14 +73,14 @@ void ModelPage::setSettings(const AppPaths &paths, const AppSettings &settings) 
     const QSignalBlocker block_combo(model_combo_);
     const QSignalBlocker block_dir(models_dir_edit_);
 
-    const int model_index = model_combo_->findData(QString::fromStdString(settings_.model_id));
+    const int model_index = model_combo_->findData(qtrans::app::from_utf8(settings_.model_id));
     model_combo_->setCurrentIndex(model_index >= 0 ? model_index : 0);
-    models_dir_edit_->setText(QString::fromStdString(settings_.effectiveModelsDir(paths_)));
+    models_dir_edit_->setText(qtrans::app::from_utf8(settings_.effectiveModelsDir(paths_)));
 }
 
 void ModelPage::applyTo(AppSettings &settings) const {
-    settings.setSelectedModelId(model_combo_->currentData().toString().toStdString());
-    settings.setEffectiveModelsDir(paths_, models_dir_edit_->text().toStdString());
+    settings.setSelectedModelId(qtrans::app::to_utf8(model_combo_->currentData().toString()));
+    settings.setEffectiveModelsDir(paths_, qtrans::app::to_utf8(models_dir_edit_->text()));
 }
 
 void ModelPage::setBusy(bool busy) {

@@ -7,6 +7,8 @@ set(QTRANS_TEST_DIRS
     network
     model
     translation
+    text
+    log
 )
 
 foreach(test_dir IN LISTS QTRANS_TEST_DIRS)

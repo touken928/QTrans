@@ -1,8 +1,9 @@
 #include "task/task_orchestrator.h"
 
+#include "log/component.h"
+#include "log/logger.h"
 #include "network/download.h"
 
-#include <cstdio>
 #include <stdexcept>
 
 namespace {
@@ -307,11 +308,12 @@ void TaskOrchestrator::execute_task(Task task) {
             }
             case TaskKind::TranslatePipeline: {
                 const auto &payload = std::get<TranslatePipelinePayload>(task.payload);
-                fprintf(stderr, "[Orchestrator] TranslatePipeline task:%llu src:'%s' target:'%s' back:%d\n",
-                        static_cast<unsigned long long>(task_id.value),
-                        payload.source.c_str(),
-                        payload.target_language.c_str(),
-                        payload.back_translate ? 1 : 0);
+                qtrans::log::get(qtrans::log::Component::Task)
+                    ->debug(
+                        "TranslatePipeline task:{} target:'{}' back:{}",
+                        task_id.value,
+                        payload.target_language,
+                        payload.back_translate);
                 emit_status("Translating", true);
 
                 if (payload.source.empty()) {
@@ -334,10 +336,11 @@ void TaskOrchestrator::execute_task(Task task) {
                         }
                     },
                     [this, task_id](bool is_back_channel, const std::string &piece) {
-                        fprintf(stderr, "[Orchestrator] token:%s chan:%d piece:'%s'\n",
+                        qtrans::log::get(qtrans::log::Component::Task)
+                            ->trace(
+                                "token:{} piece:'{}'",
                                 is_back_channel ? "back" : "fwd",
-                                is_back_channel ? 1 : 0,
-                                piece.c_str());
+                                piece);
                         if (is_back_channel) {
                             if (callbacks_.on_back_translate_appended) {
                                 callbacks_.on_back_translate_appended(task_id.value, piece);
@@ -349,18 +352,24 @@ void TaskOrchestrator::execute_task(Task task) {
                     cancel_token.get());
 
                 if (result.outcome == InferenceOutcome::Cancelled) {
-                    fprintf(stderr, "[Orchestrator] TranslatePipeline cancelled task:%llu\n",
-                            static_cast<unsigned long long>(task_id.value));
+                    qtrans::log::get(qtrans::log::Component::Task)
+                        ->debug("TranslatePipeline cancelled task:{}", task_id.value);
                     emit_status("Cancelled", false);
                     finalize_task(task_id, task.kind, TaskState::Cancelled);
                 } else if (result.outcome == InferenceOutcome::Failed) {
-                    fprintf(stderr, "[Orchestrator] TranslatePipeline failed task:%llu err:%s\n",
-                            static_cast<unsigned long long>(task_id.value), result.error_message.c_str());
+                    qtrans::log::get(qtrans::log::Component::Task)
+                        ->error(
+                            "TranslatePipeline failed task:{} err:{}",
+                            task_id.value,
+                            result.error_message);
                     emit_status(std::string("Error: ") + result.error_message, false);
                     finalize_task(task_id, task.kind, TaskState::Failed);
                 } else {
-                    fprintf(stderr, "[Orchestrator] TranslatePipeline completed task:%llu result_len:%zu\n",
-                            static_cast<unsigned long long>(task_id.value), result.text.size());
+                    qtrans::log::get(qtrans::log::Component::Task)
+                        ->debug(
+                            "TranslatePipeline completed task:{} result_len:{}",
+                            task_id.value,
+                            result.text.size());
                     emit_status("Done", false);
                     finalize_task(task_id, task.kind, TaskState::Completed);
                 }

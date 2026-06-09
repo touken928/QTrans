@@ -1,13 +1,24 @@
 #include "wordselect/clipboard_capture.h"
 
+#include "app/string_bridge.h"
+#include "log/component.h"
+#include "log/logger.h"
+
 #include <QApplication>
 #include <QClipboard>
 #include <QTimer>
 #include <chrono>
-#include <cstdio>
 #include <thread>
 
 namespace ClipboardCapture {
+
+namespace {
+
+auto clipboard_logger() {
+    return qtrans::log::get(qtrans::log::Component::Clipboard);
+}
+
+}  // namespace
 
 QString captureSelectedText(int timeoutMs) {
     QClipboard *clipboard = QApplication::clipboard();
@@ -16,14 +27,16 @@ QString captureSelectedText(int timeoutMs) {
     }
 
     const QString oldText = clipboard->text();
-    fprintf(stderr, "[ClipboardCapture] oldText '%s' (empty=%d)\n",
-            oldText.toUtf8().constData(), oldText.isEmpty());
+    clipboard_logger()->trace(
+        "oldText '{}' (empty={})",
+        qtrans::app::to_utf8(oldText),
+        oldText.isEmpty());
 
     clipboard->clear();
-    fprintf(stderr, "[ClipboardCapture] clipboard cleared, simulating pasteboard copy\n");
+    clipboard_logger()->debug("clipboard cleared, simulating pasteboard copy");
 
     simulateCopy();
-    fprintf(stderr, "[ClipboardCapture] copy simulated, polling clipboard\n");
+    clipboard_logger()->debug("copy simulated, polling clipboard");
 
     auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
 
@@ -37,14 +50,16 @@ QString captureSelectedText(int timeoutMs) {
         captured = clipboard->text();
         ++pollCount;
         if (!captured.isEmpty()) {
-            fprintf(stderr, "[ClipboardCapture] captured after %d polls: '%s'\n",
-                    pollCount, captured.toUtf8().constData());
+            clipboard_logger()->trace(
+                "captured after {} polls: '{}'",
+                pollCount,
+                qtrans::app::to_utf8(captured));
             break;
         }
     }
 
     if (captured.isEmpty()) {
-        fprintf(stderr, "[ClipboardCapture] timeout after %d polls, no text captured\n", pollCount);
+        clipboard_logger()->warn("timeout after {} polls, no text captured", pollCount);
     }
 
     QTimer::singleShot(200, qApp, [oldText]() {

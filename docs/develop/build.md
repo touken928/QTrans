@@ -6,6 +6,8 @@
 - CMake 3.21+
 - Ninja
 
+主要 vcpkg 依赖（见根目录 `vcpkg.json`）：`llama-cpp`、`qtbase`、`curl`、`icu`、`simdutf`、`spdlog`、`gtest`。
+
 平台额外工具：
 
 | 平台 | 依赖 |

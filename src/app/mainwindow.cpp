@@ -12,7 +12,9 @@
 #include "app/ui/wordselect_page.h"
 #include "network/download.h"
 #include "model/model_catalog.h"
-#include "storage/debug_ai_log.h"
+#include "app/string_bridge.h"
+#include "log/component.h"
+#include "log/logger.h"
 #include "wordselect/hotkey_manager.h"
 #include "wordselect/popup_window.h"
 #include "wordselect/session_controller.h"
@@ -20,21 +22,22 @@
 
 #include <QCloseEvent>
 #include <QCoreApplication>
-#include <QDebug>
 #include <QHBoxLayout>
 #include <QMetaObject>
 #include <QShowEvent>
 #include <QStackedWidget>
 #include <QThread>
 
-MainWindow::MainWindow(TaskService *task_service, QThread *worker_thread, QWidget *parent)
-    : QMainWindow(parent), task_service_(task_service), worker_thread_(worker_thread), paths_(AppPaths::detect(QCoreApplication::applicationDirPath().toStdString())) {
+MainWindow::MainWindow(
+    TaskService *task_service,
+    QThread *worker_thread,
+    const AppPaths &paths,
+    QWidget *parent)
+    : QMainWindow(parent), task_service_(task_service), worker_thread_(worker_thread), paths_(paths) {
     setWindowTitle(QStringLiteral("QTrans"));
     resize(960, 600);
     setMinimumSize(720, 480);
 
-    paths_.ensureDirectories();
-    register_app_logs_dir(paths_.logs_dir);
     settings_.load(paths_);
     settings_.ensureStorage(paths_);
     syncSettingsToTaskService();
@@ -92,21 +95,21 @@ MainWindow::MainWindow(TaskService *task_service, QThread *worker_thread, QWidge
     session_controller_ = new SessionController(
         hotkey_manager_, task_service_, popup_window_, this);
     session_controller_->initialize();
-    const QString hotkeyStr = QString::fromStdString(settings_.hotkey);
+    const QString hotkeyStr = qtrans::app::from_utf8(settings_.hotkey);
     if (!hotkeyStr.isEmpty()) {
         session_controller_->setHotkey(hotkeyStr);
     }
     session_controller_->setTranslateLanguages(
-        QString::fromStdString(settings_.wordselect_source_language),
+        qtrans::app::from_utf8(settings_.wordselect_source_language),
         QStringLiteral("Auto"));
     session_controller_->setEnabled(settings_.wordselect_enabled);
 
-    translate_page_->setSourceLanguage(QString::fromStdString(settings_.source_language));
-    translate_page_->setTargetLanguage(QString::fromStdString(settings_.target_language));
+    translate_page_->setSourceLanguage(qtrans::app::from_utf8(settings_.source_language));
+    translate_page_->setTargetLanguage(qtrans::app::from_utf8(settings_.target_language));
     syncLanguagesToSettings();
 
     wordselect_page_->setEnabled(settings_.wordselect_enabled);
-    wordselect_page_->setTargetLanguage(QString::fromStdString(settings_.wordselect_target_language));
+    wordselect_page_->setTargetLanguage(qtrans::app::from_utf8(settings_.wordselect_target_language));
     wordselect_page_->setHotkey(hotkeyStr);
     wordselect_page_->setAutoCloseMs(settings_.auto_close_ms);
     connect(wordselect_page_, &WordSelectPage::settingsChanged,
@@ -172,21 +175,21 @@ void MainWindow::applySettingsFromPage() {
 }
 
 QString MainWindow::currentModelPath() const {
-    return QString::fromStdString(settings_.effectiveModelPath(paths_));
+    return qtrans::app::from_utf8(settings_.effectiveModelPath(paths_));
 }
 
 void MainWindow::syncSettingsToTaskService() {
     const ModelCatalogEntry *model = settings_.selectedModel();
     task_service_->setModelPath(currentModelPath());
-    task_service_->setRemoteSpec(QString::fromStdString(model->remote_spec));
+    task_service_->setRemoteSpec(qtrans::app::from_utf8(model->remote_spec));
     task_service_->setDownloadHub(model->download_hub);
 }
 
 void MainWindow::syncLanguagesToSettings() {
     const QString source = translate_page_->sourceLanguageName();
     const QString target = translate_page_->targetLanguageName();
-    settings_.source_language = source.toStdString();
-    settings_.target_language = target.toStdString();
+    settings_.source_language = qtrans::app::to_utf8(source);
+    settings_.target_language = qtrans::app::to_utf8(target);
     saveSettings();
 }
 
@@ -197,8 +200,8 @@ void MainWindow::onWordSelectSettingsChanged() {
     const int auto_close = wordselect_page_->autoCloseMs();
 
     settings_.wordselect_enabled = enabled;
-    settings_.wordselect_target_language = target.toStdString();
-    settings_.hotkey = hotkey.toStdString();
+    settings_.wordselect_target_language = qtrans::app::to_utf8(target);
+    settings_.hotkey = qtrans::app::to_utf8(hotkey);
     settings_.auto_close_ms = auto_close;
     saveSettings();
 
@@ -213,7 +216,7 @@ void MainWindow::saveSettings() {
     try {
         settings_.save(paths_);
     } catch (const std::exception &ex) {
-        translate_page_->setStatus(QString::fromUtf8(ex.what()));
+        translate_page_->setStatus(qtrans::app::from_utf8(ex.what()));
     }
 }
 
@@ -273,7 +276,7 @@ void MainWindow::hideModal() {
 
 void MainWindow::showModelMissingDialog() {
     auto *panel = new ModelMissingPanel(
-        QString::fromStdString(paths_.modeLabel()),
+        qtrans::app::from_utf8(paths_.modeLabel()),
         currentModelPath());
     connect(panel, &ModelMissingPanel::dismissed, this, [this]() {
         hideModal();
@@ -332,14 +335,19 @@ void MainWindow::onTranslateRequested(
 }
 
 void MainWindow::onTranslateTaskStarted(quint64 task_id) {
-    qDebug() << "[MainWindow] translateTaskStarted task:" << task_id << "own_active:" << own_translation_active_ << "thread:" << QThread::currentThread();
+    qtrans::log::get(qtrans::log::Component::App)
+        ->debug(
+            "translateTaskStarted task:{} own_active:{}",
+            task_id,
+            own_translation_active_);
     if (own_translation_active_) {
         active_translate_task_id_ = task_id;
     }
 }
 
 void MainWindow::onCancelRequested() {
-    qDebug() << "[MainWindow] cancelRequested task:" << active_translate_task_id_ << "thread:" << QThread::currentThread();
+    qtrans::log::get(qtrans::log::Component::App)
+        ->debug("cancelRequested task:{}", active_translate_task_id_);
     QMetaObject::invokeMethod(
         task_service_,
         "cancelTask",
@@ -357,7 +365,12 @@ bool MainWindow::isActiveTranslateTask(quint64 task_id) const {
 
 void MainWindow::onTranslationFinished(quint64 task_id, int state) {
     Q_UNUSED(state);
-    qDebug() << "[MainWindow] translationFinished task:" << task_id << "active:" << active_translate_task_id_ << "own:" << own_translation_active_ << "thread:" << QThread::currentThread();
+    qtrans::log::get(qtrans::log::Component::App)
+        ->debug(
+            "translationFinished task:{} active:{} own:{}",
+            task_id,
+            active_translate_task_id_,
+            own_translation_active_);
     if (!isActiveTranslateTask(task_id)) {
         return;
     }
@@ -376,7 +389,7 @@ void MainWindow::onTargetReset(quint64 task_id) {
     if (!isActiveTranslateTask(task_id)) {
         return;
     }
-    qDebug() << "[MainWindow] targetReset task:" << task_id << "thread:" << QThread::currentThread();
+    qtrans::log::get(qtrans::log::Component::App)->debug("targetReset task:{}", task_id);
     translate_page_->resetTarget();
 }
 
@@ -384,7 +397,8 @@ void MainWindow::onTargetAppended(quint64 task_id, const QString &piece) {
     if (!isActiveTranslateTask(task_id)) {
         return;
     }
-    qDebug() << "[MainWindow] targetAppended task:" << task_id << "len:" << piece.size() << "thread:" << QThread::currentThread();
+    qtrans::log::get(qtrans::log::Component::App)
+        ->debug("targetAppended task:{} len:{}", task_id, piece.size());
     translate_page_->appendTarget(piece);
 }
 

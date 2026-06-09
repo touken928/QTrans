@@ -1,7 +1,9 @@
 #include "app/task_service.h"
 
-#include <cstdio>
-#include <QDebug>
+#include "app/string_bridge.h"
+#include "log/component.h"
+#include "log/logger.h"
+
 #include <QMetaObject>
 #include <QThread>
 
@@ -14,15 +16,11 @@ void TaskService::wireCallbacks() {
     TaskOrchestratorCallbacks callbacks{};
 
     callbacks.on_status = [this](const std::string &message, bool busy) {
-        emit statusChanged(
-            QString::fromUtf8(message.c_str(), static_cast<int>(message.size())),
-            busy);
+        emit statusChanged(qtrans::app::from_utf8(message), busy);
     };
 
     callbacks.on_model_load_finished = [this](bool success, const std::string &error_message) {
-        emit modelLoadFinished(
-            success,
-            QString::fromUtf8(error_message.c_str(), static_cast<int>(error_message.size())));
+        emit modelLoadFinished(success, qtrans::app::from_utf8(error_message));
     };
 
     callbacks.on_model_unload_finished = [this]() {
@@ -47,23 +45,20 @@ void TaskService::wireCallbacks() {
     };
 
     callbacks.on_translation_finished = [this](std::uint64_t task_id, TaskState state) {
-        fprintf(stderr, "[TaskService] translationFinished task:%llu state:%d\n",
-                static_cast<unsigned long long>(task_id), static_cast<int>(state));
+        qtrans::log::get(qtrans::log::Component::Task)
+            ->debug("translationFinished task:{} state:{}", task_id, static_cast<int>(state));
         emit translationFinished(task_id, static_cast<int>(state));
     };
 
     callbacks.on_target_reset = [this](std::uint64_t task_id) {
-        fprintf(stderr, "[TaskService] targetReset task:%llu\n",
-                static_cast<unsigned long long>(task_id));
+        qtrans::log::get(qtrans::log::Component::Task)->debug("targetReset task:{}", task_id);
         emit targetReset(task_id);
     };
 
     callbacks.on_target_appended = [this](std::uint64_t task_id, const std::string &piece) {
-        fprintf(stderr, "[TaskService] targetAppended task:%llu piece:'%s'\n",
-                static_cast<unsigned long long>(task_id), piece.c_str());
-        emit targetAppended(
-            task_id,
-            QString::fromUtf8(piece.c_str(), static_cast<int>(piece.size())));
+        qtrans::log::get(qtrans::log::Component::Task)
+            ->trace("targetAppended task:{} piece:'{}'", task_id, piece);
+        emit targetAppended(task_id, qtrans::app::from_utf8(piece));
     };
 
     callbacks.on_back_translate_reset = [this](std::uint64_t task_id) {
@@ -71,20 +66,18 @@ void TaskService::wireCallbacks() {
     };
 
     callbacks.on_back_translate_appended = [this](std::uint64_t task_id, const std::string &piece) {
-        emit backTranslateAppended(
-            task_id,
-            QString::fromUtf8(piece.c_str(), static_cast<int>(piece.size())));
+        emit backTranslateAppended(task_id, qtrans::app::from_utf8(piece));
     };
 
     orchestrator_.set_callbacks(std::move(callbacks));
 }
 
 void TaskService::setModelPath(const QString &path) {
-    orchestrator_.set_model_path(path.toUtf8().constData());
+    orchestrator_.set_model_path(qtrans::app::to_utf8(path));
 }
 
 void TaskService::setRemoteSpec(const QString &spec) {
-    orchestrator_.set_remote_spec(spec.toUtf8().constData());
+    orchestrator_.set_remote_spec(qtrans::app::to_utf8(spec));
 }
 
 void TaskService::setDownloadHub(int hub) {
@@ -162,19 +155,20 @@ void TaskService::translateInteractive(
     bool back_translate,
     bool wordselect) {
     TranslatePipelinePayload payload{};
-    payload.source = source.toUtf8().constData();
-    payload.target_language = target_language.toUtf8().constData();
-    payload.source_language = source_language.toUtf8().constData();
+    payload.source = qtrans::app::to_utf8(source);
+    payload.target_language = qtrans::app::to_utf8(target_language);
+    payload.source_language = qtrans::app::to_utf8(source_language);
     payload.back_translate = back_translate;
     payload.wordselect = wordselect;
     const TaskId task_id = submitTranslatePipeline(payload, TaskPriority::Interactive);
-    fprintf(stderr,
-            "[TaskService] translateInteractive task:%llu src_len:%d target:'%s' back:%d wordselect:%d\n",
-            static_cast<unsigned long long>(task_id.value),
+    qtrans::log::get(qtrans::log::Component::Task)
+        ->debug(
+            "translateInteractive task:{} src_len:{} target:'{}' back:{} wordselect:{}",
+            task_id.value,
             static_cast<int>(source.size()),
-            payload.target_language.c_str(),
-            payload.back_translate ? 1 : 0,
-            payload.wordselect ? 1 : 0);
+            payload.target_language,
+            payload.back_translate,
+            payload.wordselect);
     emit translateTaskStarted(task_id.value);
 }
 

@@ -1,6 +1,9 @@
 #include "wordselect/session_controller.h"
 
+#include "app/string_bridge.h"
 #include "app/task_service.h"
+#include "log/component.h"
+#include "log/logger.h"
 #include "wordselect/clipboard_capture.h"
 #include "wordselect/hotkey_manager.h"
 #include "wordselect/popup_window.h"
@@ -8,11 +11,18 @@
 #include <QMetaObject>
 #include <QThread>
 #include <QTimer>
-#include <cstdio>
 
 #ifdef Q_OS_MACOS
 #include "wordselect/mac/platform_utils.h"
 #endif
+
+namespace {
+
+auto wordselect_logger() {
+    return qtrans::log::get(qtrans::log::Component::WordSelect);
+}
+
+}  // namespace
 
 SessionController::SessionController(
     HotkeyManager *hotkeyMgr,
@@ -63,11 +73,11 @@ void SessionController::setHotkey(const QString &shortcut) {
 
     m_hotkeyManager->unregisterHotkey(m_translateHotkeyId);
     if (!m_hotkeyManager->registerHotkey(m_translateHotkeyId, mods, key)) {
-        fprintf(stderr,
-                "[SessionCtrl] failed to register hotkey '%s' (mods=%d key=%d)\n",
-                m_hotkeyStr.toUtf8().constData(),
-                static_cast<int>(mods),
-                static_cast<int>(key));
+        wordselect_logger()->warn(
+            "failed to register hotkey '{}' (mods={} key={})",
+            qtrans::app::to_utf8(m_hotkeyStr),
+            static_cast<int>(mods),
+            static_cast<int>(key));
     }
 }
 
@@ -89,7 +99,7 @@ void SessionController::onHotkeyTriggered(int hotkeyId) {
     }
 
     if (!m_enabled) {
-        fprintf(stderr, "[SessionCtrl] hotkey ignored: word select disabled\n");
+        wordselect_logger()->debug("hotkey ignored: word select disabled");
         return;
     }
 
@@ -97,15 +107,15 @@ void SessionController::onHotkeyTriggered(int hotkeyId) {
         return;
     }
 
-    fprintf(stderr, "[SessionCtrl] hotkey triggered, state=%d\n", static_cast<int>(m_state));
+    wordselect_logger()->debug("hotkey triggered, state={}", static_cast<int>(m_state));
 
     if (m_state == PopupState::Capturing) {
-        fprintf(stderr, "[SessionCtrl] already capturing, ignoring\n");
+        wordselect_logger()->debug("already capturing, ignoring");
         return;
     }
 
     if (m_state == PopupState::Translating) {
-        fprintf(stderr, "[SessionCtrl] cancelling current translation\n");
+        wordselect_logger()->debug("cancelling current translation");
         if (m_activeTaskId != 0) {
             TaskId id{};
             id.value = m_activeTaskId;
@@ -115,7 +125,7 @@ void SessionController::onHotkeyTriggered(int hotkeyId) {
     }
 
     if (!m_taskService->isModelLoaded()) {
-        fprintf(stderr, "[SessionCtrl] model not loaded\n");
+        wordselect_logger()->warn("model not loaded");
         m_popup->showError(QStringLiteral("Model not loaded. Open main window and load a model first."));
 #ifdef Q_OS_MACOS
         macRestoreFrontApp();
@@ -132,15 +142,16 @@ void SessionController::onHotkeyTriggered(int hotkeyId) {
 
 void SessionController::doTranslate() {
     if (m_state != PopupState::Capturing) {
-        fprintf(stderr, "[SessionCtrl] doTranslate: not capturing (state=%d), skipping\n",
-                static_cast<int>(m_state));
+        wordselect_logger()->debug(
+            "doTranslate: not capturing (state={}), skipping",
+            static_cast<int>(m_state));
         return;
     }
 
-    fprintf(stderr, "[SessionCtrl] capturing clipboard text\n");
+    wordselect_logger()->debug("capturing clipboard text");
 #ifdef Q_OS_MACOS
     if (!macEnsureAccessibilityTrusted(true)) {
-        fprintf(stderr, "[SessionCtrl] accessibility permission not granted\n");
+        wordselect_logger()->warn("accessibility permission not granted");
         m_popup->showError(QStringLiteral(
             "Accessibility permission is required to copy selected text. "
             "Enable QTrans in System Settings → Privacy & Security → Accessibility, then try again."));
@@ -155,7 +166,7 @@ void SessionController::doTranslate() {
 
     const QString text = ClipboardCapture::captureSelectedText(500);
     if (text.isEmpty()) {
-        fprintf(stderr, "[SessionCtrl] captured text is empty, resetting session\n");
+        wordselect_logger()->warn("captured text is empty, resetting session");
         m_popup->showError(QStringLiteral(
             "Could not copy selected text. Select text in the front app first, "
             "then press the shortcut again."));
@@ -164,8 +175,10 @@ void SessionController::doTranslate() {
         return;
     }
 
-    fprintf(stderr, "[SessionCtrl] captured text: '%s' (len=%d)\n",
-            text.toUtf8().constData(), static_cast<int>(text.size()));
+    wordselect_logger()->trace(
+        "captured text: '{}' (len={})",
+        qtrans::app::to_utf8(text),
+        static_cast<int>(text.size()));
 
     m_state = PopupState::Translating;
     m_activeTaskId = 0;
