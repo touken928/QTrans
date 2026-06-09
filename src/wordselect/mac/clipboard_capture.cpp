@@ -1,17 +1,21 @@
 #include "../clipboard_capture.h"
 
+#include "log/component.h"
+#include "log/logger.h"
+
 #include <Carbon/Carbon.h>
 #include <CoreGraphics/CoreGraphics.h>
 #include <chrono>
-#include <cstdio>
 #include <thread>
 
 namespace ClipboardCapture {
 
 void simulateCopy() {
+    auto logger = qtrans::log::get(qtrans::log::Component::Clipboard);
+
     CGEventSourceRef source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
     if (!source) {
-        fprintf(stderr, "[ClipboardCapture] CGEventSourceCreate failed\n");
+        logger->error("CGEventSourceCreate failed");
         return;
     }
 
@@ -19,7 +23,7 @@ void simulateCopy() {
     CGEventRef cUp = CGEventCreateKeyboardEvent(source, kVK_ANSI_C, false);
 
     if (!cDown || !cUp) {
-        fprintf(stderr, "[ClipboardCapture] CGEventCreate failed\n");
+        logger->error("CGEventCreate failed");
         if (cDown) CFRelease(cDown);
         if (cUp) CFRelease(cUp);
         CFRelease(source);

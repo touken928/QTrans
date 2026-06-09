@@ -1,8 +1,10 @@
 #include "../hotkey_manager.h"
 
+#include "log/component.h"
+#include "log/logger.h"
+
 #include <Carbon/Carbon.h>
 #include <QCoreApplication>
-#include <cstdio>
 
 namespace {
 EventHandlerUPP gHotkeyHandlerUPP = nullptr;
@@ -61,8 +63,9 @@ bool HotkeyManager::registerHotkey(int id, Qt::KeyboardModifiers modifiers, Qt::
     const OSStatus status = RegisterEventHotKey(vk, mod, hotkeyId,
                                                 GetApplicationEventTarget(), 0, &ref);
     if (status != noErr) {
-        fprintf(stderr,
-                "[HotkeyManager] RegisterEventHotKey failed id=%d vk=0x%x mod=0x%x status=%d\n",
+        qtrans::log::get(qtrans::log::Component::WordSelect)
+            ->error(
+                "RegisterEventHotKey failed id={} vk=0x{:x} mod=0x{:x} status={}",
                 id,
                 vk,
                 mod,
@@ -70,11 +73,8 @@ bool HotkeyManager::registerHotkey(int id, Qt::KeyboardModifiers modifiers, Qt::
         return false;
     }
 
-    fprintf(stderr,
-            "[HotkeyManager] registered hotkey id=%d vk=0x%x mod=0x%x\n",
-            id,
-            vk,
-            mod);
+    qtrans::log::get(qtrans::log::Component::WordSelect)
+        ->debug("registered hotkey id={} vk=0x{:x} mod=0x{:x}", id, vk, mod);
 
     HotkeyBinding binding{};
     binding.id = id;

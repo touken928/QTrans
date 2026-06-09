@@ -1,49 +1,53 @@
 # AGENTS.md — QTrans
 
-Instructions for AI coding agents working in this repository.
+面向在本仓库中工作的 AI 编码代理的说明。
 
-## Project
+## 项目
 
-QTrans is a **C++17 / Qt6** desktop app for **local CPU inference** with Hy-MT (llama.cpp). Features: translate/back-translate, model download, word-select translation (platform hotkeys + popup).
+QTrans 是基于 **C++17 / Qt6** 的桌面应用，使用 Hy-MT（llama.cpp）进行**本地 CPU 推理**。功能包括：翻译/回译、模型下载、划词翻译（平台热键 + 弹窗）。
 
-| Item | Detail |
+| 项 | 说明 |
 |------|--------|
-| Build | CMake 3.21+, Ninja, **vcpkg** (`VCPKG_ROOT`) |
+| 构建 | CMake 3.21+、Ninja、**vcpkg**（`VCPKG_ROOT`） |
 | UI | Qt6 Widgets |
-| Inference | llama.cpp via vcpkg `llama-cpp` |
-| License | GPL-3.0 |
+| 推理 | 通过 vcpkg `llama-cpp` 使用 llama.cpp |
+| 许可 | GPL-3.0 |
 
-Human docs: [README.md](README.md), [docs/README_zh.md](docs/README_zh.md).  
-Developer docs: **[docs/develop/](docs/develop/)** (workflow, build, CI, release).
+用户文档：[README.md](README.md)、[docs/README_zh.md](docs/README_zh.md)。  
+开发者文档：**[docs/develop/](docs/develop/)**（工作流、构建、CI、发布）。
 
-## Repository layout
+## 仓库结构
 
 ```text
 src/
-  app/           # Main window, UI pages, task glue, single-instance
-  translation/   # Hy-MT, inference engine, languages
-  model/         # Catalog, files
-  network/       # Model download (libcurl)
-  storage/       # Paths, settings, debug AI logs
-  task/          # Queue, orchestrator (worker thread)
-  wordselect/    # Hotkey, clipboard, popup, session; mac/ win/ platform code
-.github/workflows/   # CI + release (YAML at root of workflows/, not subdirs)
-docs/develop/    # Contributor documentation
-resources/       # Qt resources (icons)
+  app/           # 主窗口、UI 页面、任务胶水层、单实例、Qt 字符串桥接
+  text/          # UTF-8（simdutf）、ICU 分句、按 token 预算分块
+  log/           # spdlog 初始化、组件日志、AI trace 落盘、控制台进度
+  translation/   # Hy-MT、推理引擎、语言列表
+  model/         # 模型目录、文件
+  network/       # 模型下载（libcurl）
+  storage/       # 路径、设置
+  task/          # 队列、编排器（工作线程）
+  wordselect/    # 热键、剪贴板、弹窗、会话；mac/ win/ 平台代码
+.github/workflows/   # CI + 发布（YAML 位于 workflows/ 根目录，不要放子目录）
+docs/develop/    # 贡献者文档
+resources/       # Qt 资源（图标）
 ```
 
-`qtrans_engine` static library: core logic under `src/` except app shell and wordselect UI wiring. Executable target: `QTrans`.
+`qtrans_engine` 静态库：`src/` 下除 app 壳与 wordselect UI 接线外的核心逻辑。可执行目标：`QTrans`。
 
-## Storage & translation
+## 存储与翻译
 
-- **AppPaths** (`src/storage/app_paths.h`): portable mode uses `<app>/data/`; system mode uses `~/.qtrans/`. Subdirs: `models/`, `settings/`, `logs/`. Resolve paths via `AppPaths::detect` + `ensureDirectories()`; do not write app data or diagnostics to the process cwd.
-- **Debug AI logs** (`src/storage/debug_ai_log.*`): prompt/response dumps only in **Debug** builds, written to `logs_dir` as `ai_output_*.log`. Release builds are no-ops.
-- **Long text** (`src/translation/text_chunker.*`, ICU): main-window translate and back-translate auto-split when input exceeds context. **Word-select** must fail with an explicit error instead of auto-splitting.
+- **AppPaths**（`src/storage/app_paths.h`）：便携模式使用 `<app>/data/`；系统模式使用 `~/.qtrans/`。子目录：`models/`、`settings/`、`logs/`。通过 `AppPaths::detect` + `ensureDirectories()` 解析路径；不要将应用数据或诊断信息写入进程 cwd。
+- **日志**（`src/log/`）：spdlog 组件化日志。Debug：控制台 trace + 旋转 `logs_dir/qtrans.log`。Release：仅控制台 warn/error（无文件 sink）。
+- **AI trace**（`src/log/ai_trace.*`）：仅在 **Debug** 构建中将 prompt/response 写入 `logs_dir/ai_output_*.log`。Release 构建为空操作。
+- **UTF-8 / 分块**（`src/text/`）：simdutf 负责校验与边界；ICU 仅用于分句。主窗口翻译与回译在输入超出上下文时自动分块。**划词翻译**必须返回明确错误，不得自动分块。
+- **Qt 边界**（`src/app/string_bridge.*`）：引擎调用的唯一 `QString` ↔ UTF-8 `std::string` 转换入口。
 
-## Build (local)
+## 本地构建
 
 ```bash
-# Debug + compile_commands.json (clangd)
+# Debug + compile_commands.json（clangd）
 cmake --preset default && cmake --build --preset debug
 
 # Release
@@ -51,84 +55,84 @@ cmake --preset arm64-osx-release && cmake --build --preset arm64-osx-release   #
 cmake --preset x64-mingw-release && cmake --build --preset x64-mingw-release   # Windows MinGW
 ```
 
-Presets: `CMakePresets.json`. Do not add dependencies without updating `vcpkg.json`.
+Preset 定义见 `CMakePresets.json`。新增依赖须同步更新 `vcpkg.json`。
 
-## Tests
+## 测试
 
-Unit tests live in `tests/`, mirrored under `src/` directories (`task/`, `storage/`, `network/`, `model/`, `translation/`). One gtest binary per directory, linked to `qtrans_engine`. Framework: **GoogleTest** via vcpkg (`gtest` in `vcpkg.json`).
+单元测试位于 `tests/`，按 `src/` 目录镜像（`task/`、`storage/`、`network/`、`model/`、`translation/`、`text/`、`log/`）。每个目录一个 gtest 可执行文件，链接 `qtrans_engine`。框架：vcpkg 提供的 **GoogleTest**（`vcpkg.json` 中的 `gtest`）。
 
 ```bash
 cmake --preset arm64-osx-release-user -DQTRANS_BUILD_TESTS=ON
 cmake --build --preset arm64-osx-release-user
 ctest --test-dir build/arm64-osx-release-user --output-on-failure
-ctest --test-dir build/arm64-osx-release-user -L dir:task   # filter by directory
+ctest --test-dir build/arm64-osx-release-user -L dir:task   # 按目录过滤
 ```
 
-Default is `QTRANS_BUILD_TESTS=OFF`. Pure-logic modules (parsers, state machines, INI I/O) are in scope; Qt-widget / platform-API code is not. To make a private static testable, add a `friend struct XxxTestAccess;` in the class header and define the accessor in `tests/<dir>/xxx_test_access.h`.
+默认 `QTRANS_BUILD_TESTS=OFF`。纯逻辑模块（解析器、状态机、INI I/O）在测试范围内；Qt 控件 / 平台 API 代码不在范围内。若需测试私有静态逻辑，在类头文件中添加 `friend struct XxxTestAccess;`，并在 `tests/<dir>/xxx_test_access.h` 中定义访问器。
 
-PRs to `main` run the full `ctest` suite in CI (workflow `unit-tests.yml`, job **Unit tests**).
+向 `main` 提交的 PR 会在 CI 中运行完整 `ctest`（工作流 `unit-tests.yml`，任务 **Unit tests**）。
 
-## Code style
+## 代码风格
 
-- Format with repo root [`.clang-format`](.clang-format) (Google-based, 4 spaces, pointer right alignment).
-- Scope: `src/**/*.{cpp,h,mm}`.
-- Before suggesting commits, ensure changed C++ files would pass:
+- 使用仓库根目录 [`.clang-format`](.clang-format) 格式化（基于 Google，4 空格，指针右对齐）。
+- 范围：`src/**/*.{cpp,h,mm}`。
+- 建议提交前，确保修改过的 C++ 文件可通过：
 
 ```bash
 clang-format -i <files>
 ```
 
-CI job **Code formatting** runs `clang-format-18` on PRs to `main`.
+CI 任务 **Code formatting** 会对发往 `main` 的 PR 运行 `clang-format-18`。
 
-## Git & PR workflow (required)
+## Git 与 PR 工作流（必须遵守）
 
-`main` is protected: **no direct push**. All changes go through PR.
+`main` 受保护：**禁止直接推送**。所有变更须通过 PR。
 
-1. Branch: `users/<github-login>/<topic>` (e.g. `users/touken928/fix-popup`).
-2. Commit on that branch only; never commit on `main`.
-3. Push branch → open PR to `main`.
-4. CI must pass: **Branch naming**, **Code formatting**.
-5. Merge on GitHub; remote head branch is auto-deleted. Local: `git fetch --prune`.
+1. 分支：`users/<github-login>/<topic>`（例如 `users/touken928/fix-popup`）。
+2. 仅在该分支上提交；切勿在 `main` 上提交。
+3. 推送分支 → 向 `main` 开 PR。
+4. CI 须通过：**Branch naming**、**Code formatting**。
+5. 在 GitHub 合并；远程 head 分支会自动删除。本地执行：`git fetch --prune`。
 
-Do **not** run `git push origin main` or `git commit` on `main`.
+**不要**执行 `git push origin main` 或在 `main` 上 `git commit`。
 
-Details: [docs/develop/workflow.md](docs/develop/workflow.md).
+详情：[docs/develop/workflow.md](docs/develop/workflow.md)。
 
-## CI & releases
+## CI 与发布
 
-| Workflow | When |
+| 工作流 | 触发时机 |
 |----------|------|
-| `branch-policy.yml` | push non-`main`, PR → `main` |
+| `branch-policy.yml` | 推送非 `main` 分支、PR → `main` |
 | `format-check.yml` | PR → `main` |
-| `release.yml` | tag `v*` only |
+| `release.yml` | 仅 tag `v*` |
 
-Release: `git tag vX.Y.Z && git push origin vX.Y.Z` from `main` (maintainer).
+发布：在 `main` 上执行 `git tag vX.Y.Z && git push origin vX.Y.Z`（维护者操作）。
 
-Workflow files **must** live in `.github/workflows/*.yml` (not nested subfolders).
+工作流文件**必须**位于 `.github/workflows/*.yml`（不要放在嵌套子目录）。
 
-## Agent guidelines
+## 代理指南
 
-1. **Minimal diffs** — Only change what the task needs; no unrelated refactors or drive-by formatting outside touched files.
-2. **Match existing patterns** — Naming, Qt parent/ownership, signals/slots, include order, platform `#if` in `wordselect/mac|win/`.
-3. **Threading** — `TaskService` runs on a worker `QThread`; UI updates via signals to `MainWindow` / pages.
-4. **Platform code** — macOS: `src/app/mac/`, `src/wordselect/mac/`. Windows: `src/app/win/`, `src/wordselect/win/`. Keep shared logic platform-agnostic in `src/`.
-5. **No secrets** — Never commit API keys, tokens, or local paths in settings.
-6. **No vcpkg churn** — Avoid bumping `vcpkg.json` / overlays unless explicitly requested.
-7. **Commits** — Only when the user asks; follow repo commit style (`feat:`, `fix:`, `ci:`, etc.).
-8. **Docs** — Contributor-facing changes: update relevant file under `docs/develop/` if behavior or workflow changes.
+1. **最小 diff** — 只改任务所需内容；不做无关重构，也不对在触文件之外的代码做顺手格式化。
+2. **遵循现有模式** — 命名、Qt 父对象/所有权、signals/slots、include 顺序、`wordselect/mac|win/` 中的平台 `#if`。
+3. **线程** — `TaskService` 运行在工作 `QThread` 上；UI 通过信号更新 `MainWindow` / 各页面。
+4. **平台代码** — macOS：`src/app/mac/`、`src/wordselect/mac/`。Windows：`src/app/win/`、`src/wordselect/win/`。共享逻辑保持平台无关，放在 `src/`。
+5. **禁止密钥** — 切勿在设置或代码中提交 API 密钥、token 或本地路径。
+6. **避免 vcpkg 扰动** — 除非明确要求，不要升级 `vcpkg.json` / overlays。
+7. **提交** — 仅在用户要求时提交；遵循仓库提交风格（`feat:`、`fix:`、`ci:` 等）。
+8. **文档** — 面向贡献者的行为或工作流变更：更新 `docs/develop/` 下相关文件。
 
-## Common pitfalls
+## 常见陷阱
 
-- Adding `Qt6::Network` or extra Qt modules without manifest update in `vcpkg.json`.
-- Putting GitHub workflows under `.github/workflows/ci/` (GitHub may not register them).
-- Using branch names outside `users/<login>/...` (CI fails).
-- Editing only `main` locally then expecting push to work (Ruleset blocks).
+- 添加 `Qt6::Network` 或额外 Qt 模块时未更新 `vcpkg.json` manifest。
+- 将 GitHub 工作流放在 `.github/workflows/ci/`（GitHub 可能无法注册）。
+- 使用 `users/<login>/...` 以外的分支名（CI 会失败）。
+- 仅在本地修改 `main` 后尝试推送（Ruleset 会阻止）。
 
-## Quick links
+## 快速链接
 
-- [Workflow](docs/develop/workflow.md)
-- [Build](docs/develop/build.md)
-- [Code style](docs/develop/code-style.md)
+- [工作流](docs/develop/workflow.md)
+- [构建](docs/develop/build.md)
+- [代码风格](docs/develop/code-style.md)
 - [CI](docs/develop/ci.md)
-- [Branch protection](docs/develop/branch-protection.md)
-- [Release](docs/develop/release.md)
+- [分支保护](docs/develop/branch-protection.md)
+- [发布](docs/develop/release.md)

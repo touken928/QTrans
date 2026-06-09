@@ -1,13 +1,15 @@
 #include "app/ui/translate_page.h"
 
+#include "app/string_bridge.h"
 #include "app/widget_utils.h"
+#include "log/component.h"
+#include "log/logger.h"
 #include "translation/translation_languages.h"
 
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
 #include <QComboBox>
-#include <QDebug>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPlainTextEdit>
@@ -22,7 +24,7 @@ namespace {
 
 int defaultLanguageIndex(const char *id) {
     for (int i = 0; i < translation_language_count(); ++i) {
-        if (QString::fromUtf8(translation_languages()[i].id) == QString::fromUtf8(id)) {
+        if (qtrans::app::from_utf8(translation_languages()[i].id) == qtrans::app::from_utf8(id)) {
             return i;
         }
     }
@@ -34,7 +36,7 @@ QString languageNameAt(QComboBox *combo) {
     if (index < 0 || index >= translation_language_count()) {
         return QStringLiteral("English");
     }
-    return QString::fromUtf8(translation_languages()[index].model_name);
+    return qtrans::app::from_utf8(translation_languages()[index].model_name);
 }
 
 }  // namespace
@@ -50,7 +52,7 @@ TranslatePage::TranslatePage(QWidget *parent)
     auto *toolbar = new QHBoxLayout();
     source_lang_combo_ = new QComboBox(this);
     for (int i = 0; i < translation_language_count(); ++i) {
-        source_lang_combo_->addItem(QString::fromUtf8(translation_languages()[i].label));
+        source_lang_combo_->addItem(qtrans::app::from_utf8(translation_languages()[i].label));
     }
     source_lang_combo_->setCurrentIndex(defaultLanguageIndex("en"));
     configureComboBox(source_lang_combo_, 140);
@@ -61,7 +63,7 @@ TranslatePage::TranslatePage(QWidget *parent)
 
     target_lang_combo_ = new QComboBox(this);
     for (int i = 0; i < translation_language_count(); ++i) {
-        target_lang_combo_->addItem(QString::fromUtf8(translation_languages()[i].label));
+        target_lang_combo_->addItem(qtrans::app::from_utf8(translation_languages()[i].label));
     }
     target_lang_combo_->setCurrentIndex(defaultLanguageIndex("zh"));
     configureComboBox(target_lang_combo_, 140);
@@ -185,7 +187,8 @@ void TranslatePage::resetBackTranslate() {
 }
 
 void TranslatePage::appendTarget(const QString &piece) {
-    qDebug() << "[TranslatePage] appendTarget len:" << piece.size() << "thread:" << QThread::currentThread();
+    qtrans::log::get(qtrans::log::Component::App)
+        ->debug("appendTarget len:{}", piece.size());
     target_edit_->moveCursor(QTextCursor::End);
     target_edit_->insertPlainText(piece);
     target_edit_->moveCursor(QTextCursor::End);

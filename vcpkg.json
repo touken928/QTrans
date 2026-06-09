@@ -19,6 +19,8 @@
       ]
     },
     "gtest",
-    "icu"
+    "icu",
+    "simdutf",
+    "spdlog"
   ]
 }

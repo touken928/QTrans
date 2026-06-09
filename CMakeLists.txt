@@ -8,6 +8,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(llama CONFIG REQUIRED)
 find_package(CURL REQUIRED)
 find_package(ICU REQUIRED COMPONENTS uc i18n data)
+find_package(simdutf CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
 set(CMAKE_AUTOMOC ON)
@@ -15,24 +17,45 @@ set(CMAKE_AUTORCC ON)
 
 add_library(qtrans_engine STATIC
     src/storage/app_paths.cpp
-    src/storage/debug_ai_log.cpp
     src/storage/settings.cpp
     src/model/model_catalog.cpp
     src/model/model_files.cpp
     src/network/download.cpp
+    src/text/utf8.cpp
+    src/text/utf8_stream_buffer.cpp
+    src/text/sentence_splitter.cpp
+    src/text/chunker.cpp
+    src/log/init.cpp
+    src/log/logger.cpp
+    src/log/registry.cpp
+    src/log/component.cpp
+    src/log/ai_trace.cpp
+    src/log/console_progress.cpp
     src/translation/translation_languages.cpp
     src/translation/translation_model.cpp
     src/translation/hymt.cpp
-    src/translation/text_chunker.cpp
     src/translation/inference_engine.cpp
     src/task/task_queue.cpp
     src/task/task_orchestrator.cpp
 )
 
 target_include_directories(qtrans_engine PUBLIC src)
-target_link_libraries(qtrans_engine PUBLIC llama CURL::libcurl ICU::uc ICU::i18n ICU::data)
+target_link_libraries(qtrans_engine PUBLIC
+    llama
+    CURL::libcurl
+    ICU::uc
+    ICU::i18n
+    ICU::data
+    simdutf::simdutf
+    spdlog::spdlog
+)
+
+target_compile_definitions(qtrans_engine PUBLIC
+    $<$<CONFIG:Release>:SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_WARN>
+)
 
 set(QTRANS_SOURCES_COMMON
+    src/app/string_bridge.cpp
     src/app/main.cpp
     src/app/single_instance.cpp
     src/app/single_instance.h

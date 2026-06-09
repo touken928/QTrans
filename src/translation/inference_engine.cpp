@@ -3,10 +3,11 @@
 #include "model/model_files.h"
 #include "network/download.h"
 #include "translation/hymt.h"
-#include "translation/text_chunker.h"
+#include "log/component.h"
+#include "log/logger.h"
+#include "text/chunker.h"
 
 #include <algorithm>
-#include <cstdio>
 #include <stdexcept>
 
 namespace {
@@ -38,13 +39,13 @@ bool is_cancelled(const CancelToken *cancel_token) {
 int max_chunk_prompt_tokens(const TranslationModelConfig &config) {
     // Translation output is often similar in length to the source; reserve ~half of
     // n_ctx for generation so a chunk does not fill the window with prompt alone.
-    const int output_room = std::max(kTranslationOutputReserve, config.n_ctx / 2);
+    const int output_room = std::max(qtrans::text::kTranslationOutputReserve, config.n_ctx / 2);
     const int budget = config.n_ctx - output_room;
     return budget > 0 ? budget : 1;
 }
 
 bool prompt_fits_context(int prompt_tokens, const TranslationModelConfig &config) {
-    return prompt_tokens > 0 && prompt_tokens + kTranslationOutputReserve <= config.n_ctx;
+    return prompt_tokens > 0 && prompt_tokens + qtrans::text::kTranslationOutputReserve <= config.n_ctx;
 }
 
 std::string context_limit_error() {
@@ -143,7 +144,7 @@ TranslateStepResult InferenceEngine::translate(
 
     std::vector<std::string> chunks;
     try {
-        chunks = chunk_text_by_token_budget(text, max_chunk_tokens, token_counter);
+        chunks = qtrans::text::chunk_by_token_budget(text, max_chunk_tokens, token_counter);
     } catch (const std::exception &ex) {
         return make_failure(ex.what());
     }
@@ -162,10 +163,8 @@ TranslateStepResult InferenceEngine::translate(
             return make_cancelled();
         }
 
-        fprintf(stderr,
-                "[InferenceEngine] translating chunk %zu/%zu\n",
-                i + 1,
-                chunks.size());
+        qtrans::log::get(qtrans::log::Component::Inference)
+            ->debug("translating chunk {}/{}", i + 1, chunks.size());
 
         // Each chunk streams through the same on_token callback; no reset between chunks.
         TranslateStepResult chunk_result = translate_single_chunk(

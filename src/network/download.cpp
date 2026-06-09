@@ -1,10 +1,12 @@
 #include "network/download.h"
 
+#include "log/component.h"
+#include "log/console_progress.h"
+#include "log/logger.h"
+
 #include <curl/curl.h>
 
 #include <chrono>
-#include <cstdarg>
-#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -21,25 +23,18 @@ constexpr const char k_auto_scheme[] = "auto://";
 
 struct DownloadContext {
     FILE *out = nullptr;
-    curl_off_t last_reported = -1;
     curl_off_t last_dlnow = 0;
     std::chrono::steady_clock::time_point last_time = std::chrono::steady_clock::now();
     std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
+    qtrans::log::ConsoleProgress progress;
 };
 
 bool g_quiet = false;
 std::mutex g_progress_mutex;
 DownloadProgressCallback g_progress_callback;
 
-void log_message(const char *fmt, ...) {
-    if (g_quiet) {
-        return;
-    }
-
-    va_list args;
-    va_start(args, fmt);
-    std::vfprintf(stderr, fmt, args);
-    va_end(args);
+auto download_logger() {
+    return qtrans::log::get(qtrans::log::Component::Download);
 }
 
 void report_progress(DownloadContext *ctx, curl_off_t dltotal, curl_off_t dlnow) {
@@ -118,13 +113,7 @@ int progress_callback(
 
     if (dltotal > 0) {
         const curl_off_t pct = dlnow * 100 / dltotal;
-        if (pct != ctx->last_reported) {
-            ctx->last_reported = pct;
-            if (!g_quiet) {
-                std::fprintf(stderr, "\rdownloading: %3lld%%", static_cast<long long>(pct));
-                std::fflush(stderr);
-            }
-        }
+        ctx->progress.update(static_cast<std::int64_t>(pct));
     }
 
     const auto now = std::chrono::steady_clock::now();
@@ -212,6 +201,7 @@ void download_from_hub(const std::string &local_path, const DownloadSpec &spec, 
     std::filesystem::remove(temp_path);
 
     DownloadContext ctx{};
+    ctx.progress.set_enabled(!g_quiet);
     ctx.start_time = std::chrono::steady_clock::now();
     ctx.last_time = ctx.start_time;
     ctx.out = std::fopen(temp_path.c_str(), "wb");
@@ -265,9 +255,7 @@ void download_from_hub(const std::string &local_path, const DownloadSpec &spec, 
         throw std::runtime_error("failed to finalize download: " + ec.message());
     }
 
-    if (!g_quiet) {
-        std::fprintf(stderr, "\n");
-    }
+    ctx.progress.finish();
 }
 
 bool parse_scheme_uri(
@@ -356,7 +344,7 @@ ModelHub download_probe_hub(const DownloadSpec &spec) {
     for (const ModelHub hub : auto_hub_candidates()) {
         const std::string url = download_resolve_url(spec, hub);
         if (remote_file_available(url, hub)) {
-            log_message("auto: selected %s\n", download_hub_name(hub));
+            download_logger()->info("auto: selected {}", download_hub_name(hub));
             return hub;
         }
         if (!errors.empty()) {
@@ -376,7 +364,7 @@ void download_to_file(const std::string &local_path, const DownloadSpec &spec, b
     if (spec.hub != ModelHub::Auto) {
         const ModelHub hub = spec.hub;
         const std::string url = download_resolve_url(spec, hub);
-        log_message("downloading [%s] %s\n", download_hub_name(hub), url.c_str());
+        download_logger()->info("downloading [{}] {}", download_hub_name(hub), url);
         download_from_hub(local_path, spec, hub);
         return;
     }
@@ -393,8 +381,8 @@ void download_to_file(const std::string &local_path, const DownloadSpec &spec, b
                 continue;
             }
 
-            log_message("auto: selected %s\n", download_hub_name(hub));
-            log_message("downloading [%s] %s\n", download_hub_name(hub), url.c_str());
+            download_logger()->info("auto: selected {}", download_hub_name(hub));
+            download_logger()->info("downloading [{}] {}", download_hub_name(hub), url);
             download_from_hub(local_path, spec, hub);
             return;
         } catch (const std::exception &ex) {
@@ -411,12 +399,12 @@ void download_to_file(const std::string &local_path, const DownloadSpec &spec, b
 
 void download_ensure(const std::string &local_path, const DownloadSpec &spec, bool force) {
     if (!force && download_file_exists(local_path)) {
-        log_message("using cached model: %s\n", local_path.c_str());
+        download_logger()->info("using cached model: {}", local_path);
         return;
     }
 
     download_to_file(local_path, spec, true);
-    log_message("saved to %s\n", local_path.c_str());
+    download_logger()->info("saved to {}", local_path);
 }
 
 void download_set_progress_callback(DownloadProgressCallback callback) {

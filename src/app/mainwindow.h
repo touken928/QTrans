@@ -23,7 +23,11 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
-    explicit MainWindow(TaskService *task_service, QThread *worker_thread, QWidget *parent = nullptr);
+    explicit MainWindow(
+        TaskService *task_service,
+        QThread *worker_thread,
+        const AppPaths &paths,
+        QWidget *parent = nullptr);
     ~MainWindow() override;
 
     void bringToForeground();

@@ -1,5 +1,8 @@
 #include "../hotkey_manager.h"
 
+#include "log/component.h"
+#include "log/logger.h"
+
 #include <windows.h>
 #include <QCoreApplication>
 
@@ -22,8 +25,18 @@ bool HotkeyManager::registerHotkey(int id, Qt::KeyboardModifiers modifiers, Qt::
     const UINT vk = nativeKey(key);
 
     if (!::RegisterHotKey(nullptr, id, mod, vk)) {
+        qtrans::log::get(qtrans::log::Component::WordSelect)
+            ->error(
+                "RegisterHotKey failed id={} vk=0x{:x} mod=0x{:x} error={}",
+                id,
+                vk,
+                mod,
+                static_cast<unsigned long>(::GetLastError()));
         return false;
     }
+
+    qtrans::log::get(qtrans::log::Component::WordSelect)
+        ->debug("registered hotkey id={} vk=0x{:x} mod=0x{:x}", id, vk, mod);
 
     HotkeyBinding binding{};
     binding.id = id;

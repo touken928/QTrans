@@ -1,11 +1,13 @@
 #include "translation/hymt.h"
 
-#include "storage/debug_ai_log.h"
+#include "log/ai_trace.h"
+#include "log/component.h"
+#include "log/logger.h"
+#include "text/utf8_stream_buffer.h"
 #include "translation/translation_languages.h"
 #include "llama.h"
 
 #include <algorithm>
-#include <cstdio>
 #include <functional>
 #include <memory>
 #include <stdexcept>
@@ -22,13 +24,47 @@ bool is_chinese_target(const std::string &target_language) {
     return is_chinese_language_name(target_language);
 }
 
+void log_llama_text(ggml_log_level level, const char *text) {
+    if (text == nullptr) {
+        return;
+    }
+    std::string_view message(text);
+    while (!message.empty() && (message.back() == '\n' || message.back() == '\r')) {
+        message.remove_suffix(1);
+    }
+    if (message.empty()) {
+        return;
+    }
+
+    auto logger = qtrans::log::get(qtrans::log::Component::Hymt);
+    switch (level) {
+        case GGML_LOG_LEVEL_ERROR:
+            logger->error("{}", message);
+            break;
+#ifndef NDEBUG
+        case GGML_LOG_LEVEL_WARN:
+            logger->warn("{}", message);
+            break;
+        case GGML_LOG_LEVEL_INFO:
+            logger->info("{}", message);
+            break;
+        case GGML_LOG_LEVEL_DEBUG:
+            logger->debug("{}", message);
+            break;
+#endif
+        case GGML_LOG_LEVEL_CONT:
+        case GGML_LOG_LEVEL_NONE:
+        default:
+            break;
+    }
+}
+
 void set_log_callback() {
-    llama_log_set([](ggml_log_level level, const char *text, void *) {
-        if (level >= GGML_LOG_LEVEL_ERROR) {
-            std::fputs(text, stderr);
-        }
-    },
-                  nullptr);
+    llama_log_set(
+        [](ggml_log_level level, const char *text, void *) {
+            log_llama_text(level, text);
+        },
+        nullptr);
 }
 
 // Official inference params: https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF
@@ -49,83 +85,6 @@ bool abort_callback(void *data) {
     const auto *should_cancel = static_cast<const std::function<bool()> *>(data);
     return (*should_cancel)();
 }
-
-bool is_utf8_continuation(unsigned char byte) {
-    return (byte & 0xC0) == 0x80;
-}
-
-size_t utf8_sequence_length(unsigned char lead) {
-    if ((lead & 0x80) == 0) {
-        return 1;
-    }
-    if ((lead & 0xE0) == 0xC0) {
-        return 2;
-    }
-    if ((lead & 0xF0) == 0xE0) {
-        return 3;
-    }
-    if ((lead & 0xF8) == 0xF0) {
-        return 4;
-    }
-    return 0;
-}
-
-// Returns the length of the longest prefix that ends on complete UTF-8 code points.
-size_t utf8_complete_prefix_length(const std::string &text) {
-    size_t index = 0;
-    size_t complete = 0;
-    while (index < text.size()) {
-        const unsigned char lead = static_cast<unsigned char>(text[index]);
-        const size_t sequence_len = utf8_sequence_length(lead);
-        if (sequence_len == 0) {
-            complete = index + 1;
-            index += 1;
-            continue;
-        }
-        if (index + sequence_len > text.size()) {
-            break;
-        }
-        bool valid = true;
-        for (size_t offset = 1; offset < sequence_len; ++offset) {
-            if (!is_utf8_continuation(static_cast<unsigned char>(text[index + offset]))) {
-                valid = false;
-                break;
-            }
-        }
-        if (!valid) {
-            complete = index + 1;
-            index += 1;
-            continue;
-        }
-        complete = index + sequence_len;
-        index += sequence_len;
-    }
-    return complete;
-}
-
-// BPE tokens may split UTF-8 code points; only emit complete characters to the UI.
-class Utf8StreamBuffer {
-public:
-    std::string push(std::string_view piece) {
-        pending_.append(piece);
-        const size_t complete_len = utf8_complete_prefix_length(pending_);
-        if (complete_len == 0) {
-            return {};
-        }
-        std::string emit = pending_.substr(0, complete_len);
-        pending_.erase(0, complete_len);
-        return emit;
-    }
-
-    std::string flush() {
-        std::string emit = std::move(pending_);
-        pending_.clear();
-        return emit;
-    }
-
-private:
-    std::string pending_;
-};
 
 std::string token_to_text(const llama_vocab *vocab, llama_token token) {
     char buffer[256];
@@ -284,6 +243,8 @@ std::string Hymt::generate(
     const std::string &prompt,
     const std::function<void(const std::string &)> &on_token,
     const std::function<bool()> &should_cancel) {
+    auto logger = qtrans::log::get(qtrans::log::Component::Hymt);
+
     std::function<bool()> cancel_fn = should_cancel ? should_cancel : []() { return false; };
     llama_set_abort_callback(ctx_, abort_callback, &cancel_fn);
 
@@ -294,15 +255,14 @@ std::string Hymt::generate(
         }
     } guard{ctx_};
 
-    fprintf(stderr, "[Hymt] generate start, clearing memory\n");
-    fprintf(stderr, "[Hymt] prompt: '%s'\n", prompt.c_str());
+    logger->trace("generate start, clearing memory");
+    logger->trace("prompt: '{}'", prompt);
     llama_memory_clear(llama_get_memory(ctx_), true);
-    fprintf(stderr, "[Hymt] memory cleared, resetting sampler\n");
+    logger->trace("memory cleared, resetting sampler");
     llama_sampler_reset(sampler_);
 
     const llama_vocab *vocab = llama_model_get_vocab(model_holder_->model);
-    fprintf(stderr, "[Hymt] vocab obtained, tokenizing prompt (len=%d)\n",
-            static_cast<int>(prompt.size()));
+    logger->trace("tokenizing prompt (len={})", prompt.size());
 
     const int n_prompt = -llama_tokenize(
         vocab,
@@ -312,7 +272,7 @@ std::string Hymt::generate(
         0,
         true,
         true);
-    fprintf(stderr, "[Hymt] token count: %d\n", n_prompt);
+    logger->trace("token count: {}", n_prompt);
     if (n_prompt <= 0) {
         throw std::runtime_error("failed to measure prompt tokens");
     }
@@ -338,18 +298,18 @@ std::string Hymt::generate(
     }
     const int max_gen = std::min(config_.max_tokens, ctx_room);
 
-    fprintf(stderr,
-            "[Hymt] starting decode loop, max_gen=%d prompt_tokens=%d n_ctx=%d\n",
-            max_gen,
-            n_prompt,
-            config_.n_ctx);
-    Utf8StreamBuffer utf8_stream;
+    logger->debug(
+        "starting decode loop, max_gen={} prompt_tokens={} n_ctx={}",
+        max_gen,
+        n_prompt,
+        config_.n_ctx);
+    qtrans::text::Utf8StreamBuffer utf8_stream;
     for (int i = 0; i < max_gen; ++i) {
         if (i > 0 && i % 10 == 0) {
-            fprintf(stderr, "[Hymt] token %d/%d\n", i, max_gen);
+            logger->trace("token {}/{}", i, max_gen);
         }
         if (cancel_fn()) {
-            fprintf(stderr, "[Hymt] cancelled at token %d\n", i);
+            logger->debug("cancelled at token {}", i);
             throw TranslationCancelled();
         }
 
@@ -363,13 +323,13 @@ std::string Hymt::generate(
 
         const llama_token token = llama_sampler_sample(sampler_, ctx_, -1);
         if (llama_vocab_is_eog(vocab, token)) {
-            fprintf(stderr, "[Hymt] EOG at token %d\n", i);
+            logger->debug("EOG at token {}", i);
             break;
         }
 
         const std::string piece = token_to_text(vocab, token);
         response.append(piece);
-        fprintf(stderr, "[Hymt] token %d:'%s'\n", i, piece.c_str());
+        logger->trace("token {}:'{}'", i, piece);
         if (on_token) {
             const std::string emit = utf8_stream.push(piece);
             if (!emit.empty()) {
@@ -377,7 +337,7 @@ std::string Hymt::generate(
             }
         }
         if (cancel_fn()) {
-            fprintf(stderr, "[Hymt] cancelled at token %d\n", i);
+            logger->debug("cancelled at token {}", i);
             throw TranslationCancelled();
         }
         batch = llama_batch_get_one(const_cast<llama_token *>(&token), 1);
@@ -390,10 +350,9 @@ std::string Hymt::generate(
         }
     }
 
-    fprintf(stderr, "[Hymt] generate done, response_len=%zu response:'%s'\n",
-            response.size(), response.c_str());
+    logger->trace("generate done, response_len={} response:'{}'", response.size(), response);
 
-    write_debug_ai_output(prompt, response);
+    qtrans::log::write_ai_trace(prompt, response);
 
     return response;
 }
