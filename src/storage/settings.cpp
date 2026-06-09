@@ -1,5 +1,8 @@
 #include "storage/settings.h"
 
+#include "model/inference_resolver.h"
+#include "model/runtime_capabilities.h"
+
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -16,9 +19,7 @@ std::string trim(const std::string &value) {
 }
 
 void migrate_legacy_settings(AppSettings &settings, const AppPaths &paths) {
-    if (find_model_by_id(settings.model_id) == nullptr) {
-        settings.model_id = default_model()->id;
-    }
+    settings.migrateModelSelection(RuntimeCapabilities::instance());
 
     if (!settings.models_dir.empty()) {
         return;
@@ -178,5 +179,19 @@ void AppSettings::setEffectiveModelsDir(const AppPaths &paths, const std::string
 void AppSettings::setSelectedModelId(const std::string &id) {
     if (find_model_by_id(id) != nullptr) {
         model_id = id;
+    }
+}
+
+void AppSettings::migrateModelSelection(const RuntimeCapabilities &caps) {
+    const PlatformProfile profile = detect_platform_profile();
+
+    if (const ModelCatalogEntry *entry = find_model_by_id(model_id)) {
+        if (resolve_inference(*entry, caps)) {
+            return;
+        }
+    }
+
+    if (const ModelCatalogEntry *fallback = default_available_model(caps, profile)) {
+        model_id = fallback->id;
     }
 }

@@ -3,7 +3,6 @@
 #include "app/string_bridge.h"
 #include "log/component.h"
 #include "log/logger.h"
-
 #include <QMetaObject>
 #include <QThread>
 
@@ -20,7 +19,9 @@ void TaskService::wireCallbacks() {
     };
 
     callbacks.on_model_load_finished = [this](bool success, const std::string &error_message) {
-        emit modelLoadFinished(success, qtrans::app::from_utf8(error_message));
+        const QString backend_label =
+            success ? qtrans::app::from_utf8(orchestrator_.active_backend_label()) : QString{};
+        emit modelLoadFinished(success, qtrans::app::from_utf8(error_message), backend_label);
     };
 
     callbacks.on_model_unload_finished = [this]() {
@@ -74,6 +75,22 @@ void TaskService::wireCallbacks() {
 
 void TaskService::setModelPath(const QString &path) {
     orchestrator_.set_model_path(qtrans::app::to_utf8(path));
+}
+
+void TaskService::setModelId(const QString &id) {
+    orchestrator_.set_model_id(qtrans::app::to_utf8(id));
+}
+
+void TaskService::setBackendPluginDir(const QString &path) {
+    orchestrator_.set_backend_plugin_dir(qtrans::app::to_utf8(path));
+}
+
+void TaskService::initializeBackend() {
+    orchestrator_.initialize_backend();
+}
+
+QString TaskService::activeBackendLabel() const {
+    return qtrans::app::from_utf8(orchestrator_.active_backend_label());
 }
 
 void TaskService::setRemoteSpec(const QString &spec) {

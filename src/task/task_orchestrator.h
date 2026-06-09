@@ -7,6 +7,7 @@
 #include "translation/inference_engine.h"
 #include "translation/translation_model.h"
 
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -36,8 +37,13 @@ public:
     void set_callbacks(TaskOrchestratorCallbacks callbacks);
 
     void set_model_path(const std::string &path);
+    void set_model_id(const std::string &id);
+    void set_backend_plugin_dir(const std::filesystem::path &plugin_dir);
+    void initialize_backend();
     void set_remote_spec(const std::string &spec);
     void set_download_hub(int hub);
+
+    std::string active_backend_label() const;
 
     TaskId submit_download_model(TaskPriority priority = TaskPriority::Interactive);
     TaskId submit_load_model(TaskPriority priority = TaskPriority::Interactive);
@@ -67,6 +73,8 @@ private:
     TaskOrchestratorCallbacks callbacks_;
 
     std::string model_path_;
+    std::string model_id_;
+    std::filesystem::path backend_plugin_dir_;
     std::string remote_spec_ = "AngelSlim/Hy-MT2-1.8B-1.25Bit-GGUF/Hy-MT2-1.8B-1.25Bit.gguf";
     int download_hub_ = 2;
     TranslationModelConfig model_config_{};

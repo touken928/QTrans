@@ -4,7 +4,7 @@
 
 ## 项目
 
-QTrans 是基于 **C++17 / Qt6** 的桌面应用，使用 Hy-MT（llama.cpp）进行**本地 CPU 推理**。功能包括：翻译/回译、模型下载、划词翻译（平台热键 + 弹窗）。
+QTrans 是基于 **C++17 / Qt6** 的桌面应用，使用 Hy-MT（llama.cpp）进行**本地推理**。全平台 CPU；**仅 Windows x64 Release** 可附带 `ggml-vulkan.dll` 做 Vulkan GPU 卸载（无 CUDA）。功能包括：翻译/回译、模型下载、划词翻译（平台热键 + 弹窗）。
 
 | 项 | 说明 |
 |------|--------|
@@ -24,7 +24,7 @@ src/
   text/          # UTF-8（simdutf）、ICU 分句、按 token 预算分块
   log/           # spdlog 初始化、组件日志、AI trace 落盘、控制台进度
   translation/   # Hy-MT、推理引擎、语言列表
-  model/         # 模型目录、文件
+  model/         # 模型目录、推理后端解析、平台默认模型
   network/       # 模型下载（libcurl）
   storage/       # 路径、设置
   task/          # 队列、编排器（工作线程）
@@ -51,11 +51,12 @@ resources/       # Qt 资源（图标）
 cmake --preset default && cmake --build --preset debug
 
 # Release
-cmake --preset arm64-osx-release && cmake --build --preset arm64-osx-release   # macOS arm64
-cmake --preset x64-mingw-release && cmake --build --preset x64-mingw-release   # Windows MinGW
+cmake --preset arm64-osx-release && cmake --build --preset arm64-osx-release     # macOS arm64（CPU）
+cmake --preset x64-mingw-release && cmake --build --preset x64-mingw-release     # Win x64（+ ggml-vulkan.dll）
+cmake --preset arm64-mingw-release && cmake --build --preset arm64-mingw-release  # WOA arm64（CPU）
 ```
 
-Preset 定义见 `CMakePresets.json`。新增依赖须同步更新 `vcpkg.json`。
+Preset 定义见 `CMakePresets.json`。`QTRANS_MULTI_BACKEND` 仅在 `x64-mingw*` triplet 启用。Win x64 Release 须将 `ggml-vulkan.dll` 与 `QTrans.exe` 同目录分发。首推默认模型：Win x64 → `hymt2-q4`；macOS arm64 / WOA → `hymt2-125bit`。新增依赖须同步更新 `vcpkg.json`。
 
 ## 测试
 

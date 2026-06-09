@@ -123,6 +123,14 @@ jobs:
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
           Copy-Item $binary "$stage/QTrans.exe"
 
+          $vulkanDll = Join-Path $env:VCPKG_INSTALL_ROOT "bin/ggml-vulkan.dll"
+          if (Test-Path $vulkanDll) {
+            Copy-Item $vulkanDll $stage
+            Write-Host "Bundled ggml-vulkan.dll"
+          } else {
+            Write-Warning "ggml-vulkan.dll not found at $vulkanDll"
+          }
+
           $imports = & $objdump -p $binary |
             Select-String -SimpleMatch "DLL Name:" |
             ForEach-Object { ($_ -split "DLL Name:\s+", 2)[1].Trim() }

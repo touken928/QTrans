@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>在本机运行 <a href="https://huggingface.co/AngelSlim/Hy-MT2-1.8B-1.25Bit-GGUF">Hy-MT</a> 翻译模型的 LLM 软件，可自动下载权重并在 CPU 上完成推理。</strong>
+  <strong>在本机运行 <a href="https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF">Hy-MT</a> 翻译模型的 LLM 软件，可自动下载权重；全平台 CPU 推理，Windows x64 可选 Vulkan GPU。</strong>
 </p>
 
 <p align="center">
@@ -33,9 +33,10 @@
 预编译二进制可在 [Releases](https://github.com/touken928/QTrans/releases) 页面获取：
 
 - `QTrans-<版本>-macos-arm64` — macOS ARM64
-- `QTrans-<版本>-mingw-x64.zip` — Windows x64（内含 `QTrans.exe` 及 OpenMP 运行库 DLL）
+- `QTrans-<版本>-mingw-x64.zip` — Windows x64（`QTrans.exe`、`ggml-vulkan.dll`、OpenMP 运行库 DLL）
+- Windows on ARM 须使用 arm64 CPU 构建包（勿在模拟层下使用 x64 包）
 
-下载对应平台的压缩包。Windows 请解压后运行 `QTrans.exe`；macOS 上如需请先赋予可执行权限，然后运行。首次使用请打开 **Model** 页面下载模型，再点击 **Load**。
+下载对应平台的压缩包。Windows 请将 `QTrans.exe` 与 `ggml-vulkan.dll` 置于同一目录后运行；macOS 上如需请先赋予可执行权限，然后运行。首次使用请打开 **Model** 页面下载模型，再点击 **Load**。默认模型：Windows x64 为 **Q4**，macOS ARM64 / WOA 为 **1.25Bit (STQ)**。
 
 ## 从源码构建
 
@@ -53,9 +54,13 @@
 cmake --preset arm64-osx-release
 cmake --build --preset arm64-osx-release
 
-# Windows MinGW x64（Release）
+# Windows MinGW x64（Release，可选 Vulkan）
 cmake --preset x64-mingw-release
 cmake --build --preset x64-mingw-release
+
+# Windows on ARM（仅 CPU）
+cmake --preset arm64-mingw-release
+cmake --build --preset arm64-mingw-release
 
 # Debug（任意平台，使用 VCPKG_DEFAULT_TRIPLET）
 cmake --preset default

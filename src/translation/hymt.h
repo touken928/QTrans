@@ -2,6 +2,7 @@
 
 #include "translation/translation_model.h"
 
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <string>
@@ -19,12 +20,12 @@ public:
 
     int count_prompt_tokens(const std::string &text, const std::string &target_language) const;
 
+    static void ensure_backend(const std::filesystem::path &plugin_dir = {});
+
 private:
     static std::string build_user_prompt(const std::string &text, const std::string &target_language);
     static std::string format_chat_prompt(const std::string &user_prompt);
     static bool contains_chinese(const std::string &text);
-
-    static void ensure_backend();
     std::string generate(
         const std::string &prompt,
         const std::function<void(const std::string &)> &on_token = nullptr,
