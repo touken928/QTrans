@@ -1,5 +1,6 @@
 #pragma once
 
+#include "translation/model_profile.h"
 #include "translation/translation_model.h"
 #include "task/cancel_token.h"
 #include "task/task_types.h"
@@ -12,7 +13,8 @@ class InferenceEngine {
 public:
     bool is_loaded() const;
 
-    void load(const std::string &model_path, const TranslationModelConfig &config);
+    void load(const std::string &model_path, const TranslationModelConfig &config,
+              const ModelProfile &profile);
     void unload();
 
     TranslateStepResult translate(
