@@ -22,12 +22,24 @@ std::string json_escape(const std::string &s) {
     std::ostringstream out;
     for (char c : s) {
         switch (c) {
-            case '"':  out << "\\\""; break;
-            case '\\': out << "\\\\"; break;
-            case '\n': out << "\\n"; break;
-            case '\r': out << "\\r"; break;
-            case '\t': out << "\\t"; break;
-            default:   out << c; break;
+            case '"':
+                out << "\\\"";
+                break;
+            case '\\':
+                out << "\\\\";
+                break;
+            case '\n':
+                out << "\\n";
+                break;
+            case '\r':
+                out << "\\r";
+                break;
+            case '\t':
+                out << "\\t";
+                break;
+            default:
+                out << c;
+                break;
         }
     }
     return out.str();
@@ -45,12 +57,24 @@ std::string extract_json_string(const std::string &json, const std::string &key)
         if (json[pos] == '\\' && pos + 1 < json.size()) {
             char next = json[pos + 1];
             switch (next) {
-                case '"':  result += '"'; break;
-                case '\\': result += '\\'; break;
-                case 'n':  result += '\n'; break;
-                case 'r':  result += '\r'; break;
-                case 't':  result += '\t'; break;
-                default:   result += next; break;
+                case '"':
+                    result += '"';
+                    break;
+                case '\\':
+                    result += '\\';
+                    break;
+                case 'n':
+                    result += '\n';
+                    break;
+                case 'r':
+                    result += '\r';
+                    break;
+                case 't':
+                    result += '\t';
+                    break;
+                default:
+                    result += next;
+                    break;
             }
             pos += 2;
         } else if (json[pos] == '"') {
@@ -112,8 +136,8 @@ std::string build_user_prompt(const std::string &text, const std::string &target
 }
 
 std::string build_openai_body(const std::string &model,
-                               const std::string &user_prompt,
-                               const TranslatorOptions &config) {
+                              const std::string &user_prompt,
+                              const TranslatorOptions &config) {
     std::ostringstream ss;
     ss << "{"
        << "\"model\":\"" << json_escape(model) << "\","
@@ -125,8 +149,8 @@ std::string build_openai_body(const std::string &model,
 }
 
 std::string build_anthropic_body(const std::string &model,
-                                  const std::string &user_prompt,
-                                  const TranslatorOptions &config) {
+                                 const std::string &user_prompt,
+                                 const TranslatorOptions &config) {
     std::ostringstream ss;
     ss << "{"
        << "\"model\":\"" << json_escape(model) << "\","
@@ -159,8 +183,8 @@ struct CurlSlistGuard {
 };
 
 std::string curl_post(const std::string &url,
-                       const std::map<std::string, std::string> &headers,
-                       const std::string &body) {
+                      const std::map<std::string, std::string> &headers,
+                      const std::string &body) {
     ensure_curl_initialized();
 
     CURL *curl = curl_easy_init();
@@ -212,12 +236,14 @@ struct RemoteRuntime::Impl {
     bool loaded_ = false;
 };
 
-RemoteRuntime::RemoteRuntime() : impl_(std::make_unique<Impl>()) {}
+RemoteRuntime::RemoteRuntime() : impl_(std::make_unique<Impl>()) {
+}
 RemoteRuntime::~RemoteRuntime() = default;
 RemoteRuntime::RemoteRuntime(RemoteRuntime &&) noexcept = default;
 RemoteRuntime &RemoteRuntime::operator=(RemoteRuntime &&) noexcept = default;
 
-void RemoteRuntime::initialize_backend(const BackendOptions & /*opts*/) {}
+void RemoteRuntime::initialize_backend(const BackendOptions & /*opts*/) {
+}
 
 void RemoteRuntime::load_model(const std::vector<std::uint8_t> & /*data*/,
                                const TranslatorOptions & /*config*/) {
@@ -290,14 +316,14 @@ std::string RemoteRuntime::translate(
 }
 
 int RemoteRuntime::count_prompt_tokens(const std::string & /*text*/,
-                                        const std::string & /*target_language*/) const {
+                                       const std::string & /*target_language*/) const {
     return 1;
 }
 
 std::string RemoteRuntime::backend_label() const {
     return impl_->remote_config.api_provider.empty()
-        ? "Remote API"
-        : impl_->remote_config.api_provider;
+               ? "Remote API"
+               : impl_->remote_config.api_provider;
 }
 
 RuntimeKind RemoteRuntime::kind() const {

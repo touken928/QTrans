@@ -81,7 +81,10 @@ FILE *open_memory_as_file(std::vector<std::uint8_t> &buffer) {
     FILE *file = std::tmpfile();
     if (file == nullptr) return nullptr;
     const size_t written = std::fwrite(buffer.data(), 1, buffer.size(), file);
-    if (written != buffer.size()) { std::fclose(file); return nullptr; }
+    if (written != buffer.size()) {
+        std::fclose(file);
+        return nullptr;
+    }
     std::rewind(file);
     return file;
 #else
@@ -90,7 +93,7 @@ FILE *open_memory_as_file(std::vector<std::uint8_t> &buffer) {
 }
 
 LlamaModelHolder load_llama_model(const std::vector<std::uint8_t> &data,
-                                   const llama_model_params &params) {
+                                  const llama_model_params &params) {
     if (data.empty()) throw std::invalid_argument("gguf data is empty");
     LlamaModelHolder holder;
     holder.buffer = data;
@@ -153,20 +156,30 @@ void log_llama_text(ggml_log_level level, const char *text) {
     auto logger = spdlog::get("hymt");
     if (!logger) return;
     switch (level) {
-        case GGML_LOG_LEVEL_ERROR: logger->error("{}", message); break;
+        case GGML_LOG_LEVEL_ERROR:
+            logger->error("{}", message);
+            break;
 #ifndef NDEBUG
-        case GGML_LOG_LEVEL_WARN:  logger->warn("{}", message); break;
-        case GGML_LOG_LEVEL_INFO:  logger->info("{}", message); break;
-        case GGML_LOG_LEVEL_DEBUG: logger->debug("{}", message); break;
+        case GGML_LOG_LEVEL_WARN:
+            logger->warn("{}", message);
+            break;
+        case GGML_LOG_LEVEL_INFO:
+            logger->info("{}", message);
+            break;
+        case GGML_LOG_LEVEL_DEBUG:
+            logger->debug("{}", message);
+            break;
 #endif
-        default: break;
+        default:
+            break;
     }
 }
 
 void set_llama_log_callback() {
     llama_log_set([](ggml_log_level level, const char *text, void *) {
         log_llama_text(level, text);
-    }, nullptr);
+    },
+                  nullptr);
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +291,9 @@ void write_ai_trace(const std::string &prompt, const std::string &response) {
 
     std::ofstream logf(log_path, std::ios::binary);
     if (!logf.is_open()) return;
-    logf << "=== prompt ===\n" << prompt << "\n\n=== response ===\n" << response << '\n';
+    logf << "=== prompt ===\n"
+         << prompt << "\n\n=== response ===\n"
+         << response << '\n';
 #else
     (void)prompt;
     (void)response;
@@ -304,10 +319,14 @@ struct LocalRuntime::Impl {
     }
 
     ~Impl() {
-        if (sampler_ != nullptr) { llama_sampler_free(sampler_); sampler_ = nullptr; }
-        if (ctx_ != nullptr) { llama_free(ctx_); ctx_ = nullptr; }
-        model_holder_ = LlamaModelHolder();
-        loaded_ = false;
+        if (sampler_ != nullptr) {
+            llama_sampler_free(sampler_);
+            sampler_ = nullptr;
+        }
+        if (ctx_ != nullptr) {
+            llama_free(ctx_);
+            ctx_ = nullptr;
+        }
     }
 };
 
@@ -315,10 +334,12 @@ struct LocalRuntime::Impl {
 // LocalRuntime implementation
 // ---------------------------------------------------------------------------
 
-LocalRuntime::LocalRuntime() : impl_(std::make_unique<Impl>()) {}
+LocalRuntime::LocalRuntime() : impl_(std::make_unique<Impl>()) {
+}
 LocalRuntime::~LocalRuntime() = default;
 
-LocalRuntime::LocalRuntime(LocalRuntime &&other) noexcept : impl_(std::move(other.impl_)) {}
+LocalRuntime::LocalRuntime(LocalRuntime &&other) noexcept : impl_(std::move(other.impl_)) {
+}
 LocalRuntime &LocalRuntime::operator=(LocalRuntime &&other) noexcept {
     if (this != &other) impl_ = std::move(other.impl_);
     return *this;
@@ -356,8 +377,14 @@ void LocalRuntime::load_model(const std::vector<std::uint8_t> &data, const Trans
     impl_->config_ = config;
 
     // Clean up previous state.
-    if (impl_->sampler_ != nullptr) { llama_sampler_free(impl_->sampler_); impl_->sampler_ = nullptr; }
-    if (impl_->ctx_ != nullptr) { llama_free(impl_->ctx_); impl_->ctx_ = nullptr; }
+    if (impl_->sampler_ != nullptr) {
+        llama_sampler_free(impl_->sampler_);
+        impl_->sampler_ = nullptr;
+    }
+    if (impl_->ctx_ != nullptr) {
+        llama_free(impl_->ctx_);
+        impl_->ctx_ = nullptr;
+    }
     impl_->model_holder_ = LlamaModelHolder();
 
     llama_model_params model_params = llama_model_default_params();
@@ -446,7 +473,9 @@ std::string LocalRuntime::generate(
 
     struct AbortGuard {
         llama_context *ctx;
-        ~AbortGuard() { llama_set_abort_callback(ctx, nullptr, nullptr); }
+        ~AbortGuard() {
+            llama_set_abort_callback(ctx, nullptr, nullptr);
+        }
     } guard{impl_->ctx_};
 
     if (logger) {
@@ -482,7 +511,7 @@ std::string LocalRuntime::generate(
 
     if (logger)
         logger->debug("starting decode loop, max_gen={} prompt_tokens={} n_ctx={}",
-                       max_gen, n_prompt, impl_->config_.n_ctx);
+                      max_gen, n_prompt, impl_->config_.n_ctx);
 
     core::Utf8StreamBuffer utf8_stream;
     for (int i = 0; i < max_gen; ++i) {

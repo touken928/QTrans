@@ -127,7 +127,7 @@ RuntimeKind Translator::runtime_kind() const {
 }
 
 int Translator::count_prompt_tokens(const std::string &text,
-                                     const std::string &target_language) const {
+                                    const std::string &target_language) const {
     if (!impl_->runtime || !impl_->runtime->is_loaded())
         return 0;
     return impl_->runtime->count_prompt_tokens(text, target_language);

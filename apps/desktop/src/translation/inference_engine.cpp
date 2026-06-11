@@ -115,8 +115,8 @@ TranslateStepResult InferenceEngine::run_translate_pipeline(
     }
 
     auto should_cancel = cancel_token != nullptr
-        ? cancel_token->checker()
-        : std::function<bool()>();
+                             ? cancel_token->checker()
+                             : std::function<bool()>();
 
     if (on_reset) on_reset(false);
 
