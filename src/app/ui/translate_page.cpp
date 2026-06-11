@@ -86,8 +86,11 @@ TranslatePage::TranslatePage(QWidget *parent)
     root->addLayout(toolbar);
 
     splitter_ = new QSplitter(Qt::Horizontal, this);
+    splitter_->setHandleWidth(4);
+    splitter_->setChildrenCollapsible(false);
 
     auto *source_panel = new QWidget(splitter_);
+    source_panel->setMinimumWidth(200);
     auto *source_layout = new QVBoxLayout(source_panel);
     source_layout->setContentsMargins(0, 0, 0, 0);
     auto *source_label = new QLabel(QStringLiteral("Source"), source_panel);
@@ -98,6 +101,7 @@ TranslatePage::TranslatePage(QWidget *parent)
     source_layout->addWidget(source_edit_, 1);
 
     auto *target_panel = new QWidget(splitter_);
+    target_panel->setMinimumWidth(200);
     auto *target_layout = new QVBoxLayout(target_panel);
     target_layout->setContentsMargins(0, 0, 0, 0);
     auto *target_label = new QLabel(QStringLiteral("Target"), target_panel);
@@ -108,6 +112,7 @@ TranslatePage::TranslatePage(QWidget *parent)
     target_layout->addWidget(target_edit_, 1);
 
     back_panel_ = new QWidget(splitter_);
+    back_panel_->setMinimumWidth(200);
     auto *back_layout = new QVBoxLayout(back_panel_);
     back_layout->setContentsMargins(0, 0, 0, 0);
     auto *back_label = new QLabel(QStringLiteral("Back-translate"), back_panel_);
