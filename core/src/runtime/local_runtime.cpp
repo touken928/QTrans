@@ -334,11 +334,13 @@ struct LocalRuntime::Impl {
 // LocalRuntime implementation
 // ---------------------------------------------------------------------------
 
-LocalRuntime::LocalRuntime() : impl_(std::make_unique<Impl>()) {
+LocalRuntime::LocalRuntime()
+    : impl_(std::make_unique<Impl>()) {
 }
 LocalRuntime::~LocalRuntime() = default;
 
-LocalRuntime::LocalRuntime(LocalRuntime &&other) noexcept : impl_(std::move(other.impl_)) {
+LocalRuntime::LocalRuntime(LocalRuntime &&other) noexcept
+    : impl_(std::move(other.impl_)) {
 }
 LocalRuntime &LocalRuntime::operator=(LocalRuntime &&other) noexcept {
     if (this != &other) impl_ = std::move(other.impl_);

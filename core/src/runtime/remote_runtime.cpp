@@ -236,7 +236,8 @@ struct RemoteRuntime::Impl {
     bool loaded_ = false;
 };
 
-RemoteRuntime::RemoteRuntime() : impl_(std::make_unique<Impl>()) {
+RemoteRuntime::RemoteRuntime()
+    : impl_(std::make_unique<Impl>()) {
 }
 RemoteRuntime::~RemoteRuntime() = default;
 RemoteRuntime::RemoteRuntime(RemoteRuntime &&) noexcept = default;
