@@ -13,8 +13,10 @@ jobs:
       VCPKG_HOST_TRIPLET: x64-mingw-static-release
       DIST_SUFFIX: windows-x64
       VCPKG_ROOT: C:\vcpkg
+      VCPKG_TARGET_TRIPLET: x64-mingw-static-release
       VCPKG_INSTALL_ROOT: ${{ github.workspace }}/build/x64-mingw-release/vcpkg_installed
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
+      BUILD_DIR: ${{ github.workspace }}/build/x64-mingw-release
       LLVM_MINGW: C:\llvm-mingw
 
     steps:
@@ -24,40 +26,77 @@ jobs:
       - name: Setup Ninja
         shell: pwsh
         run: |
-          $url = "https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-win.zip"
-          $archive = Join-Path $env:TEMP "ninja.zip"
-          Invoke-WebRequest -Uri $url -OutFile $archive
-          Expand-Archive -Path $archive -DestinationPath C:\ninja
-          echo "C:\ninja" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $bin = "C:\ninja"
+          if (-not (Test-Path "$bin\ninja.exe")) {
+            Write-Host "Downloading Ninja..."
+            $url = "https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-win.zip"
+            $archive = Join-Path $env:TEMP "ninja.zip"
+            Invoke-WebRequest -Uri $url -OutFile $archive
+            Expand-Archive -Path $archive -DestinationPath $bin
+          } else {
+            Write-Host "Ninja already cached"
+          }
+          echo $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Setup llvm-mingw
         shell: pwsh
         run: |
-          $url = "https://github.com/mstorsjo/llvm-mingw/releases/download/20250114/llvm-mingw-20250114-ucrt-x86_64.zip"
-          $archive = Join-Path $env:TEMP "llvm-mingw.zip"
-          Invoke-WebRequest -Uri $url -OutFile $archive
-          Expand-Archive -Path $archive -DestinationPath $env:TEMP
-          $extracted = Get-ChildItem "$env:TEMP\llvm-mingw-*" -Directory | Select-Object -First 1
-          Move-Item $extracted.FullName $env:LLVM_MINGW
+          if (-not (Test-Path "$env:LLVM_MINGW\bin\clang.exe")) {
+            Write-Host "Downloading llvm-mingw..."
+            $url = "https://github.com/mstorsjo/llvm-mingw/releases/download/20250114/llvm-mingw-20250114-ucrt-x86_64.zip"
+            $archive = Join-Path $env:TEMP "llvm-mingw.zip"
+            Invoke-WebRequest -Uri $url -OutFile $archive
+            Expand-Archive -Path $archive -DestinationPath $env:TEMP
+            $extracted = Get-ChildItem "$env:TEMP\llvm-mingw-*" -Directory | Select-Object -First 1
+            Move-Item $extracted.FullName $env:LLVM_MINGW
+          } else {
+            Write-Host "llvm-mingw already cached"
+          }
           echo "$env:LLVM_MINGW\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Cache Ninja
+        uses: actions/cache@v4
+        with:
+          path: C:\ninja
+          key: ninja-win-1.12.1
+
+      - name: Cache llvm-mingw
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.LLVM_MINGW }}
+          key: llvm-mingw-20250114-ucrt-x86_64
 
       - name: Cache vcpkg binary artifacts
         id: cache-vcpkg-blobs
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
-          key: vcpkg-blobs-mingw-x64-static-release-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
+          key: vcpkg-blobs-windows-x64-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
           restore-keys: |
-            vcpkg-blobs-mingw-x64-static-release-
+            vcpkg-blobs-windows-x64-
 
       - name: Cache vcpkg_installed
         id: cache-vcpkg-installed
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_INSTALL_ROOT }}
-          key: vcpkg-installed-mingw-x64-static-release-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
+          key: vcpkg-installed-windows-x64-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/llama-cpp/portfile.cmake', 'overlay/llama-cpp/vcpkg.json') }}
           restore-keys: |
-            vcpkg-installed-mingw-x64-static-release-
+            vcpkg-installed-windows-x64-
+
+      - name: Cache build objects
+        id: cache-build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.BUILD_DIR }}/core
+            ${{ env.BUILD_DIR }}/apps
+            ${{ env.BUILD_DIR }}/build.ninja
+            ${{ env.BUILD_DIR }}/.ninja_log
+            ${{ env.BUILD_DIR }}/.ninja_deps
+          key: build-objects-windows-x64-${{ hashFiles('apps/desktop/src/**/*.cpp', 'apps/desktop/src/**/*.h', 'apps/desktop/src/**/*.mm', 'core/src/**/*.cpp', 'core/include/**/*.h', 'core/tests/**/*.cpp') }}
+          restore-keys: |
+            build-objects-windows-x64-
 
       - name: Setup vcpkg
         shell: pwsh
@@ -77,29 +116,29 @@ jobs:
 
           Write-Host "binary artifacts cache hit: ${{ steps.cache-vcpkg-blobs.outputs.cache-hit }}"
           Write-Host "vcpkg_installed cache hit: ${{ steps.cache-vcpkg-installed.outputs.cache-hit }}"
+          Write-Host "build objects cache hit: ${{ steps.cache-build.outputs.cache-hit }}"
 
           if (Test-Path $env:VCPKG_INSTALL_ROOT) {
             Get-ChildItem $env:VCPKG_INSTALL_ROOT -Recurse -Directory -Filter 'qtbase*' |
               Select-Object -First 5 |
               ForEach-Object { $_.FullName }
           } else {
-            Write-Host "vcpkg_installed missing - expect qtbase to compile from source"
+            Write-Host "vcpkg_installed missing - dependencies will compile from source"
           }
 
       - name: Configure application
         shell: pwsh
         run: |
           $llvmMingw = $env:LLVM_MINGW -replace '\\', '/'
-          $cmakeArgs = @(
-            "--preset", $env:CMAKE_PRESET,
-            "-DCMAKE_SYSTEM_NAME=Windows",
-            "-DCMAKE_C_COMPILER=$llvmMingw/bin/x86_64-w64-mingw32-gcc.exe",
-            "-DCMAKE_CXX_COMPILER=$llvmMingw/bin/x86_64-w64-mingw32-g++.exe",
-            "-DCMAKE_MAKE_PROGRAM=C:/ninja/ninja.exe",
-            "-DVCPKG_HOST_TRIPLET=$($env:VCPKG_HOST_TRIPLET)",
+          cmake `
+            "--preset=$env:CMAKE_PRESET" `
+            "-DCMAKE_SYSTEM_NAME=Windows" `
+            "-DCMAKE_C_COMPILER=$llvmMingw/bin/x86_64-w64-mingw32-gcc.exe" `
+            "-DCMAKE_CXX_COMPILER=$llvmMingw/bin/x86_64-w64-mingw32-g++.exe" `
+            "-DCMAKE_MAKE_PROGRAM=C:/ninja/ninja.exe" `
+            "-DVCPKG_HOST_TRIPLET=$env:VCPKG_HOST_TRIPLET" `
+            "-DVCPKG_INSTALL_ROOT=$env:VCPKG_INSTALL_ROOT" `
             "-DVCPKG_APPLOCAL_DEPS=OFF"
-          )
-          cmake @cmakeArgs
 
       - name: Build application
         shell: pwsh

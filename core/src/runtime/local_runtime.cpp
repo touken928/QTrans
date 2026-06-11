@@ -112,7 +112,7 @@ LlamaModelHolder load_llama_model(const std::vector<std::uint8_t> &data,
 
 bool probe_vulkan_gpu() {
 #ifdef QTRANS_MULTI_BACKEND
-    const ggml_backend_reg_t reg = ggml_backend_reg_by_name("VULKAN");
+    const ggml_backend_reg_t reg = ggml_backend_reg_by_name("Vulkan");
     if (reg == nullptr) return false;
     const size_t device_count = ggml_backend_reg_dev_count(reg);
     for (size_t i = 0; i < device_count; ++i) {
