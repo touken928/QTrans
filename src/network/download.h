@@ -8,7 +8,8 @@
 class CancelToken;
 
 struct DownloadCancelled : public std::runtime_error {
-    DownloadCancelled() : std::runtime_error("download cancelled") {
+    DownloadCancelled()
+        : std::runtime_error("download cancelled") {
     }
 };
 
