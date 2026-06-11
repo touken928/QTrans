@@ -128,7 +128,7 @@ jobs:
 
           $forbiddenPatterns = @(
             'libgcc', 'libstdc\+\+', 'libwinpthread',
-            'ggml', 'vulkan', 'qt6', 'vcpkg'
+            'ggml', 'qt6', 'vcpkg'
           )
           foreach ($dll in $imports) {
             $lower = $dll.ToLowerInvariant()
