@@ -41,6 +41,7 @@ private slots:
     void onSaveModelSettings();
     void onLoadModelFromPage();
     void onUnloadModelFromPage();
+    void onDeleteModel();
     void onTranslateRequested(
         const QString &source,
         const QString &target_language,

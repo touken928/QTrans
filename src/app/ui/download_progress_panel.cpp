@@ -1,8 +1,10 @@
 #include "app/ui/download_progress_panel.h"
 
 #include <QFont>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QProgressBar>
+#include <QPushButton>
 #include <QVBoxLayout>
 
 namespace {
@@ -66,13 +68,27 @@ DownloadProgressPanel::DownloadProgressPanel(QWidget *parent)
     progress_bar_->setValue(0);
     layout->addWidget(progress_bar_);
 
+    auto *info_row = new QHBoxLayout();
+    info_row->setContentsMargins(0, 0, 0, 0);
+    info_row->setSpacing(12);
+
     speed_label_ = new QLabel(QStringLiteral("Speed: --"), this);
     speed_label_->setObjectName(QStringLiteral("mutedLabel"));
-    layout->addWidget(speed_label_);
+    info_row->addWidget(speed_label_);
 
     eta_label_ = new QLabel(QStringLiteral("Time left: --:--"), this);
     eta_label_->setObjectName(QStringLiteral("mutedLabel"));
-    layout->addWidget(eta_label_);
+    info_row->addWidget(eta_label_);
+
+    info_row->addStretch(1);
+
+    cancel_button_ = new QPushButton(QStringLiteral("Cancel"), this);
+    cancel_button_->setObjectName(QStringLiteral("cancelDownloadBtn"));
+    info_row->addWidget(cancel_button_);
+
+    layout->addLayout(info_row);
+
+    connect(cancel_button_, &QPushButton::clicked, this, &DownloadProgressPanel::cancelRequested);
 }
 
 void DownloadProgressPanel::setProgress(

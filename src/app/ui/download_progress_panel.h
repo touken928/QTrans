@@ -4,6 +4,7 @@
 
 class QLabel;
 class QProgressBar;
+class QPushButton;
 
 class DownloadProgressPanel : public QWidget {
     Q_OBJECT
@@ -15,9 +16,13 @@ public:
     void setFailure();
     void setLoading();
 
+signals:
+    void cancelRequested();
+
 private:
     QProgressBar *progress_bar_ = nullptr;
     QLabel *status_label_ = nullptr;
     QLabel *speed_label_ = nullptr;
     QLabel *eta_label_ = nullptr;
+    QPushButton *cancel_button_ = nullptr;
 };

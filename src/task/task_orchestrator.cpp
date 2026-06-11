@@ -298,7 +298,7 @@ void TaskOrchestrator::execute_task(Task task) {
                     }
                 });
 
-                download_to_file(payload.local_path, payload.remote_spec, true);
+                download_to_file(payload.local_path, payload.remote_spec, true, cancel_token.get());
                 download_set_progress_callback(nullptr);
 
                 emit_status("Download complete", false);
@@ -437,6 +437,14 @@ void TaskOrchestrator::execute_task(Task task) {
                     finalize_task(task_id, task.kind, TaskState::Completed);
                 }
                 break;
+            }
+        }
+    } catch (const DownloadCancelled &) {
+        if (task.kind == TaskKind::DownloadModel) {
+            download_set_progress_callback(nullptr);
+            emit_status("Download cancelled", false);
+            if (callbacks_.on_download_finished) {
+                callbacks_.on_download_finished(false);
             }
         }
     } catch (const std::exception &ex) {
