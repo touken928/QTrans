@@ -1,6 +1,6 @@
 #include "wordselect/clipboard_capture.h"
 
-#include "app/string_bridge.h"
+#include "ui/string_bridge.h"
 #include "log/component.h"
 #include "log/logger.h"
 

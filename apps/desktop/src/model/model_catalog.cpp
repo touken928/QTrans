@@ -1,6 +1,6 @@
 #include "model/model_catalog.h"
 
-#include "translation/model_profile.h"
+#include "model/model_profile.h"
 
 #include <filesystem>
 

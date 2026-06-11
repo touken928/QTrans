@@ -1,7 +1,7 @@
 #include "wordselect/session_controller.h"
 
-#include "app/string_bridge.h"
-#include "app/task_service.h"
+#include "ui/string_bridge.h"
+#include "ui/task_service.h"
 #include "log/component.h"
 #include "log/logger.h"
 #include "wordselect/clipboard_capture.h"

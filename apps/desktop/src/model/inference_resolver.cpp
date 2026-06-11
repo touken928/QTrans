@@ -1,6 +1,6 @@
 #include "model/inference_resolver.h"
 
-#include "translation/translation_model.h"
+#include "model/model_config.h"
 
 #include <sstream>
 
