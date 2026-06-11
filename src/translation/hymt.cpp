@@ -3,6 +3,7 @@
 #include "log/ai_trace.h"
 #include "log/component.h"
 #include "log/logger.h"
+#include "model/runtime_capabilities.h"
 #include "text/utf8_stream_buffer.h"
 #include "translation/translation_languages.h"
 #include "ggml-backend.h"
@@ -117,12 +118,21 @@ Hymt::~Hymt() {
     set_loaded(false);
 }
 
-void Hymt::ensure_backend() {
+void Hymt::ensure_backend(const std::filesystem::path &plugin_dir) {
     static bool initialized = false;
     if (!initialized) {
         set_log_callback();
         llama_backend_init();
+#ifdef QTRANS_MULTI_BACKEND
+        RuntimeCapabilities::instance().set_plugin_dir(plugin_dir);
         ggml_backend_load_all();
+        if (!plugin_dir.empty()) {
+            ggml_backend_load_all_from_path(plugin_dir.string().c_str());
+        }
+#else
+        (void)plugin_dir;
+#endif
+        RuntimeCapabilities::instance().refresh();
         initialized = true;
     }
 }

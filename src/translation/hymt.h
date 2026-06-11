@@ -20,7 +20,7 @@ public:
 
     int count_prompt_tokens(const std::string &text, const std::string &target_language) const;
 
-    static void ensure_backend();
+    static void ensure_backend(const std::filesystem::path &plugin_dir = {});
 
 private:
     static std::string build_user_prompt(const std::string &text, const std::string &target_language);

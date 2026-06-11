@@ -1,3 +1,4 @@
+#include "model/platform_profile.h"
 #include "storage/app_paths.h"
 #include "storage/settings.h"
 
@@ -58,7 +59,7 @@ TEST_F(AppSettingsTest, LoadOnMissingFileKeepsDefaults) {
     EXPECT_EQ(settings.target_language, "Chinese");
     EXPECT_TRUE(settings.wordselect_enabled);
     EXPECT_TRUE(settings.models_dir.empty());
-    EXPECT_EQ(settings.model_id, "hymt2-q4");
+    EXPECT_EQ(settings.model_id, default_model_id_for_platform());
 }
 
 TEST_F(AppSettingsTest, SaveAndLoadRoundTrip) {
