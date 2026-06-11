@@ -1,8 +1,13 @@
 #pragma once
 
-#include "translation/translation_model.h"
+#include "qtrans/core/cancellation.h"
+#include "qtrans/core/options.h"
+#include "qtrans/core/translator.h"
+#include "qtrans/core/types.h"
+
 #include "task/cancel_token.h"
 #include "task/task_types.h"
+#include "translation/translation_model.h"
 
 #include <functional>
 #include <memory>
@@ -10,6 +15,17 @@
 
 class InferenceEngine {
 public:
+    InferenceEngine();
+    ~InferenceEngine();
+
+    InferenceEngine(const InferenceEngine &) = delete;
+    InferenceEngine &operator=(const InferenceEngine &) = delete;
+    InferenceEngine(InferenceEngine &&) noexcept;
+    InferenceEngine &operator=(InferenceEngine &&) noexcept;
+
+    void set_backend_options(const qtrans::core::BackendOptions &opts);
+    void set_translator_options(const qtrans::core::TranslatorOptions &opts);
+
     bool is_loaded() const;
 
     void load(const std::string &model_path, const TranslationModelConfig &config);
@@ -29,6 +45,7 @@ public:
         const CancelToken *cancel_token);
 
 private:
-    TranslationModelConfig config_{};
-    std::unique_ptr<TranslationModel> model_;
+    qtrans::core::TranslatorOptions options_{};
+    qtrans::core::BackendOptions backend_options_{};
+    std::unique_ptr<qtrans::core::Translator> translator_;
 };

@@ -7,7 +7,8 @@
 #include "model/model_catalog.h"
 #include "model/runtime_capabilities.h"
 #include "network/download.h"
-#include "translation/hymt.h"
+#include "qtrans/core/options.h"
+#include "qtrans/core/runtime.h"
 
 #include <stdexcept>
 
@@ -47,7 +48,12 @@ void TaskOrchestrator::initialize_backend() {
         std::lock_guard<std::mutex> lock(mutex_);
         plugin_dir = backend_plugin_dir_;
     }
-    Hymt::ensure_backend(plugin_dir);
+    qtrans::core::BackendOptions opts;
+    opts.plugin_dir = plugin_dir;
+    qtrans::core::ITranslationRuntime::initialize_default_backend(opts);
+
+    RuntimeCapabilities::instance().set_plugin_dir(plugin_dir);
+    RuntimeCapabilities::instance().refresh();
 }
 
 std::string TaskOrchestrator::active_backend_label() const {
@@ -320,8 +326,6 @@ void TaskOrchestrator::execute_task(Task task) {
                     model_id = model_id_;
                 }
 
-                Hymt::ensure_backend(plugin_dir);
-
                 const ModelCatalogEntry *entry = find_model_by_id(model_id);
                 if (entry == nullptr) {
                     throw std::runtime_error("unknown model id: " + model_id);
@@ -332,6 +336,15 @@ void TaskOrchestrator::execute_task(Task task) {
                 if (!resolved.has_value()) {
                     throw std::runtime_error(unavailable_reason(*entry, caps));
                 }
+
+                qtrans::core::BackendOptions backend_opts;
+                backend_opts.plugin_dir = plugin_dir;
+                if (resolved->backend == InferenceBackend::GpuMetal) {
+                    backend_opts.backend_type = qtrans::core::BackendType::Metal;
+                } else if (resolved->backend == InferenceBackend::GpuVulkan) {
+                    backend_opts.backend_type = qtrans::core::BackendType::Vulkan;
+                }
+                engine_.set_backend_options(backend_opts);
 
                 TranslationModelConfig config = make_translation_config(*resolved);
                 {
