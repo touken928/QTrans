@@ -3,13 +3,12 @@
 #include <string>
 
 enum class InferenceBackend {
-    CpuStq1_0,
-    CpuGgml,
     GpuVulkan,
+    GpuMetal,
 };
 
 struct ResolvedInference {
-    InferenceBackend backend = InferenceBackend::CpuGgml;
+    InferenceBackend backend = InferenceBackend::GpuVulkan;
     int n_gpu_layers = 0;
 };
 

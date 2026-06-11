@@ -54,6 +54,8 @@ TEST(ModelCatalog, AllEntriesHaveNonEmptyFields) {
         EXPECT_FALSE(entry.display_name.empty()) << "display_name empty for " << entry.id;
         EXPECT_FALSE(entry.filename.empty()) << "filename empty for " << entry.id;
         EXPECT_FALSE(entry.remote_spec.empty()) << "remote_spec empty for " << entry.id;
+        EXPECT_FALSE(entry.modelscope_remote_spec.empty())
+            << "modelscope_remote_spec empty for " << entry.id;
         EXPECT_FALSE(entry.backend_priority.empty()) << "backend_priority empty for " << entry.id;
     }
 }

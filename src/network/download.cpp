@@ -98,6 +98,13 @@ DownloadSpec spec_for_hub(const DownloadSpec &spec, ModelHub hub) {
     return resolved;
 }
 
+std::string effective_repo(const DownloadSpec &spec, ModelHub hub) {
+    if (hub == ModelHub::ModelScope && !spec.modelscope_repo.empty()) {
+        return spec.modelscope_repo;
+    }
+    return spec.repo;
+}
+
 size_t write_callback(char *ptr, size_t size, size_t nmemb, void *userdata) {
     auto *ctx = static_cast<DownloadContext *>(userdata);
     return std::fwrite(ptr, size, nmemb, ctx->out);
@@ -137,6 +144,7 @@ void apply_auth_header(CURL *curl, struct curl_slist **headers, ModelHub hub) {
 void configure_curl_common(CURL *curl, bool is_probe) {
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "QTrans/0.1");
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
     curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
     curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
@@ -310,16 +318,17 @@ std::string download_default_revision(ModelHub hub) {
 }
 
 std::string download_resolve_url(const DownloadSpec &spec, ModelHub hub) {
+    const std::string repo = effective_repo(spec, hub);
     const std::string revision = spec.revision.empty()
                                      ? download_default_revision(hub)
                                      : spec.revision;
 
     if (hub == ModelHub::ModelScope) {
-        return "https://www.modelscope.cn/models/" + spec.repo +
-               "/resolve/" + revision + "/" + spec.filename;
+        return "https://www.modelscope.cn/api/v1/models/" + repo +
+               "/repo?FilePath=" + url_encode_component(spec.filename);
     }
 
-    return "https://huggingface.co/" + spec.repo + "/resolve/" + revision + "/" + spec.filename;
+    return "https://huggingface.co/" + repo + "/resolve/" + revision + "/" + spec.filename;
 }
 
 const char *download_hub_name(ModelHub hub) {

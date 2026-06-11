@@ -111,24 +111,12 @@ jobs:
           $version = $env:GITHUB_REF_NAME -replace '^v', ''
           $binary = "build/$env:CMAKE_PRESET/QTrans.exe"
           $objdump = "$env:LLVM_MINGW/bin/llvm-objdump.exe"
-          $mingwBin = "$env:LLVM_MINGW/bin"
           $stage = "dist/QTrans-$version-$env:DIST_SUFFIX"
           $zip = "$stage.zip"
 
           & $objdump -p $binary | Out-Null
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Invalid PE binary"
-          }
-
-          New-Item -ItemType Directory -Force -Path $stage | Out-Null
-          Copy-Item $binary "$stage/QTrans.exe"
-
-          $vulkanDll = Join-Path $env:VCPKG_INSTALL_ROOT "bin/ggml-vulkan.dll"
-          if (Test-Path $vulkanDll) {
-            Copy-Item $vulkanDll $stage
-            Write-Host "Bundled ggml-vulkan.dll"
-          } else {
-            Write-Warning "ggml-vulkan.dll not found at $vulkanDll"
           }
 
           $imports = & $objdump -p $binary |
@@ -138,29 +126,27 @@ jobs:
           Write-Host "Imported DLLs:"
           $imports | ForEach-Object { Write-Host "  $_" }
 
-          function Add-BundledDll([string]$dll) {
-            if ($bundled -contains $dll) { return }
-            $src = Join-Path $mingwBin $dll
-            if (Test-Path $src) {
-              Copy-Item $src $stage
-              $script:bundled += $dll
+          $forbiddenPatterns = @(
+            'libgcc', 'libstdc\+\+', 'libwinpthread',
+            'ggml', 'vulkan', 'qt6', 'vcpkg'
+          )
+          foreach ($dll in $imports) {
+            $lower = $dll.ToLowerInvariant()
+            foreach ($pattern in $forbiddenPatterns) {
+              if ($lower -match $pattern) {
+                Write-Error "Unexpected third-party DLL dependency in static Windows build: $dll"
+              }
             }
           }
 
-          $bundled = @()
-          foreach ($dll in $imports) {
-            Add-BundledDll $dll
+          $libomp = "$env:LLVM_MINGW/bin/libomp.dll"
+          if (-not (Test-Path $libomp)) {
+            Write-Error "libomp.dll not found in llvm-mingw: $libomp"
           }
 
-          # llvm-mingw uses libomp.dll (not GCC libgomp-1.dll); bundle even if -static hides PE imports.
-          Add-BundledDll "libomp.dll"
-
-          if ($bundled -notcontains "libomp.dll") {
-            Write-Error "libomp.dll not found in $mingwBin"
-          }
-
-          Write-Host "Bundled MinGW runtime DLLs:"
-          $bundled | ForEach-Object { Write-Host "  $_" }
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item $binary "$stage/QTrans.exe"
+          Copy-Item $libomp "$stage/libomp.dll"
 
           if (Test-Path $zip) {
             Remove-Item $zip -Force

@@ -22,9 +22,8 @@
 | Preset | 用途 |
 |--------|------|
 | `default` + `debug` | 本地 Debug，生成 `compile_commands.json`（clangd） |
-| `arm64-osx-release` | macOS ARM64 Release（CPU-only） |
-| `x64-mingw-release` | Windows MinGW x64 Release（可选 Vulkan GPU 插件） |
-| `arm64-mingw-release` | Windows on ARM Release（CPU-only） |
+| `arm64-osx-release` | macOS ARM64 Release（Metal GPU） |
+| `x64-mingw-release` | Windows MinGW x64 Release（Vulkan GPU 静态编入） |
 
 构建目录：`build/<preset 名>/`。
 
@@ -40,11 +39,7 @@ cmake --build --preset arm64-osx-release
 cmake --preset x64-mingw-release
 cmake --build --preset x64-mingw-release
 # 产物：build/x64-mingw-release/QTrans.exe
-# Release 包另含 ggml-vulkan.dll（与 QTrans.exe 同目录）；无 Vulkan 时 Q4 模型回退 CPU。
-
-# Windows on ARM（CPU-only）
-cmake --preset arm64-mingw-release
-cmake --build --preset arm64-mingw-release
+# Release 包：QTrans.exe（Vulkan 后端静态链入）+ libomp.dll（OpenMP 运行时）
 
 # 本地 Debug（任意已配置 triplet 的主机）
 cmake --preset default

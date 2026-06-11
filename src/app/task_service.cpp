@@ -97,6 +97,10 @@ void TaskService::setRemoteSpec(const QString &spec) {
     orchestrator_.set_remote_spec(qtrans::app::to_utf8(spec));
 }
 
+void TaskService::setModelscopeRemoteSpec(const QString &spec) {
+    orchestrator_.set_modelscope_remote_spec(qtrans::app::to_utf8(spec));
+}
+
 void TaskService::setDownloadHub(int hub) {
     orchestrator_.set_download_hub(hub);
 }

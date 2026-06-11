@@ -21,9 +21,8 @@ private:
     void set_support(InferenceBackend backend, bool supported);
 
     std::filesystem::path plugin_dir_;
-    bool cpu_stq1_0_ = true;
-    bool cpu_ggml_ = true;
     bool gpu_vulkan_ = false;
+    bool gpu_metal_ = false;
     bool refreshed_ = false;
 };
 

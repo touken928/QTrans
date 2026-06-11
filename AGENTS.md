@@ -4,7 +4,7 @@
 
 ## 项目
 
-QTrans 是基于 **C++17 / Qt6** 的桌面应用，使用 Hy-MT（llama.cpp）进行**本地推理**。全平台 CPU；**仅 Windows x64 Release** 可附带 `ggml-vulkan.dll` 做 Vulkan GPU 卸载（无 CUDA）。功能包括：翻译/回译、模型下载、划词翻译（平台热键 + 弹窗）。
+QTrans 是基于 **C++17 / Qt6** 的桌面应用，使用 Hy-MT（llama.cpp）进行**本地 GPU 推理**：Windows x64 使用 Vulkan、macOS arm64 使用 Metal（静态链入）；ggml 仍编译 CPU 后端供模型加载与缓冲分配，运行时推理走 GPU（`n_gpu_layers=-1`）。默认模型为 **Q4**。功能包括：翻译/回译、模型下载、划词翻译（平台热键 + 弹窗）。
 
 | 项 | 说明 |
 |------|--------|
@@ -51,12 +51,11 @@ resources/       # Qt 资源（图标）
 cmake --preset default && cmake --build --preset debug
 
 # Release
-cmake --preset arm64-osx-release && cmake --build --preset arm64-osx-release     # macOS arm64（CPU）
-cmake --preset x64-mingw-release && cmake --build --preset x64-mingw-release     # Win x64（+ ggml-vulkan.dll）
-cmake --preset arm64-mingw-release && cmake --build --preset arm64-mingw-release  # WOA arm64（CPU）
+cmake --preset arm64-osx-release && cmake --build --preset arm64-osx-release     # macOS arm64（Metal GPU）
+cmake --preset x64-mingw-release && cmake --build --preset x64-mingw-release     # Win x64（Vulkan GPU 静态编入）
 ```
 
-Preset 定义见 `CMakePresets.json`。`QTRANS_MULTI_BACKEND` 仅在 `x64-mingw*` triplet 启用。Win x64 Release 须将 `ggml-vulkan.dll` 与 `QTrans.exe` 同目录分发。首推默认模型：Win x64 → `hymt2-q4`；macOS arm64 / WOA → `hymt2-125bit`。新增依赖须同步更新 `vcpkg.json`。
+Preset 定义见 `CMakePresets.json`。`QTRANS_MULTI_BACKEND` 仅在 `x64-mingw*` triplet 启用（Vulkan 后端）；`QTRANS_GPU_METAL` 在 `*-osx*` triplet 启用（Metal 后端）。默认模型：`hymt2-q4`。新增依赖须同步更新 `vcpkg.json`。
 
 ## 测试
 

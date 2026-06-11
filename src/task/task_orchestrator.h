@@ -41,6 +41,7 @@ public:
     void set_backend_plugin_dir(const std::filesystem::path &plugin_dir);
     void initialize_backend();
     void set_remote_spec(const std::string &spec);
+    void set_modelscope_remote_spec(const std::string &spec);
     void set_download_hub(int hub);
 
     std::string active_backend_label() const;
@@ -75,7 +76,9 @@ private:
     std::string model_path_;
     std::string model_id_;
     std::filesystem::path backend_plugin_dir_;
-    std::string remote_spec_ = "AngelSlim/Hy-MT2-1.8B-1.25Bit-GGUF/Hy-MT2-1.8B-1.25Bit.gguf";
+    std::string remote_spec_ = "tencent/Hy-MT2-1.8B-GGUF/Hy-MT2-1.8B-Q4_K_M.gguf";
+    std::string modelscope_remote_spec_ =
+        "Tencent-Hunyuan/Hy-MT2-1.8B-GGUF/Hy-MT2-1.8B-Q4_K_M.gguf";
     int download_hub_ = 2;
     TranslationModelConfig model_config_{};
 

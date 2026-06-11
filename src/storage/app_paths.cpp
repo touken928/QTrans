@@ -6,7 +6,7 @@
 namespace {
 
 constexpr const char kPortableMarker[] = ".portable";
-constexpr const char kDefaultModelFile[] = "Hy-MT2-1.8B-1.25Bit.gguf";
+constexpr const char kDefaultModelFile[] = "Hy-MT2-1.8B-Q4_K_M.gguf";
 
 std::filesystem::path homeDirectory() {
 #ifdef _WIN32

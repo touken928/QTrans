@@ -165,9 +165,9 @@ TEST_F(AppSettingsTest, EffectiveModelsDirAbsoluteUsedAsIs) {
 TEST_F(AppSettingsTest, EffectiveModelPathJoinsSelectedModelFilename) {
     AppSettings s;
     s.models_dir = "/abs/models";
-    s.model_id = "hymt2-125bit";
+    s.model_id = "hymt2-q4";
     const std::string path = s.effectiveModelPath(paths_);
-    EXPECT_EQ(path, std::string("/abs/models/") + find_model_by_id("hymt2-125bit")->filename);
+    EXPECT_EQ(path, std::string("/abs/models/") + find_model_by_id("hymt2-q4")->filename);
 }
 
 TEST_F(AppSettingsTest, SetEffectiveModelsDirClearsWhenMatchingDefault) {
@@ -229,7 +229,7 @@ TEST_F(AppSettingsTest, LegacyModelPathMigrationSetsModelsDir) {
     AppSettings s;
     s.load(paths_);
     EXPECT_EQ(s.models_dir, "/legacy/dir");
-    EXPECT_EQ(s.model_id, "hymt2-125bit");
+    EXPECT_EQ(s.model_id, "hymt2-q4");
 }
 
 TEST_F(AppSettingsTest, LegacyModelPathMigrationPreservesExistingModelsDir) {

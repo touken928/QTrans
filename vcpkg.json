@@ -6,7 +6,12 @@
       "name": "llama-cpp",
       "features": [
         "vulkan"
-      ]
+      ],
+      "platform": "windows & x64 & !arm64"
+    },
+    {
+      "name": "llama-cpp",
+      "platform": "!windows | (windows & arm64)"
     },
     {
       "name": "curl",

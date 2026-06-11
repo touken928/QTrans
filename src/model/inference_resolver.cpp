@@ -9,10 +9,8 @@ namespace {
 int n_gpu_layers_for(InferenceBackend backend) {
     switch (backend) {
         case InferenceBackend::GpuVulkan:
+        case InferenceBackend::GpuMetal:
             return -1;
-        case InferenceBackend::CpuStq1_0:
-        case InferenceBackend::CpuGgml:
-            return 0;
     }
     return 0;
 }

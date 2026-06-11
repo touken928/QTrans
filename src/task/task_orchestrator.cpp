@@ -60,6 +60,11 @@ void TaskOrchestrator::set_remote_spec(const std::string &spec) {
     remote_spec_ = spec;
 }
 
+void TaskOrchestrator::set_modelscope_remote_spec(const std::string &spec) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    modelscope_remote_spec_ = spec;
+}
+
 void TaskOrchestrator::set_download_hub(int hub) {
     std::lock_guard<std::mutex> lock(mutex_);
     download_hub_ = hub;
@@ -82,6 +87,14 @@ DownloadSpec TaskOrchestrator::make_download_spec_unlocked() const {
     if (!download_parse_spec(remote_spec_, spec)) {
         throw std::runtime_error("invalid remote spec: " + remote_spec_);
     }
+
+    if (!modelscope_remote_spec_.empty()) {
+        DownloadSpec modelscope_spec{};
+        if (download_parse_spec(modelscope_remote_spec_, modelscope_spec)) {
+            spec.modelscope_repo = modelscope_spec.repo;
+        }
+    }
+
     return spec;
 }
 

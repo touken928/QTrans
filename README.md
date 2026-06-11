@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>An LLM translator that runs <a href="https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF">Hy-MT</a> models locally, downloads weights automatically, and performs CPU inference on all platforms (optional Vulkan GPU on Windows x64).</strong>
+  <strong>An LLM translator that runs <a href="https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF">Hy-MT</a> models locally, downloads weights automatically, and performs GPU inference with statically linked backends (Vulkan on Windows x64, Metal on macOS ARM64).</strong>
 </p>
 
 <p align="center">
@@ -33,10 +33,8 @@
 Prebuilt binaries are available on the [Releases](https://github.com/touken928/QTrans/releases) page:
 
 - `QTrans-<version>-macos-arm64` — macOS ARM64
-- `QTrans-<version>-mingw-x64.zip` — Windows x64 (`QTrans.exe`, `ggml-vulkan.dll`, OpenMP runtime DLLs)
-- Windows on ARM requires the arm64 CPU build (not the x64 zip under emulation)
-
-Download the archive for your platform. On Windows, unzip so `QTrans.exe` and `ggml-vulkan.dll` sit in the same folder, then run `QTrans.exe`. On macOS, make the app executable if needed, then run it. On first launch, open **Model**, download the model, and click **Load**. Default model: **Q4** on Windows x64, **1.25Bit (STQ)** on macOS ARM64 and Windows on ARM.
+- `QTrans-<version>-mingw-x64.zip` — Windows x64 (`QTrans.exe` + `libomp.dll`)
+Download the archive for your platform. On Windows, unzip and run `QTrans.exe`. On macOS, make the app executable if needed, then run it. On first launch, open **Model**, download the model, and click **Load**. Default model: **Q4** on all supported platforms.
 
 ## Build from Source
 
@@ -54,13 +52,9 @@ Download the archive for your platform. On Windows, unzip so `QTrans.exe` and `g
 cmake --preset arm64-osx-release
 cmake --build --preset arm64-osx-release
 
-# Windows MinGW x64 (Release, optional Vulkan)
+# Windows MinGW x64 (Release, Vulkan GPU)
 cmake --preset x64-mingw-release
 cmake --build --preset x64-mingw-release
-
-# Windows on ARM (CPU-only)
-cmake --preset arm64-mingw-release
-cmake --build --preset arm64-mingw-release
 
 # Debug (any platform, using VCPKG_DEFAULT_TRIPLET)
 cmake --preset default

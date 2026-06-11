@@ -94,8 +94,8 @@ TEST_F(AppPathsDetect, DefaultModelPathUnderModelsDir) {
     std::filesystem::create_directories(exec_dir);
 
     const AppPaths paths = AppPaths::detect(exec_dir);
-    EXPECT_EQ(paths.defaultModelFilename(), "Hy-MT2-1.8B-1.25Bit.gguf");
-    EXPECT_EQ(paths.defaultModelPath(), (paths.models_dir / "Hy-MT2-1.8B-1.25Bit.gguf").string());
+    EXPECT_EQ(paths.defaultModelFilename(), "Hy-MT2-1.8B-Q4_K_M.gguf");
+    EXPECT_EQ(paths.defaultModelPath(), (paths.models_dir / "Hy-MT2-1.8B-Q4_K_M.gguf").string());
     EXPECT_EQ(paths.modeLabel(), "System");
 
     std::filesystem::remove_all(home);

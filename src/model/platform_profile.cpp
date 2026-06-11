@@ -29,14 +29,8 @@ std::string default_model_id_for_platform() {
 }
 
 const char *preferred_default_model_id(PlatformProfile profile) {
-    switch (profile) {
-        case PlatformProfile::WindowsX64:
-            return "hymt2-q4";
-        case PlatformProfile::Arm64:
-        case PlatformProfile::Generic:
-            return "hymt2-125bit";
-    }
-    return "hymt2-125bit";
+    (void)profile;
+    return "hymt2-q4";
 }
 
 const ModelCatalogEntry *default_available_model(

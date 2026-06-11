@@ -21,6 +21,12 @@ else()
     set(QTRANS_MULTI_BACKEND_VALUE 0)
 endif()
 
+if(DEFINED VCPKG_TARGET_TRIPLET AND VCPKG_TARGET_TRIPLET MATCHES "osx")
+    set(QTRANS_GPU_METAL_VALUE 1)
+else()
+    set(QTRANS_GPU_METAL_VALUE 0)
+endif()
+
 add_library(qtrans_engine STATIC
     src/storage/app_paths.cpp
     src/storage/settings.cpp
@@ -66,6 +72,10 @@ target_compile_definitions(qtrans_engine PUBLIC
 
 if(QTRANS_MULTI_BACKEND_VALUE)
     target_compile_definitions(qtrans_engine PUBLIC QTRANS_MULTI_BACKEND)
+endif()
+
+if(QTRANS_GPU_METAL_VALUE)
+    target_compile_definitions(qtrans_engine PUBLIC QTRANS_GPU_METAL)
 endif()
 
 set(QTRANS_SOURCES_COMMON

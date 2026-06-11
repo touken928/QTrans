@@ -25,7 +25,7 @@ struct TranslationModelConfig {
     float top_p = 0.6f;
     float repeat_penalty = 1.05f;
     int n_gpu_layers = 0;
-    InferenceBackend active_backend = InferenceBackend::CpuGgml;
+    InferenceBackend active_backend = InferenceBackend::GpuVulkan;
 };
 
 struct LlamaModelFromMemory {

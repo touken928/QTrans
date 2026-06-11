@@ -192,6 +192,7 @@ void MainWindow::syncSettingsToTaskService() {
     task_service_->setModelId(qtrans::app::from_utf8(model->id));
     task_service_->setModelPath(currentModelPath());
     task_service_->setRemoteSpec(qtrans::app::from_utf8(model->remote_spec));
+    task_service_->setModelscopeRemoteSpec(qtrans::app::from_utf8(model->modelscope_remote_spec));
     task_service_->setDownloadHub(model->download_hub);
 }
 
