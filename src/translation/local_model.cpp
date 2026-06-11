@@ -1,4 +1,4 @@
-#include "translation/hymt.h"
+#include "translation/local_model.h"
 
 #include "log/ai_trace.h"
 #include "log/component.h"
@@ -17,10 +17,6 @@
 #include <vector>
 
 namespace {
-
-constexpr const char k_hy_bos[] = u8"<\xEF\xBD\x9Chy_begin\xe2\x96\x81of\xe2\x96\x81sentence\xEF\xBD\x9C>";
-constexpr const char k_hy_user[] = u8"<\xEF\xBD\x9Chy_User\xEF\xBD\x9C>";
-constexpr const char k_hy_assistant[] = u8"<\xEF\xBD\x9Chy_Assistant\xEF\xBD\x9C>";
 
 bool is_chinese_target(const std::string &target_language) {
     return is_chinese_language_name(target_language);
@@ -105,7 +101,11 @@ std::string token_to_text(const llama_vocab *vocab, llama_token token) {
 
 }  // namespace
 
-Hymt::~Hymt() {
+LocalModel::LocalModel(const ModelProfile &profile)
+    : profile_(profile) {
+}
+
+LocalModel::~LocalModel() {
     if (sampler_ != nullptr) {
         llama_sampler_free(sampler_);
         sampler_ = nullptr;
@@ -118,7 +118,7 @@ Hymt::~Hymt() {
     set_loaded(false);
 }
 
-void Hymt::ensure_backend(const std::filesystem::path &plugin_dir) {
+void LocalModel::ensure_backend(const std::filesystem::path &plugin_dir) {
     static bool initialized = false;
     if (!initialized) {
         set_log_callback();
@@ -137,7 +137,7 @@ void Hymt::ensure_backend(const std::filesystem::path &plugin_dir) {
     }
 }
 
-void Hymt::load(const std::vector<std::uint8_t> &data, const TranslationModelConfig &config) {
+void LocalModel::load(const std::vector<std::uint8_t> &data, const TranslationModelConfig &config) {
     if (data.empty()) {
         throw std::invalid_argument("model data is empty");
     }
@@ -175,7 +175,7 @@ void Hymt::load(const std::vector<std::uint8_t> &data, const TranslationModelCon
     set_loaded(true);
 }
 
-int Hymt::count_prompt_tokens(const std::string &text, const std::string &target_language) const {
+int LocalModel::count_prompt_tokens(const std::string &text, const std::string &target_language) const {
     if (!is_loaded()) {
         return 0;
     }
@@ -193,7 +193,7 @@ int Hymt::count_prompt_tokens(const std::string &text, const std::string &target
     return n_prompt > 0 ? n_prompt : 0;
 }
 
-std::string Hymt::translate(
+std::string LocalModel::translate(
     const std::string &text,
     const std::string &target_language,
     const std::function<void(const std::string &)> &on_token,
@@ -210,7 +210,7 @@ std::string Hymt::translate(
     return generate(format_chat_prompt(user_prompt), on_token, should_cancel);
 }
 
-std::string Hymt::build_user_prompt(const std::string &text, const std::string &target_language) {
+std::string LocalModel::build_user_prompt(const std::string &text, const std::string &target_language) {
     // https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF
     if (target_language == "Auto") {
         return "Translate the following segment:\n\n" + text;
@@ -227,12 +227,13 @@ std::string Hymt::build_user_prompt(const std::string &text, const std::string &
            text;
 }
 
-std::string Hymt::format_chat_prompt(const std::string &user_prompt) {
-    // Official chat template: https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF
-    return std::string(k_hy_bos) + k_hy_user + user_prompt + k_hy_assistant;
+std::string LocalModel::format_chat_prompt(const std::string &user_prompt) const {
+    const struct llama_model *model =
+        (model_holder_ != nullptr) ? model_holder_->model : nullptr;
+    return profile_.format_prompt(user_prompt, model);
 }
 
-bool Hymt::contains_chinese(const std::string &text) {
+bool LocalModel::contains_chinese(const std::string &text) {
     for (size_t i = 0; i < text.size();) {
         const unsigned char b = static_cast<unsigned char>(text[i]);
         if (b >= 0xE0 && b <= 0xEF && i + 2 < text.size()) {
@@ -250,7 +251,7 @@ bool Hymt::contains_chinese(const std::string &text) {
     return false;
 }
 
-std::string Hymt::generate(
+std::string LocalModel::generate(
     const std::string &prompt,
     const std::function<void(const std::string &)> &on_token,
     const std::function<bool()> &should_cancel) {

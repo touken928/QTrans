@@ -49,7 +49,8 @@ add_library(qtrans_engine STATIC
     src/log/console_progress.cpp
     src/translation/translation_languages.cpp
     src/translation/translation_model.cpp
-    src/translation/hymt.cpp
+    src/translation/model_profile.cpp
+    src/translation/local_model.cpp
     src/translation/inference_engine.cpp
     src/task/task_queue.cpp
     src/task/task_orchestrator.cpp

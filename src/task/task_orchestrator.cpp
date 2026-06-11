@@ -7,7 +7,7 @@
 #include "model/model_catalog.h"
 #include "model/runtime_capabilities.h"
 #include "network/download.h"
-#include "translation/hymt.h"
+#include "translation/local_model.h"
 
 #include <stdexcept>
 
@@ -47,7 +47,7 @@ void TaskOrchestrator::initialize_backend() {
         std::lock_guard<std::mutex> lock(mutex_);
         plugin_dir = backend_plugin_dir_;
     }
-    Hymt::ensure_backend(plugin_dir);
+    LocalModel::ensure_backend(plugin_dir);
 }
 
 std::string TaskOrchestrator::active_backend_label() const {
@@ -320,7 +320,7 @@ void TaskOrchestrator::execute_task(Task task) {
                     model_id = model_id_;
                 }
 
-                Hymt::ensure_backend(plugin_dir);
+                LocalModel::ensure_backend(plugin_dir);
 
                 const ModelCatalogEntry *entry = find_model_by_id(model_id);
                 if (entry == nullptr) {
@@ -334,12 +334,15 @@ void TaskOrchestrator::execute_task(Task task) {
                 }
 
                 TranslationModelConfig config = make_translation_config(*resolved);
+                if (entry->profile == nullptr) {
+                    throw std::runtime_error("no profile for model: " + model_id);
+                }
                 {
                     std::lock_guard<std::mutex> lock(mutex_);
                     model_config_ = config;
                 }
 
-                engine_.load(payload.model_path, config);
+                engine_.load(payload.model_path, config, *entry->profile);
 
                 {
                     std::lock_guard<std::mutex> lock(mutex_);

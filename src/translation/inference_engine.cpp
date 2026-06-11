@@ -2,7 +2,7 @@
 
 #include "model/model_files.h"
 #include "network/download.h"
-#include "translation/hymt.h"
+#include "translation/local_model.h"
 #include "log/component.h"
 #include "log/logger.h"
 #include "text/chunker.h"
@@ -53,7 +53,7 @@ std::string context_limit_error() {
 }
 
 TranslateStepResult translate_single_chunk(
-    Hymt *model,
+    LocalModel *model,
     const std::string &text,
     const std::string &target_language,
     const std::function<void(const std::string &)> &on_token,
@@ -87,14 +87,15 @@ bool InferenceEngine::is_loaded() const {
     return model_ != nullptr && model_->is_loaded();
 }
 
-void InferenceEngine::load(const std::string &model_path, const TranslationModelConfig &config) {
+void InferenceEngine::load(const std::string &model_path, const TranslationModelConfig &config,
+                           const ModelProfile &profile) {
     if (!download_file_exists(model_path)) {
         throw std::runtime_error("model file not found: " + model_path);
     }
 
     const std::vector<std::uint8_t> data = read_file_bytes(model_path);
 
-    auto model = std::make_unique<Hymt>();
+    auto model = profile.create_model();
     model->load(data, config);
 
     config_ = config;
@@ -119,7 +120,7 @@ TranslateStepResult InferenceEngine::translate(
         return make_cancelled();
     }
 
-    Hymt *hymt = dynamic_cast<Hymt *>(model_.get());
+    LocalModel *hymt = dynamic_cast<LocalModel *>(model_.get());
     if (hymt == nullptr) {
         return make_failure("unsupported translation model");
     }
