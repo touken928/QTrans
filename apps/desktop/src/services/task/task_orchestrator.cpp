@@ -58,7 +58,7 @@ void TaskOrchestrator::initialize_backend() {
 
 std::string TaskOrchestrator::active_backend_label() const {
     std::lock_guard<std::mutex> lock(mutex_);
-    return inference_backend_label(model_config_.active_backend);
+    return inference_backend_label(active_backend_);
 }
 
 void TaskOrchestrator::set_remote_spec(const std::string &spec) {
@@ -346,16 +346,17 @@ void TaskOrchestrator::execute_task(Task task) {
                 }
                 engine_.set_backend_options(backend_opts);
 
-                TranslationModelConfig config = make_translation_config(*resolved);
+                qtrans::core::TranslatorOptions opts = make_translator_options(*resolved);
                 if (entry->profile == nullptr) {
                     throw std::runtime_error("no profile for model: " + model_id);
                 }
                 {
                     std::lock_guard<std::mutex> lock(mutex_);
-                    model_config_ = config;
+                    translator_options_ = opts;
+                    active_backend_ = resolved->backend;
                 }
 
-                engine_.load(payload.model_path, config, *entry->profile);
+                engine_.load(payload.model_path, opts, *entry->profile);
 
                 {
                     std::lock_guard<std::mutex> lock(mutex_);

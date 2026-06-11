@@ -5,7 +5,7 @@
 #include "services/task/task_queue.h"
 #include "services/task/task_types.h"
 #include "services/engine/inference_engine.h"
-#include "model/model_config.h"
+#include "model/inference_backend.h"
 
 #include <filesystem>
 #include <functional>
@@ -80,7 +80,8 @@ private:
     std::string modelscope_remote_spec_ =
         "Tencent-Hunyuan/Hy-MT2-1.8B-GGUF/Hy-MT2-1.8B-Q4_K_M.gguf";
     int download_hub_ = 2;
-    TranslationModelConfig model_config_{};
+    qtrans::core::TranslatorOptions translator_options_{};
+    InferenceBackend active_backend_ = InferenceBackend::GpuMetal;
 
     TaskId running_task_id_{};
     TaskPriority running_priority_ = TaskPriority::Normal;

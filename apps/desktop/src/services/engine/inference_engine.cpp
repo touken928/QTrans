@@ -46,17 +46,8 @@ bool InferenceEngine::is_loaded() const {
     return translator_ != nullptr && translator_->is_loaded();
 }
 
-void InferenceEngine::load(const std::string &model_path, const TranslationModelConfig &config,
+void InferenceEngine::load(const std::string &model_path, const qtrans::core::TranslatorOptions &opts,
                            const ModelProfile & /*profile*/) {
-    qtrans::core::TranslatorOptions opts;
-    opts.n_ctx = config.n_ctx;
-    opts.max_tokens = config.max_tokens;
-    opts.n_gpu_layers = config.n_gpu_layers;
-    opts.temperature = config.temperature;
-    opts.top_k = config.top_k;
-    opts.top_p = config.top_p;
-    opts.repeat_penalty = config.repeat_penalty;
-
     options_ = opts;
 
     auto t = std::make_unique<qtrans::core::Translator>(options_);

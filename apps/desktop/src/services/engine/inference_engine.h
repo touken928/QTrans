@@ -7,7 +7,6 @@
 
 #include "services/task/cancel_token.h"
 #include "services/task/task_types.h"
-#include "model/model_config.h"
 
 class ModelProfile;
 
@@ -30,7 +29,7 @@ public:
 
     bool is_loaded() const;
 
-    void load(const std::string &model_path, const TranslationModelConfig &config,
+    void load(const std::string &model_path, const qtrans::core::TranslatorOptions &config,
               const ModelProfile &profile);
     void unload();
 

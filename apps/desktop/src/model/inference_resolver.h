@@ -7,7 +7,7 @@
 #include <optional>
 #include <string>
 
-struct TranslationModelConfig;
+#include "qtrans/core/options.h"
 
 std::optional<ResolvedInference> resolve_inference(
     const ModelCatalogEntry &entry,
@@ -17,4 +17,4 @@ std::string unavailable_reason(
     const ModelCatalogEntry &entry,
     const RuntimeCapabilities &caps);
 
-TranslationModelConfig make_translation_config(const ResolvedInference &resolved);
+qtrans::core::TranslatorOptions make_translator_options(const ResolvedInference &resolved);

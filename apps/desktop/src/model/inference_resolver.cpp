@@ -1,7 +1,5 @@
 #include "model/inference_resolver.h"
 
-#include "model/model_config.h"
-
 #include <sstream>
 
 namespace {
@@ -50,9 +48,8 @@ std::string unavailable_reason(
     return message.str();
 }
 
-TranslationModelConfig make_translation_config(const ResolvedInference &resolved) {
-    TranslationModelConfig config{};
-    config.n_gpu_layers = resolved.n_gpu_layers;
-    config.active_backend = resolved.backend;
-    return config;
+qtrans::core::TranslatorOptions make_translator_options(const ResolvedInference &resolved) {
+    qtrans::core::TranslatorOptions opts{};
+    opts.n_gpu_layers = resolved.n_gpu_layers;
+    return opts;
 }
