@@ -2,7 +2,16 @@
 
 #include <cstdint>
 #include <functional>
+#include <stdexcept>
 #include <string>
+
+class CancelToken;
+
+struct DownloadCancelled : public std::runtime_error {
+    DownloadCancelled()
+        : std::runtime_error("download cancelled") {
+    }
+};
 
 enum class ModelHub {
     HuggingFace,
@@ -43,8 +52,10 @@ void download_set_progress_callback(DownloadProgressCallback callback);
 
 ModelHub download_probe_hub(const DownloadSpec &spec);
 
-void download_to_file(const std::string &local_path, const DownloadSpec &spec, bool force = false);
+void download_to_file(const std::string &local_path, const DownloadSpec &spec, bool force = false,
+                      const CancelToken *cancel_token = nullptr);
 
-void download_ensure(const std::string &local_path, const DownloadSpec &spec, bool force = false);
+void download_ensure(const std::string &local_path, const DownloadSpec &spec, bool force = false,
+                     const CancelToken *cancel_token = nullptr);
 
 void download_set_quiet(bool quiet);

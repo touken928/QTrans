@@ -31,8 +31,17 @@ ModelPage::ModelPage(QWidget *parent)
             qtrans::app::from_utf8(entry.display_name),
             qtrans::app::from_utf8(entry.id));
     }
-    configureComboBox(model_combo_, 320);
-    model_form->addRow(QStringLiteral("Model"), model_combo_);
+    configureComboBox(model_combo_, 260);
+
+    delete_button_ = new QPushButton(QStringLiteral("Delete"), this);
+    delete_button_->setObjectName(QStringLiteral("deleteModelBtn"));
+
+    auto *model_row = new QHBoxLayout();
+    model_row->setContentsMargins(0, 0, 0, 0);
+    model_row->setSpacing(8);
+    model_row->addWidget(model_combo_, 1);
+    model_row->addWidget(delete_button_);
+    model_form->addRow(QStringLiteral("Model"), model_row);
 
     models_dir_edit_ = new QLineEdit(this);
     models_dir_edit_->setMinimumWidth(320);
@@ -57,6 +66,7 @@ ModelPage::ModelPage(QWidget *parent)
     connect(save_button_, &QPushButton::clicked, this, &ModelPage::saveRequested);
     connect(load_button_, &QPushButton::clicked, this, &ModelPage::loadModelRequested);
     connect(unload_button_, &QPushButton::clicked, this, &ModelPage::unloadModelRequested);
+    connect(delete_button_, &QPushButton::clicked, this, &ModelPage::deleteModelRequested);
     connect(model_combo_, &QComboBox::currentIndexChanged, this, [this]() {
         applyTo(settings_);
         emit modelEdited();
@@ -160,4 +170,5 @@ void ModelPage::updateActions() {
     save_button_->setEnabled(idle);
     load_button_->setEnabled(idle && !model_loaded_);
     unload_button_->setEnabled(idle && model_loaded_);
+    delete_button_->setEnabled(idle && !model_loaded_);
 }

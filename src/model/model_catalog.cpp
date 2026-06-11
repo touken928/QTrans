@@ -14,6 +14,15 @@ const ModelCatalogEntry k_models[] = {
         2,
         {InferenceBackend::GpuVulkan, InferenceBackend::GpuMetal},
     },
+    {
+        "hymt2-7b-q4",
+        "Hy-MT2-7B (Q4)",
+        "Hy-MT2-7B-Q4_K_M.gguf",
+        "tencent/Hy-MT2-7B-GGUF/Hy-MT2-7B-Q4_K_M.gguf",
+        "Tencent-Hunyuan/Hy-MT2-7B-GGUF/Hy-MT2-7B-Q4_K_M.gguf",
+        2,
+        {InferenceBackend::GpuVulkan, InferenceBackend::GpuMetal},
+    },
 };
 
 }  // namespace

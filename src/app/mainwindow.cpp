@@ -23,8 +23,11 @@
 
 #include <QCloseEvent>
 #include <QCoreApplication>
+#include <QFile>
 #include <QHBoxLayout>
+#include <QMessageBox>
 #include <QMetaObject>
+#include <QPushButton>
 #include <QShowEvent>
 #include <QStackedWidget>
 #include <QThread>
@@ -75,6 +78,7 @@ MainWindow::MainWindow(
     connect(model_page_, &ModelPage::saveRequested, this, &MainWindow::onSaveModelSettings);
     connect(model_page_, &ModelPage::loadModelRequested, this, &MainWindow::onLoadModelFromPage);
     connect(model_page_, &ModelPage::unloadModelRequested, this, &MainWindow::onUnloadModelFromPage);
+    connect(model_page_, &ModelPage::deleteModelRequested, this, &MainWindow::onDeleteModel);
     connect(model_page_, &ModelPage::modelEdited, this, &MainWindow::applySettingsFromPage);
     connect(translate_page_, &TranslatePage::translateRequested, this, &MainWindow::onTranslateRequested);
     connect(translate_page_, &TranslatePage::cancelRequested, this, &MainWindow::onCancelRequested);
@@ -270,6 +274,33 @@ void MainWindow::onUnloadModelFromPage() {
     QMetaObject::invokeMethod(task_service_, "unloadModel", Qt::QueuedConnection);
 }
 
+void MainWindow::onDeleteModel() {
+    const QString model_path = currentModelPath();
+
+    auto *msg = new QMessageBox(this);
+    msg->setObjectName(QStringLiteral("alertPanel"));
+    msg->setIcon(QMessageBox::Warning);
+    msg->setWindowTitle(QStringLiteral("Delete Model File"));
+    msg->setText(QStringLiteral("Delete the model file?\n%1\n\nThis cannot be undone.").arg(model_path));
+    auto *delete_btn = msg->addButton(QStringLiteral("Delete"), QMessageBox::DestructiveRole);
+    msg->addButton(QMessageBox::Cancel);
+    msg->setDefaultButton(QMessageBox::Cancel);
+    msg->exec();
+
+    if (msg->clickedButton() != delete_btn) {
+        return;
+    }
+
+    QFile file(model_path);
+    if (!file.remove()) {
+        showAlertDialog(QStringLiteral("Failed to Delete"),
+                        QStringLiteral("Could not delete the file:\n%1").arg(file.errorString()));
+        return;
+    }
+
+    translate_page_->setStatus(QStringLiteral("Model file deleted."));
+}
+
 void MainWindow::setUiBusy(bool busy) {
     busy_ = busy;
     sidebar_->setNavigationEnabled(!busy);
@@ -308,7 +339,12 @@ void MainWindow::showModelMissingDialog() {
 
 void MainWindow::showDownloadDialog() {
     download_panel_ = new DownloadProgressPanel();
-    modal_->setContent(download_panel_, QSize(460, 220));
+    connect(download_panel_, &DownloadProgressPanel::cancelRequested, this, [this]() {
+        awaiting_download_load_ = false;
+        hideModal();
+        task_service_->cancelTask(0);
+    });
+    modal_->setContent(download_panel_, QSize(460, 260));
     modal_->showModal();
 }
 

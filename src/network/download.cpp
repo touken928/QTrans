@@ -1,5 +1,6 @@
 #include "network/download.h"
 
+#include "task/cancel_token.h"
 #include "log/component.h"
 #include "log/console_progress.h"
 #include "log/logger.h"
@@ -27,6 +28,7 @@ struct DownloadContext {
     std::chrono::steady_clock::time_point last_time = std::chrono::steady_clock::now();
     std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
     qtrans::log::ConsoleProgress progress;
+    const CancelToken *cancel_token = nullptr;
 };
 
 bool g_quiet = false;
@@ -118,6 +120,10 @@ int progress_callback(
     curl_off_t /*ulnow*/) {
     auto *ctx = static_cast<DownloadContext *>(clientp);
 
+    if (ctx->cancel_token != nullptr && ctx->cancel_token->is_cancelled()) {
+        return 1;
+    }
+
     if (dltotal > 0) {
         const curl_off_t pct = dlnow * 100 / dltotal;
         ctx->progress.update(static_cast<std::int64_t>(pct));
@@ -198,7 +204,8 @@ bool remote_file_available(const std::string &url, ModelHub hub) {
     return result == CURLE_OK && http_code >= 200 && http_code < 400;
 }
 
-void download_from_hub(const std::string &local_path, const DownloadSpec &spec, ModelHub hub) {
+void download_from_hub(const std::string &local_path, const DownloadSpec &spec, ModelHub hub,
+                       const CancelToken *cancel_token) {
     ensure_curl_initialized();
 
     const DownloadSpec resolved = spec_for_hub(spec, hub);
@@ -213,6 +220,7 @@ void download_from_hub(const std::string &local_path, const DownloadSpec &spec, 
     ctx.start_time = std::chrono::steady_clock::now();
     ctx.last_time = ctx.start_time;
     ctx.out = std::fopen(temp_path.c_str(), "wb");
+    ctx.cancel_token = cancel_token;
     if (ctx.out == nullptr) {
         throw std::runtime_error("failed to open temporary file: " + temp_path);
     }
@@ -236,6 +244,13 @@ void download_from_hub(const std::string &local_path, const DownloadSpec &spec, 
 
     const CURLcode result = curl_easy_perform(curl);
     std::fclose(ctx.out);
+
+    if (result == CURLE_ABORTED_BY_CALLBACK) {
+        std::filesystem::remove(temp_path);
+        curl_slist_free_all(headers);
+        curl_easy_cleanup(curl);
+        throw DownloadCancelled();
+    }
 
     if (result != CURLE_OK) {
         std::filesystem::remove(temp_path);
@@ -365,7 +380,8 @@ ModelHub download_probe_hub(const DownloadSpec &spec) {
     throw std::runtime_error("auto hub selection failed: " + errors);
 }
 
-void download_to_file(const std::string &local_path, const DownloadSpec &spec, bool force) {
+void download_to_file(const std::string &local_path, const DownloadSpec &spec, bool force,
+                      const CancelToken *cancel_token) {
     if (!force && download_file_exists(local_path)) {
         return;
     }
@@ -374,7 +390,7 @@ void download_to_file(const std::string &local_path, const DownloadSpec &spec, b
         const ModelHub hub = spec.hub;
         const std::string url = download_resolve_url(spec, hub);
         download_logger()->info("downloading [{}] {}", download_hub_name(hub), url);
-        download_from_hub(local_path, spec, hub);
+        download_from_hub(local_path, spec, hub, cancel_token);
         return;
     }
 
@@ -392,8 +408,10 @@ void download_to_file(const std::string &local_path, const DownloadSpec &spec, b
 
             download_logger()->info("auto: selected {}", download_hub_name(hub));
             download_logger()->info("downloading [{}] {}", download_hub_name(hub), url);
-            download_from_hub(local_path, spec, hub);
+            download_from_hub(local_path, spec, hub, cancel_token);
             return;
+        } catch (const DownloadCancelled &) {
+            throw;
         } catch (const std::exception &ex) {
             if (!errors.empty()) {
                 errors += "; ";
@@ -406,13 +424,14 @@ void download_to_file(const std::string &local_path, const DownloadSpec &spec, b
     throw std::runtime_error("auto download failed: " + errors);
 }
 
-void download_ensure(const std::string &local_path, const DownloadSpec &spec, bool force) {
+void download_ensure(const std::string &local_path, const DownloadSpec &spec, bool force,
+                     const CancelToken *cancel_token) {
     if (!force && download_file_exists(local_path)) {
         download_logger()->info("using cached model: {}", local_path);
         return;
     }
 
-    download_to_file(local_path, spec, true);
+    download_to_file(local_path, spec, true, cancel_token);
     download_logger()->info("saved to {}", local_path);
 }
 

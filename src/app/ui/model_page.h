@@ -27,6 +27,7 @@ signals:
     void saveRequested();
     void loadModelRequested();
     void unloadModelRequested();
+    void deleteModelRequested();
     void modelEdited();
 
 private:
@@ -42,6 +43,7 @@ private:
     QPushButton *save_button_ = nullptr;
     QPushButton *load_button_ = nullptr;
     QPushButton *unload_button_ = nullptr;
+    QPushButton *delete_button_ = nullptr;
 
     bool busy_ = false;
     bool model_loaded_ = false;
