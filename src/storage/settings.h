@@ -2,15 +2,12 @@
 
 #include "storage/app_paths.h"
 #include "model/model_catalog.h"
-#include "model/platform_profile.h"
 
 #include <string>
 
-class RuntimeCapabilities;
-
 struct AppSettings {
     std::string models_dir;
-    std::string model_id = default_model_id_for_platform();
+    std::string model_id = "hymt2-q4";
     std::string hotkey = "Ctrl+`";
     int auto_close_ms = 5000;
     std::string source_language = "English";
@@ -29,6 +26,4 @@ struct AppSettings {
 
     void setEffectiveModelsDir(const AppPaths &paths, const std::string &dir);
     void setSelectedModelId(const std::string &id);
-
-    void migrateModelSelection(const RuntimeCapabilities &caps);
 };

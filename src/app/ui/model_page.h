@@ -5,8 +5,6 @@
 
 #include <QWidget>
 
-class RuntimeCapabilities;
-
 class QComboBox;
 class QLineEdit;
 class QPushButton;
@@ -18,7 +16,6 @@ public:
     explicit ModelPage(QWidget *parent = nullptr);
 
     void setSettings(const AppPaths &paths, const AppSettings &settings);
-    void setRuntimeCapabilities(const RuntimeCapabilities &caps);
     void applyTo(AppSettings &settings) const;
     void setBusy(bool busy);
     void setModelLoaded(bool loaded);
@@ -31,11 +28,8 @@ signals:
 
 private:
     void updateActions();
-    void updateModelAvailability();
 
     AppPaths paths_;
-    bool has_runtime_caps_ = false;
-    const RuntimeCapabilities *runtime_caps_ = nullptr;
     AppSettings settings_;
     QComboBox *model_combo_ = nullptr;
     QLineEdit *models_dir_edit_ = nullptr;

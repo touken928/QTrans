@@ -12,7 +12,7 @@
 #include "app/ui/wordselect_page.h"
 #include "network/download.h"
 #include "model/model_catalog.h"
-#include "model/runtime_capabilities.h"
+#include "translation/hymt.h"
 #include "app/string_bridge.h"
 #include "log/component.h"
 #include "log/logger.h"
@@ -41,8 +41,7 @@ MainWindow::MainWindow(
 
     settings_.load(paths_);
     settings_.ensureStorage(paths_);
-    initializeInferenceBackend();
-    settings_.migrateModelSelection(RuntimeCapabilities::instance());
+    Hymt::ensure_backend();
     syncSettingsToTaskService();
 
     central_root_ = new QWidget(this);
@@ -168,14 +167,8 @@ void MainWindow::switchPage(int index) {
 }
 
 void MainWindow::refreshModelPage() {
-    model_page_->setRuntimeCapabilities(RuntimeCapabilities::instance());
     model_page_->setSettings(paths_, settings_);
     model_page_->setModelLoaded(model_loaded_);
-}
-
-void MainWindow::initializeInferenceBackend() {
-    task_service_->setBackendPluginDir(qtrans::app::from_utf8(paths_.app_dir.string()));
-    QMetaObject::invokeMethod(task_service_, "initializeBackend", Qt::BlockingQueuedConnection);
 }
 
 void MainWindow::applySettingsFromPage() {
@@ -415,17 +408,13 @@ void MainWindow::onTargetAppended(quint64 task_id, const QString &piece) {
 
 void MainWindow::onModelLoadFinished(
     bool success,
-    const QString &error_message,
-    const QString &backend_label) {
+    const QString &error_message) {
     model_loaded_ = success;
     translate_page_->setModelLoaded(success);
     model_page_->setModelLoaded(success);
     setUiBusy(busy_);
 
     if (success) {
-        if (!backend_label.isEmpty()) {
-            translate_page_->setStatus(backend_label);
-        }
         if (modal_->isVisible()) {
             hideModal();
             switchPage(0);

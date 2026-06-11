@@ -1,7 +1,5 @@
 #pragma once
 
-#include "model/inference_backend.h"
-
 #include <string>
 #include <vector>
 
@@ -12,7 +10,6 @@ struct ModelCatalogEntry {
     std::string remote_spec;
     std::string modelscope_remote_spec;
     int download_hub = 2;
-    std::vector<InferenceBackend> backend_priority;
 };
 
 const std::vector<ModelCatalogEntry> &model_catalog();

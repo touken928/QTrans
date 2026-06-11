@@ -12,7 +12,6 @@ const ModelCatalogEntry k_models[] = {
         "tencent/Hy-MT2-1.8B-GGUF/Hy-MT2-1.8B-Q4_K_M.gguf",
         "Tencent-Hunyuan/Hy-MT2-1.8B-GGUF/Hy-MT2-1.8B-Q4_K_M.gguf",
         2,
-        {InferenceBackend::GpuVulkan, InferenceBackend::GpuMetal},
     },
 };
 
