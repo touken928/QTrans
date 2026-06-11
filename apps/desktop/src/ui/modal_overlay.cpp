@@ -1,9 +1,9 @@
 #include "ui/modal_overlay.h"
+#include "ui/theme.h"
 #include "ui/widgets/app_theme.h"
 
 #include <QEvent>
 #include <QFrame>
-#include <QtGlobal>
 #include <QResizeEvent>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -22,8 +22,9 @@ ModalOverlay::ModalOverlay(QWidget *parent)
     panel_->setStyleSheet(AppTheme::modalPanelStyleSheet());
 
     content_layout_ = new QVBoxLayout(panel_);
-    content_layout_->setContentsMargins(24, 24, 24, 24);
-    content_layout_->setSpacing(14);
+    content_layout_->setContentsMargins(Theme::Space::xxl, Theme::Space::xl,
+                                        Theme::Space::xxl, Theme::Space::xl);
+    content_layout_->setSpacing(Theme::Space::lg);
 
     if (parent != nullptr) {
         parent->installEventFilter(this);
@@ -62,8 +63,8 @@ void ModalOverlay::showModal() {
     QTimer::singleShot(0, this, [this]() {
         if (content_widget_ != nullptr) {
             const QSize hint = content_widget_->sizeHint().expandedTo(preferred_size_);
-            const int max_w = qMax(320, width() - 32);
-            const int max_h = qMax(240, height() - 32);
+            const int max_w = qMax(320, width() - 64);
+            const int max_h = qMax(240, height() - 64);
             panel_->resize(qMin(hint.width(), max_w), qMin(hint.height(), max_h));
         }
         repositionPanel();
@@ -92,11 +93,11 @@ void ModalOverlay::repositionPanel() {
         return;
     }
 
-    const int max_w = qMax(320, width() - 32);
-    const int max_h = qMax(240, height() - 32);
+    const int max_w = qMax(320, width() - 64);
+    const int max_h = qMax(240, height() - 64);
     panel_->setMaximumSize(max_w, max_h);
 
     const int x = (width() - panel_->width()) / 2;
     const int y = (height() - panel_->height()) / 2;
-    panel_->move(qMax(16, x), qMax(16, y));
+    panel_->move(qMax(32, x), qMax(32, y));
 }

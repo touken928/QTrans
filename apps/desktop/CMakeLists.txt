@@ -43,6 +43,7 @@ endif()
 # ── QTrans executable ────────────────────────────────────────────────────────
 
 set(_QT_SOURCES_COMMON
+    src/ui/theme.h
     src/ui/string_bridge.cpp
     src/ui/main.cpp
     src/ui/single_instance.cpp

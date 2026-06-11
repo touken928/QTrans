@@ -91,7 +91,7 @@ jobs:
           OUTPUT="dist/QTrans-${VERSION}-${DIST_SUFFIX}"
 
           mkdir -p dist
-          cp "build/${CMAKE_PRESET}/QTrans" "${OUTPUT}"
+          cp "build/${CMAKE_PRESET}/apps/desktop/QTrans" "${OUTPUT}"
           chmod +x "${OUTPUT}"
 
           if otool -L "${OUTPUT}" | grep -E '@rpath|/vcpkg/'; then

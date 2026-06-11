@@ -1,6 +1,6 @@
 #include "ui/widgets/alert_panel.h"
+#include "ui/theme.h"
 
-#include <QFont>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
@@ -9,19 +9,18 @@
 AlertPanel::AlertPanel(const QString &title, const QString &message, QWidget *parent)
     : QWidget(parent) {
     auto *layout = new QVBoxLayout(this);
-    layout->setSpacing(12);
+    layout->setSpacing(Theme::Space::md);
 
     auto *title_label = new QLabel(title, this);
-    QFont title_font = title_label->font();
-    title_font.setBold(true);
-    title_font.setPointSize(title_font.pointSize() + 2);
-    title_label->setFont(title_font);
+    title_label->setObjectName(QStringLiteral("titleLabel"));
     layout->addWidget(title_label);
 
     auto *body = new QLabel(message, this);
     body->setWordWrap(true);
     body->setTextInteractionFlags(Qt::TextSelectableByMouse);
     layout->addWidget(body);
+
+    layout->addStretch(1);
 
     auto *buttons = new QHBoxLayout();
     buttons->addStretch(1);

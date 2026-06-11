@@ -1,6 +1,6 @@
 #include "ui/widgets/download_progress_panel.h"
+#include "ui/theme.h"
 
-#include <QFont>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QProgressBar>
@@ -36,13 +36,10 @@ QString formatEta(double seconds) {
     if (seconds < 0.0) {
         return QStringLiteral("--:--");
     }
-
     const int total = static_cast<int>(seconds);
-    const int minutes = total / 60;
-    const int secs = total % 60;
     return QStringLiteral("%1:%2")
-        .arg(minutes, 2, 10, QChar('0'))
-        .arg(secs, 2, 10, QChar('0'));
+        .arg(total / 60, 2, 10, QChar('0'))
+        .arg(total % 60, 2, 10, QChar('0'));
 }
 
 }  // namespace
@@ -50,13 +47,10 @@ QString formatEta(double seconds) {
 DownloadProgressPanel::DownloadProgressPanel(QWidget *parent)
     : QWidget(parent) {
     auto *layout = new QVBoxLayout(this);
-    layout->setSpacing(12);
+    layout->setSpacing(Theme::Space::md);
 
     auto *title = new QLabel(QStringLiteral("Downloading Model"), this);
-    QFont title_font = title->font();
-    title_font.setBold(true);
-    title_font.setPointSize(title_font.pointSize() + 2);
-    title->setFont(title_font);
+    title->setObjectName(QStringLiteral("titleLabel"));
     layout->addWidget(title);
 
     status_label_ = new QLabel(QStringLiteral("Preparing download..."), this);
@@ -70,7 +64,7 @@ DownloadProgressPanel::DownloadProgressPanel(QWidget *parent)
 
     auto *info_row = new QHBoxLayout();
     info_row->setContentsMargins(0, 0, 0, 0);
-    info_row->setSpacing(12);
+    info_row->setSpacing(Theme::Space::md);
 
     speed_label_ = new QLabel(QStringLiteral("Speed: --"), this);
     speed_label_->setObjectName(QStringLiteral("mutedLabel"));
@@ -83,7 +77,6 @@ DownloadProgressPanel::DownloadProgressPanel(QWidget *parent)
     info_row->addStretch(1);
 
     cancel_button_ = new QPushButton(QStringLiteral("Cancel"), this);
-    cancel_button_->setObjectName(QStringLiteral("cancelDownloadBtn"));
     info_row->addWidget(cancel_button_);
 
     layout->addLayout(info_row);
@@ -92,10 +85,7 @@ DownloadProgressPanel::DownloadProgressPanel(QWidget *parent)
 }
 
 void DownloadProgressPanel::setProgress(
-    qint64 downloaded,
-    qint64 total,
-    double speed_bps,
-    double eta_seconds) {
+    qint64 downloaded, qint64 total, double speed_bps, double eta_seconds) {
     if (total > 0) {
         const int percent = static_cast<int>(downloaded * 100 / total);
         progress_bar_->setRange(0, 100);

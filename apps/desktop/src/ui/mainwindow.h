@@ -42,6 +42,7 @@ private slots:
     void onLoadModelFromPage();
     void onUnloadModelFromPage();
     void onDeleteModel();
+    void onDeleteModelForId(const QString &model_id);
     void onTranslateRequested(
         const QString &source,
         const QString &target_language,
@@ -98,6 +99,7 @@ private:
 
     bool startup_checked_ = false;
     bool model_loaded_ = false;
+    QString loaded_model_id_;
     bool busy_ = false;
     bool awaiting_download_load_ = false;
     bool own_translation_active_ = false;

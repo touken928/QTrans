@@ -1,6 +1,6 @@
 #include "ui/widgets/model_missing_panel.h"
+#include "ui/theme.h"
 
-#include <QFont>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
@@ -12,13 +12,10 @@ ModelMissingPanel::ModelMissingPanel(
     QWidget *parent)
     : QWidget(parent) {
     auto *layout = new QVBoxLayout(this);
-    layout->setSpacing(12);
+    layout->setSpacing(Theme::Space::md);
 
     auto *title = new QLabel(QStringLiteral("Model Not Found"), this);
-    QFont title_font = title->font();
-    title_font.setBold(true);
-    title_font.setPointSize(title_font.pointSize() + 2);
-    title->setFont(title_font);
+    title->setObjectName(QStringLiteral("titleLabel"));
     layout->addWidget(title);
 
     const QString message = QStringLiteral(
@@ -29,6 +26,8 @@ ModelMissingPanel::ModelMissingPanel(
     body->setWordWrap(true);
     body->setTextInteractionFlags(Qt::TextSelectableByMouse);
     layout->addWidget(body);
+
+    layout->addStretch(1);
 
     auto *buttons = new QHBoxLayout();
     buttons->addStretch(1);

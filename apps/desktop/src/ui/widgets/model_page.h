@@ -3,13 +3,17 @@
 #include "storage/app_paths.h"
 #include "storage/settings.h"
 
+#include <QMap>
+#include <QString>
 #include <QWidget>
 
 class RuntimeCapabilities;
 
-class QComboBox;
+class QLabel;
 class QLineEdit;
 class QPushButton;
+class QScrollArea;
+class QVBoxLayout;
 
 class ModelPage : public QWidget {
     Q_OBJECT
@@ -19,32 +23,45 @@ public:
 
     void setSettings(const AppPaths &paths, const AppSettings &settings);
     void setRuntimeCapabilities(const RuntimeCapabilities &caps);
-    void applyTo(AppSettings &settings) const;
-    void setBusy(bool busy);
+    void setLoadedModelId(const QString &model_id);
     void setModelLoaded(bool loaded);
+    void setBusy(bool busy);
+    void applyTo(AppSettings &settings) const;
 
 signals:
-    void saveRequested();
-    void loadModelRequested();
-    void unloadModelRequested();
-    void deleteModelRequested();
+    void loadModelRequested(const QString &model_id);
+    void unloadModelRequested(const QString &model_id);
+    void deleteModelRequested(const QString &model_id);
     void modelEdited();
 
 private:
-    void updateActions();
-    void updateModelAvailability();
+    void rebuildCards();
+    void refreshCardStates();
+    void chooseModelsDir();
+    QString modelFilePath(const QString &model_id) const;
+    bool modelFileExists(const QString &model_id) const;
+    bool modelIsAvailable(const QString &model_id) const;
 
     AppPaths paths_;
+    AppSettings settings_;
     bool has_runtime_caps_ = false;
     const RuntimeCapabilities *runtime_caps_ = nullptr;
-    AppSettings settings_;
-    QComboBox *model_combo_ = nullptr;
-    QLineEdit *models_dir_edit_ = nullptr;
-    QPushButton *save_button_ = nullptr;
-    QPushButton *load_button_ = nullptr;
-    QPushButton *unload_button_ = nullptr;
-    QPushButton *delete_button_ = nullptr;
-
     bool busy_ = false;
     bool model_loaded_ = false;
+    QString loaded_model_id_;
+
+    QLineEdit *dir_edit_ = nullptr;
+    QPushButton *browse_btn_ = nullptr;
+    QScrollArea *scroll_ = nullptr;
+    QWidget *cards_container_ = nullptr;
+    QVBoxLayout *cards_layout_ = nullptr;
+
+    struct CardWidgets {
+        QWidget *frame = nullptr;
+        QLabel *status_badge = nullptr;
+        QPushButton *load_btn = nullptr;
+        QPushButton *unload_btn = nullptr;
+        QPushButton *delete_btn = nullptr;
+    };
+    QMap<QString, CardWidgets> cards_;
 };

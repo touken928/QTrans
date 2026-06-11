@@ -8,7 +8,6 @@ class QLabel;
 class QPlainTextEdit;
 class QPushButton;
 class QSplitter;
-class QWidget;
 
 class TranslatePage : public QWidget {
     Q_OBJECT
@@ -27,6 +26,11 @@ public:
     QString targetText() const;
     void prepareForTranslation(bool back_translate);
 
+    void setSourceLanguage(const QString &model_name);
+    void setTargetLanguage(const QString &model_name);
+    QString targetLanguageName() const;
+    QString sourceLanguageName() const;
+
 signals:
     void translateRequested(
         const QString &source,
@@ -42,12 +46,6 @@ private slots:
     void onClear();
     void onCopyResult();
     void onBackTranslateToggled(bool enabled);
-
-public:
-    void setSourceLanguage(const QString &model_name);
-    void setTargetLanguage(const QString &model_name);
-    QString targetLanguageName() const;
-    QString sourceLanguageName() const;
 
 private:
     void setBackTranslateVisible(bool visible);
