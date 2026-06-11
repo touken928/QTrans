@@ -1,4 +1,5 @@
 add_library(qtrans_core STATIC
+    src/translation_model.cpp
     src/translator.cpp
     src/runtime/local_runtime.cpp
     src/runtime/remote_runtime.cpp
@@ -6,7 +7,6 @@ add_library(qtrans_core STATIC
     src/text/utf8_stream_buffer.cpp
     src/text/sentence_splitter.cpp
     src/text/chunker.cpp
-    src/text/language_names.cpp
 )
 
 target_include_directories(qtrans_core
@@ -44,7 +44,10 @@ endif()
 if(QTRANS_BUILD_TESTS)
     find_package(GTest CONFIG REQUIRED)
     include(GoogleTest)
-    add_executable(qtrans_tests_core tests/test_core_api.cpp)
+    add_executable(qtrans_tests_core
+        tests/test_core_api.cpp
+        tests/test_translation_model.cpp
+    )
     target_link_libraries(qtrans_tests_core
         PRIVATE
             qtrans_core

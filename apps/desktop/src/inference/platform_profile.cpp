@@ -1,8 +1,8 @@
-#include "model/platform_profile.h"
+#include "inference/platform_profile.h"
 
-#include "model/inference_resolver.h"
-#include "model/model_catalog.h"
-#include "model/runtime_capabilities.h"
+#include "inference/inference_resolver.h"
+#include "catalog/model_catalog.h"
+#include "inference/runtime_capabilities.h"
 
 #if defined(_WIN32)
 #include <windows.h>

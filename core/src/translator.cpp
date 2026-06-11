@@ -53,12 +53,14 @@ std::string context_limit_error() {
 
 TranslationResult translate_single_chunk(
     ITranslationRuntime &runtime,
+    const ITranslationModel &model,
     const std::string &text,
     const std::string &target_language,
     const std::function<void(const std::string &)> &on_token,
     const std::function<bool()> &should_cancel) {
     try {
-        const std::string result = runtime.translate(text, target_language, on_token, should_cancel);
+        const std::string prompt = model.format_inference_prompt(text, target_language);
+        const std::string result = runtime.translate(prompt, on_token, should_cancel);
         return make_completed(result);
     } catch (const std::exception &ex) {
         return make_failure(ex.what());
@@ -68,20 +70,21 @@ TranslationResult translate_single_chunk(
 }  // namespace
 
 struct Translator::Impl {
+    std::unique_ptr<ITranslationModel> model;
     std::unique_ptr<ITranslationRuntime> runtime;
-    TranslatorOptions options;
     BackendOptions backend_options;
+    TranslatorOptions fallback_options;
 };
 
 Translator::Translator(TranslatorOptions options)
     : impl_(std::make_unique<Impl>()) {
-    impl_->options = std::move(options);
+    impl_->fallback_options = std::move(options);
 }
 
 Translator::Translator(std::unique_ptr<ITranslationRuntime> runtime, TranslatorOptions options)
     : impl_(std::make_unique<Impl>()) {
     impl_->runtime = std::move(runtime);
-    impl_->options = std::move(options);
+    impl_->fallback_options = std::move(options);
 }
 
 Translator::~Translator() = default;
@@ -98,24 +101,42 @@ std::string Translator::backend_label() const {
     return "uninitialized";
 }
 
-void Translator::load_model(const std::filesystem::path &model_path) {
-    auto data = ITranslationRuntime::read_file(model_path);
-    auto local_rt = std::make_unique<LocalRuntime>();
-    local_rt->initialize_backend(impl_->backend_options);
-    local_rt->load_model(data, impl_->options);
-    impl_->runtime = std::move(local_rt);
-}
+void Translator::load(std::unique_ptr<ITranslationModel> model) {
+    if (model == nullptr) {
+        throw std::invalid_argument("translation model is required");
+    }
 
-void Translator::load_remote_model(const RemoteModelConfig &remote) {
-    auto remote_rt = std::make_unique<RemoteRuntime>();
-    remote_rt->load_remote(remote, impl_->options);
-    impl_->runtime = std::move(remote_rt);
+    unload_model();
+
+    if (model->kind() == RuntimeKind::Local) {
+        auto *local_model = dynamic_cast<ILocalTranslationModel *>(model.get());
+        if (local_model == nullptr) {
+            throw std::invalid_argument("local model does not implement ILocalTranslationModel");
+        }
+
+        auto local_rt = std::make_unique<LocalRuntime>();
+        local_rt->initialize_backend(impl_->backend_options);
+        local_rt->load_model(local_model->weights(), model->translator_options());
+        impl_->runtime = std::move(local_rt);
+    } else {
+        auto *remote_model = dynamic_cast<IRemoteTranslationModel *>(model.get());
+        if (remote_model == nullptr) {
+            throw std::invalid_argument("remote model does not implement IRemoteTranslationModel");
+        }
+
+        auto remote_rt = std::make_unique<RemoteRuntime>();
+        remote_rt->load_remote(remote_model->remote_config(), model->translator_options());
+        impl_->runtime = std::move(remote_rt);
+    }
+
+    impl_->model = std::move(model);
 }
 
 void Translator::unload_model() {
     if (impl_->runtime)
         impl_->runtime->unload();
     impl_->runtime.reset();
+    impl_->model.reset();
 }
 
 bool Translator::is_loaded() const {
@@ -128,9 +149,10 @@ RuntimeKind Translator::runtime_kind() const {
 
 int Translator::count_prompt_tokens(const std::string &text,
                                     const std::string &target_language) const {
-    if (!impl_->runtime || !impl_->runtime->is_loaded())
+    if (!impl_->runtime || !impl_->runtime->is_loaded() || impl_->model == nullptr)
         return 0;
-    return impl_->runtime->count_prompt_tokens(text, target_language);
+    const std::string prompt = impl_->model->format_inference_prompt(text, target_language);
+    return impl_->runtime->count_prompt_tokens(prompt);
 }
 
 TranslationResult Translator::translate(
@@ -144,32 +166,37 @@ TranslationResult Translator::translate(
     const TranslationRequest &request,
     const TranslationCallbacks &callbacks,
     std::function<bool()> should_cancel) {
-    if (!impl_->runtime || !impl_->runtime->is_loaded())
+    if (!impl_->runtime || !impl_->runtime->is_loaded() || impl_->model == nullptr)
         return make_failure("model is not loaded");
 
     if (should_cancel && should_cancel())
         return make_cancelled();
 
+    const ITranslationModel &model = *impl_->model;
+    const TranslatorOptions &options = model.translator_options();
     auto logger = spdlog::get("inference");
 
     auto do_step = [&](const std::string &text,
                        const std::string &target_language,
                        bool wordselect,
                        const std::function<void(const std::string &)> &on_token) -> TranslationResult {
-        const int prompt_tokens = impl_->runtime->count_prompt_tokens(text, target_language);
+        const int prompt_tokens =
+            impl_->runtime->count_prompt_tokens(model.format_inference_prompt(text, target_language));
         if (prompt_tokens <= 0)
             return make_failure("failed to measure prompt tokens");
 
-        if (prompt_fits_context(prompt_tokens, impl_->options)) {
-            return translate_single_chunk(*impl_->runtime, text, target_language, on_token, should_cancel);
+        if (prompt_fits_context(prompt_tokens, options)) {
+            return translate_single_chunk(*impl_->runtime, model, text, target_language, on_token,
+                                          should_cancel);
         }
 
         if (wordselect)
             return make_failure(context_limit_error());
 
-        const int max_chunk_tokens = max_chunk_prompt_tokens(impl_->options);
+        const int max_chunk_tokens = max_chunk_prompt_tokens(options);
         const auto token_counter = [&](const std::string &segment) {
-            return impl_->runtime->count_prompt_tokens(segment, target_language);
+            return impl_->runtime->count_prompt_tokens(
+                model.format_inference_prompt(segment, target_language));
         };
 
         std::vector<std::string> chunks;
@@ -182,7 +209,8 @@ TranslationResult Translator::translate(
         if (chunks.empty())
             return make_failure("failed to split text for translation");
         if (chunks.size() == 1)
-            return translate_single_chunk(*impl_->runtime, chunks.front(), target_language, on_token, should_cancel);
+            return translate_single_chunk(*impl_->runtime, model, chunks.front(), target_language,
+                                          on_token, should_cancel);
 
         if (logger)
             logger->debug("translating in {} chunks", chunks.size());
@@ -194,7 +222,7 @@ TranslationResult Translator::translate(
                 callbacks.on_chunk_begin(static_cast<int>(i + 1), static_cast<int>(chunks.size()));
 
             auto chunk_result = translate_single_chunk(
-                *impl_->runtime, chunks[i], target_language, on_token, should_cancel);
+                *impl_->runtime, model, chunks[i], target_language, on_token, should_cancel);
 
             if (chunk_result.outcome != TranslationOutcome::Completed) {
                 if (chunk_result.outcome == TranslationOutcome::Failed)

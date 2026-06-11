@@ -41,13 +41,11 @@ public:
     virtual bool is_loaded() const = 0;
 
     virtual std::string translate(
-        const std::string &text,
-        const std::string &target_language,
+        const std::string &prompt,
         const std::function<void(const std::string &)> &on_token = nullptr,
         const std::function<bool()> &should_cancel = nullptr) = 0;
 
-    virtual int count_prompt_tokens(const std::string &text,
-                                    const std::string &target_language) const = 0;
+    virtual int count_prompt_tokens(const std::string &prompt) const = 0;
 
     virtual std::string backend_label() const = 0;
     virtual RuntimeKind kind() const = 0;

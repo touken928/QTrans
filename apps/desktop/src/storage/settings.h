@@ -1,8 +1,8 @@
 #pragma once
 
 #include "storage/app_paths.h"
-#include "model/model_catalog.h"
-#include "model/platform_profile.h"
+#include "catalog/model_catalog.h"
+#include "inference/platform_profile.h"
 
 #include <string>
 

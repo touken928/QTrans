@@ -1,6 +1,5 @@
 #include "local_runtime.h"
 
-#include "text/language_names.h"
 #include "text/utf8_stream_buffer.h"
 
 #include "ggml-backend.h"
@@ -27,11 +26,6 @@
 namespace qtrans::core {
 
 namespace {
-
-// Hy-MT prompt template constants.
-constexpr const char k_hy_bos[] = u8"<\xEF\xBD\x9Chy_begin\xe2\x96\x81of\xe2\x96\x81sentence\xEF\xBD\x9C>";
-constexpr const char k_hy_user[] = u8"<\xEF\xBD\x9Chy_User\xEF\xBD\x9C>";
-constexpr const char k_hy_assistant[] = u8"<\xEF\xBD\x9Chy_Assistant\xEF\xBD\x9C>";
 
 // ---------------------------------------------------------------------------
 // Model loading — moved from translation_model.cpp, keeping llama entirely
@@ -221,42 +215,6 @@ std::string token_to_text(const llama_vocab *vocab, llama_token token) {
 }
 
 // ---------------------------------------------------------------------------
-// Prompt building (Hy-MT specific)
-// ---------------------------------------------------------------------------
-
-bool contains_chinese(const std::string &text) {
-    for (size_t i = 0; i < text.size();) {
-        const unsigned char b = static_cast<unsigned char>(text[i]);
-        if (b >= 0xE0 && b <= 0xEF && i + 2 < text.size()) {
-            const uint32_t cp = ((b & 0x0F) << 12) |
-                                ((static_cast<unsigned char>(text[i + 1]) & 0x3F) << 6) |
-                                (static_cast<unsigned char>(text[i + 2]) & 0x3F);
-            if (cp >= 0x4E00 && cp <= 0x9FFF) return true;
-            i += 3;
-        } else {
-            ++i;
-        }
-    }
-    return false;
-}
-
-std::string build_user_prompt(const std::string &text, const std::string &target_language) {
-    if (target_language == "Auto")
-        return "Translate the following segment:\n\n" + text;
-
-    if (contains_chinese(text) && !is_chinese_language_name(target_language))
-        return "将以下文本翻译为" + translation_chinese_name(target_language) +
-               "，注意只需要输出翻译后的结果，不要额外解释：\n\n" + text;
-
-    return "Translate the following segment into " + target_language +
-           ", without additional explanation.\n\n" + text;
-}
-
-std::string format_chat_prompt(const std::string &user_prompt) {
-    return std::string(k_hy_bos) + k_hy_user + user_prompt + k_hy_assistant;
-}
-
-// ---------------------------------------------------------------------------
 // AI trace helper
 // ---------------------------------------------------------------------------
 
@@ -394,9 +352,17 @@ void LocalRuntime::load_model(const std::vector<std::uint8_t> &data, const Trans
 
     impl_->model_holder_ = load_llama_model(data, model_params);
 
+    const int train_ctx = llama_model_n_ctx_train(impl_->model_holder_.model);
+    if (train_ctx > 0 && impl_->config_.n_ctx > train_ctx) {
+        impl_->config_.n_ctx = train_ctx;
+        if (impl_->config_.max_tokens > train_ctx) {
+            impl_->config_.max_tokens = train_ctx;
+        }
+    }
+
     llama_context_params ctx_params = llama_context_default_params();
-    ctx_params.n_ctx = static_cast<uint32_t>(config.n_ctx);
-    ctx_params.n_batch = static_cast<uint32_t>(config.n_ctx);
+    ctx_params.n_ctx = static_cast<uint32_t>(impl_->config_.n_ctx);
+    ctx_params.n_batch = static_cast<uint32_t>(impl_->config_.n_ctx);
 
     impl_->ctx_ = llama_init_from_model(impl_->model_holder_.model, ctx_params);
     if (impl_->ctx_ == nullptr) {
@@ -426,25 +392,22 @@ RuntimeKind LocalRuntime::kind() const {
     return RuntimeKind::Local;
 }
 
-int LocalRuntime::count_prompt_tokens(const std::string &text, const std::string &target_language) const {
+int LocalRuntime::count_prompt_tokens(const std::string &prompt) const {
     if (!is_loaded()) return 0;
-    const std::string prompt = format_chat_prompt(build_user_prompt(text, target_language));
     const llama_vocab *vocab = llama_model_get_vocab(impl_->model_holder_.model);
     const int n_prompt = -llama_tokenize(
         vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()),
-        nullptr, 0, true, true);
+        nullptr, 0, false, true);
     return n_prompt > 0 ? n_prompt : 0;
 }
 
 std::string LocalRuntime::translate(
-    const std::string &text,
-    const std::string &target_language,
+    const std::string &prompt,
     const std::function<void(const std::string &)> &on_token,
     const std::function<bool()> &should_cancel) {
     if (!is_loaded()) throw std::runtime_error("model is not loaded");
     if (should_cancel && should_cancel()) throw std::runtime_error("translation cancelled");
-    const std::string user_prompt = build_user_prompt(text, target_language);
-    return generate(format_chat_prompt(user_prompt), on_token, should_cancel);
+    return generate(prompt, on_token, should_cancel);
 }
 
 std::string LocalRuntime::backend_label() const {
@@ -493,14 +456,14 @@ std::string LocalRuntime::generate(
 
     const int n_prompt = -llama_tokenize(
         vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()),
-        nullptr, 0, true, true);
+        nullptr, 0, false, true);
     if (logger) logger->trace("token count: {}", n_prompt);
     if (n_prompt <= 0) throw std::runtime_error("failed to measure prompt tokens");
 
     std::vector<llama_token> prompt_tokens(static_cast<size_t>(n_prompt));
     if (llama_tokenize(vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()),
                        prompt_tokens.data(), static_cast<int32_t>(prompt_tokens.size()),
-                       true, true) < 0)
+                       false, true) < 0)
         throw std::runtime_error("failed to tokenize prompt");
 
     llama_batch batch = llama_batch_get_one(

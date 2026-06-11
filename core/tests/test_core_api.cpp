@@ -132,17 +132,31 @@ TEST(CoreRuntime, RemoteModelConfigValues) {
 TEST(CoreTranslator, InjectionConstructor) {
     class MockRuntime : public ITranslationRuntime {
     public:
-        void initialize_backend(const BackendOptions &) override {}
-        void load_model(const std::vector<uint8_t> &, const TranslatorOptions &) override {}
-        void load_remote(const RemoteModelConfig &, const TranslatorOptions &) override {}
-        void unload() override {}
-        bool is_loaded() const override { return false; }
-        std::string translate(const std::string &, const std::string &,
-                             const std::function<void(const std::string &)> &,
-                             const std::function<bool()> &) override { return ""; }
-        int count_prompt_tokens(const std::string &, const std::string &) const override { return 0; }
-        std::string backend_label() const override { return "mock"; }
-        RuntimeKind kind() const override { return RuntimeKind::Local; }
+        void initialize_backend(const BackendOptions &) override {
+        }
+        void load_model(const std::vector<uint8_t> &, const TranslatorOptions &) override {
+        }
+        void load_remote(const RemoteModelConfig &, const TranslatorOptions &) override {
+        }
+        void unload() override {
+        }
+        bool is_loaded() const override {
+            return false;
+        }
+        std::string translate(const std::string &,
+                              const std::function<void(const std::string &)> &,
+                              const std::function<bool()> &) override {
+            return "";
+        }
+        int count_prompt_tokens(const std::string &) const override {
+            return 0;
+        }
+        std::string backend_label() const override {
+            return "mock";
+        }
+        RuntimeKind kind() const override {
+            return RuntimeKind::Local;
+        }
     };
 
     TranslatorOptions opts;

@@ -5,7 +5,7 @@
 #include "services/task/task_queue.h"
 #include "services/task/task_types.h"
 #include "services/engine/inference_engine.h"
-#include "model/inference_backend.h"
+#include "inference/inference_backend.h"
 
 #include <filesystem>
 #include <functional>

@@ -4,6 +4,7 @@
 #include "log/logger.h"
 
 #include <stdexcept>
+#include <utility>
 
 namespace {
 
@@ -46,12 +47,16 @@ bool InferenceEngine::is_loaded() const {
     return translator_ != nullptr && translator_->is_loaded();
 }
 
-void InferenceEngine::load(const std::string &model_path, const qtrans::core::TranslatorOptions &opts) {
-    options_ = opts;
+void InferenceEngine::load(std::unique_ptr<qtrans::core::ITranslationModel> model) {
+    if (model == nullptr) {
+        throw std::invalid_argument("translation model is required");
+    }
+
+    options_ = model->translator_options();
 
     auto t = std::make_unique<qtrans::core::Translator>(options_);
     t->initialize_backend(backend_options_);
-    t->load_model(model_path);
+    t->load(std::move(model));
 
     translator_ = std::move(t);
 }

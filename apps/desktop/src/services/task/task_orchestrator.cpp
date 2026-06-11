@@ -1,11 +1,13 @@
 #include "services/task/task_orchestrator.h"
 
+#include "models/local/local_model_factory.h"
+
 #include "log/component.h"
 #include "log/logger.h"
-#include "model/inference_backend.h"
-#include "model/inference_resolver.h"
-#include "model/model_catalog.h"
-#include "model/runtime_capabilities.h"
+#include "inference/inference_backend.h"
+#include "inference/inference_resolver.h"
+#include "catalog/model_catalog.h"
+#include "inference/runtime_capabilities.h"
 #include "services/download/download.h"
 #include "qtrans/core/options.h"
 #include "qtrans/core/runtime.h"
@@ -346,14 +348,17 @@ void TaskOrchestrator::execute_task(Task task) {
                 }
                 engine_.set_backend_options(backend_opts);
 
-                qtrans::core::TranslatorOptions opts = make_translator_options(*resolved);
                 {
                     std::lock_guard<std::mutex> lock(mutex_);
-                    translator_options_ = opts;
                     active_backend_ = resolved->backend;
                 }
 
-                engine_.load(payload.model_path, opts);
+                auto model = create_local_model(*entry, payload.model_path, resolved->n_gpu_layers);
+                {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    translator_options_ = model->translator_options();
+                }
+                engine_.load(std::move(model));
 
                 {
                     std::lock_guard<std::mutex> lock(mutex_);

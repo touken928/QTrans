@@ -1,12 +1,15 @@
 add_library(qtrans_engine STATIC
     src/storage/app_paths.cpp
     src/storage/settings.cpp
-    src/model/inference_backend.cpp
-    src/model/inference_resolver.cpp
-    src/model/model_catalog.cpp
-    src/model/language_list.cpp
-    src/model/platform_profile.cpp
-    src/model/runtime_capabilities.cpp
+    src/inference/inference_backend.cpp
+    src/inference/inference_resolver.cpp
+    src/catalog/model_catalog.cpp
+    src/models/local/hymt2_18b_local_model.cpp
+    src/models/local/hymt2_7b_local_model.cpp
+    src/models/local/local_model_factory.cpp
+    src/catalog/language_list.cpp
+    src/inference/platform_profile.cpp
+    src/inference/runtime_capabilities.cpp
     src/services/download/download.cpp
     src/services/engine/inference_engine.cpp
     src/services/task/task_queue.cpp
@@ -44,14 +47,14 @@ endif()
 
 set(_QT_SOURCES_COMMON
     src/ui/theme.h
-    src/ui/string_bridge.cpp
-    src/ui/main.cpp
-    src/ui/single_instance.cpp
-    src/ui/single_instance.h
+    src/app/string_bridge.cpp
+    src/app/main.cpp
+    src/app/single_instance.cpp
+    src/app/single_instance.h
     src/ui/mainwindow.cpp
     src/ui/mainwindow.h
-    src/ui/task_service.cpp
-    src/ui/task_service.h
+    src/app/task_service.cpp
+    src/app/task_service.h
     src/ui/modal_overlay.cpp
     src/ui/modal_overlay.h
     src/ui/widgets/alert_panel.cpp
@@ -103,9 +106,9 @@ add_executable(QTrans ${_QT_SOURCES_COMMON})
 target_link_libraries(QTrans PRIVATE qtrans_engine Qt6::Widgets)
 
 if(WIN32)
-    target_sources(QTrans PRIVATE ${_QT_SOURCES_WIN} src/ui/win/single_instance_activate.cpp)
+    target_sources(QTrans PRIVATE ${_QT_SOURCES_WIN} src/app/win/single_instance_activate.cpp)
 elseif(APPLE)
-    target_sources(QTrans PRIVATE ${_QT_SOURCES_MAC} src/ui/mac/single_instance.mm)
+    target_sources(QTrans PRIVATE ${_QT_SOURCES_MAC} src/app/mac/single_instance.mm)
     target_link_libraries(QTrans PRIVATE "-framework AppKit" "-framework ApplicationServices" "-framework Carbon" "-framework CoreGraphics")
     qt_import_plugins(QTrans
         INCLUDE BY_TYPE platforms Qt6::QCocoaIntegrationPlugin

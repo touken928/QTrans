@@ -1,10 +1,10 @@
 #include "ui/widgets/translate_page.h"
 #include "ui/theme.h"
-#include "ui/string_bridge.h"
+#include "app/string_bridge.h"
 #include "ui/widget_utils.h"
 #include "log/component.h"
 #include "log/logger.h"
-#include "model/language_list.h"
+#include "catalog/language_list.h"
 
 #include <QApplication>
 #include <QCheckBox>

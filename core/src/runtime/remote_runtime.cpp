@@ -1,7 +1,5 @@
 #include "remote_runtime.h"
 
-#include "text/language_names.h"
-
 #include <curl/curl.h>
 
 #include <spdlog/spdlog.h>
@@ -105,34 +103,6 @@ std::string parse_anthropic_response(const std::string &body) {
         throw std::runtime_error("failed to parse Anthropic response");
     }
     return text;
-}
-
-// ── Prompt builder (same as local runtime) ────────────────────────────────
-
-bool contains_chinese(const std::string &text) {
-    for (size_t i = 0; i < text.size();) {
-        const unsigned char b = static_cast<unsigned char>(text[i]);
-        if (b >= 0xE0 && b <= 0xEF && i + 2 < text.size()) {
-            const uint32_t cp = ((b & 0x0F) << 12) |
-                                ((static_cast<unsigned char>(text[i + 1]) & 0x3F) << 6) |
-                                (static_cast<unsigned char>(text[i + 2]) & 0x3F);
-            if (cp >= 0x4E00 && cp <= 0x9FFF) return true;
-            i += 3;
-        } else {
-            ++i;
-        }
-    }
-    return false;
-}
-
-std::string build_user_prompt(const std::string &text, const std::string &target_language) {
-    if (target_language == "Auto")
-        return "Translate the following segment:\n\n" + text;
-    if (contains_chinese(text) && !is_chinese_language_name(target_language))
-        return "将以下文本翻译为" + translation_chinese_name(target_language) +
-               "，注意只需要输出翻译后的结果，不要额外解释：\n\n" + text;
-    return "Translate the following segment into " + target_language +
-           ", without additional explanation.\n\n" + text;
 }
 
 std::string build_openai_body(const std::string &model,
@@ -267,8 +237,7 @@ bool RemoteRuntime::is_loaded() const {
 }
 
 std::string RemoteRuntime::translate(
-    const std::string &text,
-    const std::string &target_language,
+    const std::string &prompt,
     const std::function<void(const std::string &)> &on_token,
     const std::function<bool()> &should_cancel) {
     if (!impl_->loaded_)
@@ -276,7 +245,6 @@ std::string RemoteRuntime::translate(
     if (should_cancel && should_cancel())
         throw std::runtime_error("translation cancelled");
 
-    const std::string user_prompt = build_user_prompt(text, target_language);
     const auto &remote = impl_->remote_config;
 
     std::string api_url;
@@ -290,14 +258,14 @@ std::string RemoteRuntime::translate(
         headers["x-api-key"] = remote.api_key;
         headers["anthropic-version"] = "2023-06-01";
         headers["Content-Type"] = "application/json";
-        req_body = build_anthropic_body(remote.model_name, user_prompt, impl_->config);
+        req_body = build_anthropic_body(remote.model_name, prompt, impl_->config);
     } else {
         std::string url = remote.endpoint_url;
         if (url.back() == '/') url.pop_back();
         api_url = url + "/chat/completions";
         headers["Authorization"] = "Bearer " + remote.api_key;
         headers["Content-Type"] = "application/json";
-        req_body = build_openai_body(remote.model_name, user_prompt, impl_->config);
+        req_body = build_openai_body(remote.model_name, prompt, impl_->config);
     }
 
     auto logger = spdlog::get("inference");
@@ -316,8 +284,7 @@ std::string RemoteRuntime::translate(
     return result;
 }
 
-int RemoteRuntime::count_prompt_tokens(const std::string & /*text*/,
-                                       const std::string & /*target_language*/) const {
+int RemoteRuntime::count_prompt_tokens(const std::string & /*prompt*/) const {
     return 1;
 }
 

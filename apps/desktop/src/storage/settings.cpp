@@ -1,7 +1,7 @@
 #include "storage/settings.h"
 
-#include "model/inference_resolver.h"
-#include "model/runtime_capabilities.h"
+#include "inference/inference_resolver.h"
+#include "inference/runtime_capabilities.h"
 
 #include <fstream>
 #include <sstream>

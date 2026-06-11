@@ -1,9 +1,9 @@
 #include "ui/widgets/model_page.h"
 #include "ui/theme.h"
-#include "ui/string_bridge.h"
-#include "model/inference_resolver.h"
-#include "model/model_catalog.h"
-#include "model/runtime_capabilities.h"
+#include "app/string_bridge.h"
+#include "inference/inference_resolver.h"
+#include "catalog/model_catalog.h"
+#include "inference/runtime_capabilities.h"
 #include "services/download/download.h"
 
 #include <QDesktopServices>

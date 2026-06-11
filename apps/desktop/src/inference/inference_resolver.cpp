@@ -1,4 +1,4 @@
-#include "model/inference_resolver.h"
+#include "inference/inference_resolver.h"
 
 #include <sstream>
 

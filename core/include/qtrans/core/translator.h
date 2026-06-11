@@ -3,9 +3,9 @@
 #include "qtrans/core/cancellation.h"
 #include "qtrans/core/options.h"
 #include "qtrans/core/runtime.h"
+#include "qtrans/core/translation_model.h"
 #include "qtrans/core/types.h"
 
-#include <filesystem>
 #include <functional>
 #include <memory>
 #include <string>
@@ -33,8 +33,7 @@ public:
     void initialize_backend(const BackendOptions &options);
     std::string backend_label() const;
 
-    void load_model(const std::filesystem::path &model_path);
-    void load_remote_model(const RemoteModelConfig &remote);
+    void load(std::unique_ptr<ITranslationModel> model);
     void unload_model();
     bool is_loaded() const;
 

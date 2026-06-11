@@ -1,4 +1,4 @@
-#include "model/runtime_capabilities.h"
+#include "inference/runtime_capabilities.h"
 
 #include "ggml-backend.h"
 
