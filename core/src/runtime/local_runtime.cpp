@@ -214,13 +214,6 @@ std::string token_to_text(const llama_vocab *vocab, llama_token token) {
     return std::string(buffer, static_cast<size_t>(piece_len));
 }
 
-const PromptFormatter &require_prompt_formatter(const PromptFormatterPtr &formatter) {
-    if (formatter == nullptr || !formatter->is_configured()) {
-        throw std::runtime_error("prompt formatter is not configured");
-    }
-    return *formatter;
-}
-
 // ---------------------------------------------------------------------------
 // AI trace helper
 // ---------------------------------------------------------------------------
@@ -276,7 +269,6 @@ struct LocalRuntime::Impl {
     llama_context *ctx_ = nullptr;
     llama_sampler *sampler_ = nullptr;
     TranslatorOptions config_;
-    PromptFormatterPtr prompt_formatter_;
     bool loaded_ = false;
     // Probing results
     static std::string &s_backend_label() {
@@ -391,10 +383,6 @@ bool LocalRuntime::is_loaded() const {
     return impl_->loaded_;
 }
 
-void LocalRuntime::set_prompt_formatter(PromptFormatterPtr formatter) {
-    impl_->prompt_formatter_ = std::move(formatter);
-}
-
 void LocalRuntime::load_remote(const RemoteModelConfig & /*remote*/,
                                const TranslatorOptions & /*config*/) {
     throw std::runtime_error("local runtime does not support remote models");
@@ -404,10 +392,8 @@ RuntimeKind LocalRuntime::kind() const {
     return RuntimeKind::Local;
 }
 
-int LocalRuntime::count_prompt_tokens(const std::string &text, const std::string &target_language) const {
+int LocalRuntime::count_prompt_tokens(const std::string &prompt) const {
     if (!is_loaded()) return 0;
-    const PromptFormatter &formatter = require_prompt_formatter(impl_->prompt_formatter_);
-    const std::string prompt = formatter.format_translation_prompt(text, target_language);
     const llama_vocab *vocab = llama_model_get_vocab(impl_->model_holder_.model);
     const int n_prompt = -llama_tokenize(
         vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()),
@@ -416,14 +402,12 @@ int LocalRuntime::count_prompt_tokens(const std::string &text, const std::string
 }
 
 std::string LocalRuntime::translate(
-    const std::string &text,
-    const std::string &target_language,
+    const std::string &prompt,
     const std::function<void(const std::string &)> &on_token,
     const std::function<bool()> &should_cancel) {
     if (!is_loaded()) throw std::runtime_error("model is not loaded");
     if (should_cancel && should_cancel()) throw std::runtime_error("translation cancelled");
-    const PromptFormatter &formatter = require_prompt_formatter(impl_->prompt_formatter_);
-    return generate(formatter.format_translation_prompt(text, target_language), on_token, should_cancel);
+    return generate(prompt, on_token, should_cancel);
 }
 
 std::string LocalRuntime::backend_label() const {

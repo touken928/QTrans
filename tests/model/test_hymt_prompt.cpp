@@ -36,10 +36,10 @@ TEST(HyMt2_18BLocalModel, SetsContextAndChatTemplate) {
     EXPECT_EQ(model->translator_options().max_tokens, 4096);
     EXPECT_EQ(model->translator_options().n_gpu_layers, -1);
 
-    const std::string user = model->prompt_formatter()->build_user_prompt("Hello", "Chinese");
-    const std::string chat = model->prompt_formatter()->format_translation_prompt("Hello", "Chinese");
+    const std::string user = model->build_user_prompt("Hello", "Chinese");
+    const std::string chat = model->format_translation_prompt("Hello", "Chinese");
     EXPECT_NE(chat.find(u8"<\xEF\xBD\x9Chy_User\xEF\xBD\x9C>"), std::string::npos);
-    EXPECT_EQ(chat, model->prompt_formatter()->format_chat_prompt(user));
+    EXPECT_EQ(chat, model->format_chat_prompt(user));
     std::filesystem::remove(path);
 }
 
@@ -50,8 +50,8 @@ TEST(HyMt2_7BLocalModel, SetsContextAndChatTemplate) {
     EXPECT_EQ(model->translator_options().n_ctx, 8192);
     EXPECT_EQ(model->translator_options().max_tokens, 8192);
 
-    const std::string user = model->prompt_formatter()->build_user_prompt("Hello", "Chinese");
-    const std::string chat = model->prompt_formatter()->format_translation_prompt("Hello", "Chinese");
+    const std::string user = model->build_user_prompt("Hello", "Chinese");
+    const std::string chat = model->format_translation_prompt("Hello", "Chinese");
     EXPECT_EQ(chat, "<|startoftext|>" + user + "<|extra_0|>");
     std::filesystem::remove(path);
 }

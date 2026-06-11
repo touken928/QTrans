@@ -11,12 +11,12 @@ public:
         const std::filesystem::path &path,
         int n_gpu_layers);
 
-    qtrans::core::PromptFormatterPtr prompt_formatter() const override;
+    std::string build_user_prompt(const std::string &text,
+                                  const std::string &target_language) const override;
+
+    std::string format_chat_prompt(const std::string &user_prompt) const override;
 
 private:
-    HyMt2_7BLocalModel(std::vector<std::uint8_t> weights,
-                       qtrans::core::TranslatorOptions options,
-                       qtrans::core::PromptFormatterPtr formatter);
-
-    qtrans::core::PromptFormatterPtr formatter_;
+    explicit HyMt2_7BLocalModel(std::vector<std::uint8_t> weights,
+                                qtrans::core::TranslatorOptions options);
 };

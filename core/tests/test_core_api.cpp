@@ -143,14 +143,12 @@ TEST(CoreTranslator, InjectionConstructor) {
         bool is_loaded() const override {
             return false;
         }
-        void set_prompt_formatter(PromptFormatterPtr) override {
-        }
-        std::string translate(const std::string &, const std::string &,
+        std::string translate(const std::string &,
                               const std::function<void(const std::string &)> &,
                               const std::function<bool()> &) override {
             return "";
         }
-        int count_prompt_tokens(const std::string &, const std::string &) const override {
+        int count_prompt_tokens(const std::string &) const override {
             return 0;
         }
         std::string backend_label() const override {

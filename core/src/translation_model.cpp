@@ -7,11 +7,11 @@ namespace qtrans::core {
 
 namespace {
 
-PromptFormatterPtr require_formatter(const PromptFormatterPtr &formatter) {
-    if (formatter == nullptr || !formatter->is_configured()) {
-        throw std::runtime_error("prompt formatter is not configured");
+RemoteApiModel::UserPromptFn require_user_prompt_fn(const RemoteApiModel::UserPromptFn &fn) {
+    if (!fn) {
+        throw std::invalid_argument("build_user_prompt is required");
     }
-    return formatter;
+    return fn;
 }
 
 }  // namespace
@@ -28,15 +28,29 @@ std::vector<std::uint8_t> LocalGgufModelBase::load_weights(const std::filesystem
 
 RemoteApiModel::RemoteApiModel(RemoteModelConfig remote,
                                TranslatorOptions options,
-                               PromptFormatterPtr formatter)
+                               UserPromptFn build_user_prompt,
+                               ChatPromptFn format_chat_prompt)
     : remote_(std::move(remote)),
       options_(options),
-      formatter_(std::move(formatter)) {
-    require_formatter(formatter_);
+      build_user_prompt_(require_user_prompt_fn(build_user_prompt)),
+      format_chat_prompt_(std::move(format_chat_prompt)) {
 }
 
-PromptFormatterPtr RemoteApiModel::prompt_formatter() const {
-    return require_formatter(formatter_);
+std::string RemoteApiModel::build_user_prompt(const std::string &text,
+                                              const std::string &target_language) const {
+    return build_user_prompt_(text, target_language);
+}
+
+std::string RemoteApiModel::format_chat_prompt(const std::string &user_prompt) const {
+    if (format_chat_prompt_) {
+        return format_chat_prompt_(user_prompt);
+    }
+    return user_prompt;
+}
+
+std::string RemoteApiModel::format_inference_prompt(const std::string &text,
+                                                    const std::string &target_language) const {
+    return build_user_prompt(text, target_language);
 }
 
 }  // namespace qtrans::core

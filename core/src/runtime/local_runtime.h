@@ -26,16 +26,12 @@ public:
     void unload() override;
     bool is_loaded() const override;
 
-    void set_prompt_formatter(PromptFormatterPtr formatter) override;
-
     std::string translate(
-        const std::string &text,
-        const std::string &target_language,
+        const std::string &prompt,
         const std::function<void(const std::string &)> &on_token = nullptr,
         const std::function<bool()> &should_cancel = nullptr) override;
 
-    int count_prompt_tokens(const std::string &text,
-                            const std::string &target_language) const override;
+    int count_prompt_tokens(const std::string &prompt) const override;
 
     std::string backend_label() const override;
     RuntimeKind kind() const override;

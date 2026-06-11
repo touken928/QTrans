@@ -46,7 +46,6 @@ if(QTRANS_BUILD_TESTS)
     include(GoogleTest)
     add_executable(qtrans_tests_core
         tests/test_core_api.cpp
-        tests/test_prompt_formatter.cpp
         tests/test_translation_model.cpp
     )
     target_link_libraries(qtrans_tests_core

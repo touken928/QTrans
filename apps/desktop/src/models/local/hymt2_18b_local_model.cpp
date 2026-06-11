@@ -99,13 +99,6 @@ std::string format_chat_prompt(const std::string &user_prompt) {
     return std::string(k_bos) + k_user + user_prompt + k_assistant;
 }
 
-qtrans::core::PromptFormatterPtr make_prompt_formatter() {
-    auto formatter = std::make_shared<qtrans::core::PromptFormatter>();
-    formatter->build_user_prompt = build_user_prompt;
-    formatter->format_chat_prompt = format_chat_prompt;
-    return formatter;
-}
-
 qtrans::core::TranslatorOptions make_translator_options(int n_gpu_layers) {
     qtrans::core::TranslatorOptions opts;
     opts.n_gpu_layers = n_gpu_layers;
@@ -117,19 +110,22 @@ qtrans::core::TranslatorOptions make_translator_options(int n_gpu_layers) {
 }  // namespace
 
 HyMt2_18BLocalModel::HyMt2_18BLocalModel(std::vector<std::uint8_t> weights,
-                                         qtrans::core::TranslatorOptions options,
-                                         qtrans::core::PromptFormatterPtr formatter)
-    : qtrans::core::LocalGgufModelBase(std::move(weights), options),
-      formatter_(std::move(formatter)) {
+                                         qtrans::core::TranslatorOptions options)
+    : qtrans::core::LocalGgufModelBase(std::move(weights), options) {
 }
 
 std::unique_ptr<HyMt2_18BLocalModel> HyMt2_18BLocalModel::from_path(
     const std::filesystem::path &path,
     int n_gpu_layers) {
     return std::unique_ptr<HyMt2_18BLocalModel>(new HyMt2_18BLocalModel(
-        load_weights(path), make_translator_options(n_gpu_layers), make_prompt_formatter()));
+        load_weights(path), make_translator_options(n_gpu_layers)));
 }
 
-qtrans::core::PromptFormatterPtr HyMt2_18BLocalModel::prompt_formatter() const {
-    return formatter_;
+std::string HyMt2_18BLocalModel::build_user_prompt(const std::string &text,
+                                                   const std::string &target_language) const {
+    return ::build_user_prompt(text, target_language);
+}
+
+std::string HyMt2_18BLocalModel::format_chat_prompt(const std::string &user_prompt) const {
+    return ::format_chat_prompt(user_prompt);
 }

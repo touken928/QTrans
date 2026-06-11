@@ -105,13 +105,6 @@ std::string parse_anthropic_response(const std::string &body) {
     return text;
 }
 
-const PromptFormatter &require_prompt_formatter(const PromptFormatterPtr &formatter) {
-    if (formatter == nullptr || !formatter->is_configured()) {
-        throw std::runtime_error("prompt formatter is not configured");
-    }
-    return *formatter;
-}
-
 std::string build_openai_body(const std::string &model,
                               const std::string &user_prompt,
                               const TranslatorOptions &config) {
@@ -210,7 +203,6 @@ std::string curl_post(const std::string &url,
 struct RemoteRuntime::Impl {
     RemoteModelConfig remote_config;
     TranslatorOptions config;
-    PromptFormatterPtr prompt_formatter_;
     bool loaded_ = false;
 };
 
@@ -244,13 +236,8 @@ bool RemoteRuntime::is_loaded() const {
     return impl_->loaded_;
 }
 
-void RemoteRuntime::set_prompt_formatter(PromptFormatterPtr formatter) {
-    impl_->prompt_formatter_ = std::move(formatter);
-}
-
 std::string RemoteRuntime::translate(
-    const std::string &text,
-    const std::string &target_language,
+    const std::string &prompt,
     const std::function<void(const std::string &)> &on_token,
     const std::function<bool()> &should_cancel) {
     if (!impl_->loaded_)
@@ -258,8 +245,6 @@ std::string RemoteRuntime::translate(
     if (should_cancel && should_cancel())
         throw std::runtime_error("translation cancelled");
 
-    const PromptFormatter &formatter = require_prompt_formatter(impl_->prompt_formatter_);
-    const std::string user_prompt = formatter.build_user_prompt(text, target_language);
     const auto &remote = impl_->remote_config;
 
     std::string api_url;
@@ -273,14 +258,14 @@ std::string RemoteRuntime::translate(
         headers["x-api-key"] = remote.api_key;
         headers["anthropic-version"] = "2023-06-01";
         headers["Content-Type"] = "application/json";
-        req_body = build_anthropic_body(remote.model_name, user_prompt, impl_->config);
+        req_body = build_anthropic_body(remote.model_name, prompt, impl_->config);
     } else {
         std::string url = remote.endpoint_url;
         if (url.back() == '/') url.pop_back();
         api_url = url + "/chat/completions";
         headers["Authorization"] = "Bearer " + remote.api_key;
         headers["Content-Type"] = "application/json";
-        req_body = build_openai_body(remote.model_name, user_prompt, impl_->config);
+        req_body = build_openai_body(remote.model_name, prompt, impl_->config);
     }
 
     auto logger = spdlog::get("inference");
@@ -299,8 +284,7 @@ std::string RemoteRuntime::translate(
     return result;
 }
 
-int RemoteRuntime::count_prompt_tokens(const std::string & /*text*/,
-                                       const std::string & /*target_language*/) const {
+int RemoteRuntime::count_prompt_tokens(const std::string & /*prompt*/) const {
     return 1;
 }
 
