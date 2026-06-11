@@ -11,7 +11,7 @@ jobs:
     env:
       CMAKE_PRESET: x64-mingw-release
       VCPKG_HOST_TRIPLET: x64-mingw-static-release
-      DIST_SUFFIX: mingw-x64
+      DIST_SUFFIX: windows-x64
       VCPKG_ROOT: C:\vcpkg
       VCPKG_INSTALL_ROOT: ${{ github.workspace }}/build/x64-mingw-release/vcpkg_installed
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
@@ -156,6 +156,6 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: qtrans-mingw-x64
-          path: dist/QTrans-*-mingw-x64.zip
+          name: qtrans-windows-x64
+          path: dist/QTrans-*-windows-x64.zip
           if-no-files-found: error
