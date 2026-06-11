@@ -339,15 +339,15 @@ QString scrollBarQss() {
 
 QString splitterQss() {
     return QStringLiteral(
-               "QSplitter::handle {"
-               "  background-color: transparent;"
-               "}"
-               "QSplitter::handle:horizontal {"
-               "  width: 16px;"
-               "}"
-               "QSplitter::handle:horizontal:hover {"
-               "  background-color: transparent;"
-               "}");
+        "QSplitter::handle {"
+        "  background-color: transparent;"
+        "}"
+        "QSplitter::handle:horizontal {"
+        "  width: 16px;"
+        "}"
+        "QSplitter::handle:horizontal:hover {"
+        "  background-color: transparent;"
+        "}");
 }
 
 // -- Sidebar nav buttons ----------------------------------------------------
