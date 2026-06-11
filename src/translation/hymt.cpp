@@ -125,10 +125,9 @@ void Hymt::ensure_backend(const std::filesystem::path &plugin_dir) {
         llama_backend_init();
 #ifdef QTRANS_MULTI_BACKEND
         RuntimeCapabilities::instance().set_plugin_dir(plugin_dir);
+        ggml_backend_load_all();
         if (!plugin_dir.empty()) {
             ggml_backend_load_all_from_path(plugin_dir.string().c_str());
-        } else {
-            ggml_backend_load_all();
         }
 #else
         (void)plugin_dir;

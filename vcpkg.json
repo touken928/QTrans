@@ -2,7 +2,12 @@
   "name": "qtrans",
   "version-string": "0.1.0",
   "dependencies": [
-    "llama-cpp",
+    {
+      "name": "llama-cpp",
+      "features": [
+        "vulkan"
+      ]
+    },
     {
       "name": "curl",
       "features": [

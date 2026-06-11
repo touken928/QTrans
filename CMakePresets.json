@@ -51,15 +51,6 @@
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-mingw-static-release"
       }
-    },
-    {
-      "name": "arm64-mingw-release",
-      "displayName": "MinGW arm64 (Release)",
-      "description": "CPU-only Release build for Windows on ARM using MinGW.",
-      "inherits": "release",
-      "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "arm64-mingw-static-release"
-      }
     }
   ],
   "buildPresets": [
@@ -72,11 +63,6 @@
       "name": "x64-mingw-release",
       "displayName": "MinGW x64 (Release)",
       "configurePreset": "x64-mingw-release"
-    },
-    {
-      "name": "arm64-mingw-release",
-      "displayName": "MinGW arm64 (Release)",
-      "configurePreset": "arm64-mingw-release"
     },
     {
       "name": "debug",

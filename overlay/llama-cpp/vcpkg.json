@@ -13,5 +13,16 @@
       "name": "vcpkg-cmake-config",
       "host": true
     }
-  ]
+  ],
+  "features": {
+    "vulkan": {
+      "description": "Vulkan GPU backend (Windows x64 only)",
+      "supports": "windows & x64 & !arm64",
+      "dependencies": [
+        "shaderc",
+        "spirv-headers",
+        "vulkan"
+      ]
+    }
+  }
 }
