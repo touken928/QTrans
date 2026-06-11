@@ -32,7 +32,7 @@
 
 ## Formatting And CI
 - Use root `.clang-format` (Google-derived, 4 spaces, pointer right, `SortIncludes: false`). Format only touched C++ files.
-- CI formatting checks `core/include`, `core/src`, and `apps/desktop/src` for `*.cpp`, `*.h`, `*.mm` with `clang-format-18`. Use the exact same version locally: `pip install clang-format==18.1.0 --break-system-packages`.
+- CI formatting checks `core/include`, `core/src`, and `apps/desktop/src` for `*.cpp`, `*.h`, `*.mm` with `clang-format-18`. Use the exact same version locally: `uvx clang-format==18.1.0 -i <file>` or `uvx clang-format==18.1.0 --dry-run --Werror <file>`. Install `uv` from https://docs.astral.sh/uv/.
 - Workflow YAML files must stay directly under `.github/workflows/*.yml`; nested workflow dirs will not register.
 
 ## Git Workflow
