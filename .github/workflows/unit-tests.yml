@@ -75,6 +75,7 @@ jobs:
           fi
 
       - name: Install vcpkg dependencies (Release)
+        if: steps.cache-vcpkg-installed.outputs.cache-hit != 'true'
         shell: bash
         run: |
           "${VCPKG_ROOT}/vcpkg" install \
