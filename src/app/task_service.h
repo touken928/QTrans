@@ -13,8 +13,13 @@ public:
     explicit TaskService(QObject *parent = nullptr);
 
     void setModelPath(const QString &path);
+    void setModelId(const QString &id);
+    void setBackendPluginDir(const QString &path);
     void setRemoteSpec(const QString &spec);
+    void setModelscopeRemoteSpec(const QString &spec);
     void setDownloadHub(int hub);
+
+    QString activeBackendLabel() const;
 
     TaskId submitDownloadModel(TaskPriority priority = TaskPriority::Interactive);
     TaskId submitLoadModel(TaskPriority priority = TaskPriority::Interactive);
@@ -28,6 +33,7 @@ public:
     bool isModelLoaded() const;
 
 public slots:
+    void initializeBackend();
     void processNext();
     void downloadModel();
     void loadModel();
@@ -43,7 +49,7 @@ public slots:
 signals:
     void translateTaskStarted(quint64 task_id);
     void statusChanged(const QString &message, bool busy);
-    void modelLoadFinished(bool success, const QString &error_message);
+    void modelLoadFinished(bool success, const QString &error_message, const QString &backend_label);
     void modelUnloadFinished();
     void downloadProgress(qint64 downloaded_bytes, qint64 total_bytes, double speed_bps, double eta_seconds);
     void downloadFinished(bool success);

@@ -105,13 +105,26 @@ TEST(DownloadResolveUrl, HuggingFaceDefaultRevision) {
         "https://huggingface.co/owner/repo/resolve/main/file.gguf");
 }
 
-TEST(DownloadResolveUrl, ModelScopeDefaultRevision) {
+TEST(DownloadResolveUrl, ModelScopeUsesApiEndpoint) {
     DownloadSpec spec;
     spec.repo = "owner/repo";
     spec.filename = "file.gguf";
     EXPECT_EQ(
         download_resolve_url(spec, ModelHub::ModelScope),
-        "https://www.modelscope.cn/models/owner/repo/resolve/master/file.gguf");
+        "https://www.modelscope.cn/api/v1/models/owner/repo/repo?FilePath=file.gguf");
+}
+
+TEST(DownloadResolveUrl, ModelScopeUsesDedicatedRepoWhenProvided) {
+    DownloadSpec spec;
+    spec.repo = "tencent/Hy-MT2-1.8B-GGUF";
+    spec.modelscope_repo = "Tencent-Hunyuan/Hy-MT2-1.8B-GGUF";
+    spec.filename = "Hy-MT2-1.8B-Q4_K_M.gguf";
+    EXPECT_EQ(
+        download_resolve_url(spec, ModelHub::ModelScope),
+        "https://www.modelscope.cn/api/v1/models/Tencent-Hunyuan/Hy-MT2-1.8B-GGUF/repo?FilePath=Hy-MT2-1.8B-Q4_K_M.gguf");
+    EXPECT_EQ(
+        download_resolve_url(spec, ModelHub::HuggingFace),
+        "https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF/resolve/main/Hy-MT2-1.8B-Q4_K_M.gguf");
 }
 
 TEST(DownloadResolveUrl, HonorsCustomRevision) {

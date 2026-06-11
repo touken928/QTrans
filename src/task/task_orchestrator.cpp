@@ -2,7 +2,12 @@
 
 #include "log/component.h"
 #include "log/logger.h"
+#include "model/inference_backend.h"
+#include "model/inference_resolver.h"
+#include "model/model_catalog.h"
+#include "model/runtime_capabilities.h"
 #include "network/download.h"
+#include "translation/hymt.h"
 
 #include <stdexcept>
 
@@ -26,9 +31,38 @@ void TaskOrchestrator::set_model_path(const std::string &path) {
     model_path_ = path;
 }
 
+void TaskOrchestrator::set_model_id(const std::string &id) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    model_id_ = id;
+}
+
+void TaskOrchestrator::set_backend_plugin_dir(const std::filesystem::path &plugin_dir) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    backend_plugin_dir_ = plugin_dir;
+}
+
+void TaskOrchestrator::initialize_backend() {
+    std::filesystem::path plugin_dir;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        plugin_dir = backend_plugin_dir_;
+    }
+    Hymt::ensure_backend(plugin_dir);
+}
+
+std::string TaskOrchestrator::active_backend_label() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return inference_backend_label(model_config_.active_backend);
+}
+
 void TaskOrchestrator::set_remote_spec(const std::string &spec) {
     std::lock_guard<std::mutex> lock(mutex_);
     remote_spec_ = spec;
+}
+
+void TaskOrchestrator::set_modelscope_remote_spec(const std::string &spec) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    modelscope_remote_spec_ = spec;
 }
 
 void TaskOrchestrator::set_download_hub(int hub) {
@@ -53,6 +87,14 @@ DownloadSpec TaskOrchestrator::make_download_spec_unlocked() const {
     if (!download_parse_spec(remote_spec_, spec)) {
         throw std::runtime_error("invalid remote spec: " + remote_spec_);
     }
+
+    if (!modelscope_remote_spec_.empty()) {
+        DownloadSpec modelscope_spec{};
+        if (download_parse_spec(modelscope_remote_spec_, modelscope_spec)) {
+            spec.modelscope_repo = modelscope_spec.repo;
+        }
+    }
+
     return spec;
 }
 
@@ -270,10 +312,31 @@ void TaskOrchestrator::execute_task(Task task) {
                 emit_status("Loading model into memory", true);
                 const auto &payload = std::get<LoadModelPayload>(task.payload);
 
-                TranslationModelConfig config{};
+                std::filesystem::path plugin_dir;
+                std::string model_id;
                 {
                     std::lock_guard<std::mutex> lock(mutex_);
-                    config = model_config_;
+                    plugin_dir = backend_plugin_dir_;
+                    model_id = model_id_;
+                }
+
+                Hymt::ensure_backend(plugin_dir);
+
+                const ModelCatalogEntry *entry = find_model_by_id(model_id);
+                if (entry == nullptr) {
+                    throw std::runtime_error("unknown model id: " + model_id);
+                }
+
+                const RuntimeCapabilities &caps = RuntimeCapabilities::instance();
+                const std::optional<ResolvedInference> resolved = resolve_inference(*entry, caps);
+                if (!resolved.has_value()) {
+                    throw std::runtime_error(unavailable_reason(*entry, caps));
+                }
+
+                TranslationModelConfig config = make_translation_config(*resolved);
+                {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    model_config_ = config;
                 }
 
                 engine_.load(payload.model_path, config);

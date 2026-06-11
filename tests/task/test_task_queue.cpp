@@ -18,8 +18,8 @@ Task make_download() {
     task.kind = TaskKind::DownloadModel;
     task.priority = TaskPriority::Normal;
     DownloadSpec spec;
-    spec.repo = "AngelSlim/Hy-MT2-1.8B-1.25Bit-GGUF";
-    spec.filename = "Hy-MT2-1.8B-1.25Bit.gguf";
+    spec.repo = "Tencent-Hunyuan/Hy-MT2-1.8B-GGUF";
+    spec.filename = "Hy-MT2-1.8B-Q4_K_M.gguf";
     task.payload = DownloadModelPayload{"/tmp/model.gguf", spec};
     return task;
 }

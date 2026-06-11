@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>在本机运行 <a href="https://huggingface.co/AngelSlim/Hy-MT2-1.8B-1.25Bit-GGUF">Hy-MT</a> 翻译模型的 LLM 软件，可自动下载权重并在 CPU 上完成推理。</strong>
+  <strong>在本机运行 <a href="https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF">Hy-MT</a> 翻译模型的 LLM 软件，可自动下载权重；GPU 推理后端静态链入（Windows x64 为 Vulkan，macOS ARM64 为 Metal）。</strong>
 </p>
 
 <p align="center">
@@ -33,9 +33,8 @@
 预编译二进制可在 [Releases](https://github.com/touken928/QTrans/releases) 页面获取：
 
 - `QTrans-<版本>-macos-arm64` — macOS ARM64
-- `QTrans-<版本>-mingw-x64.zip` — Windows x64（内含 `QTrans.exe` 及 OpenMP 运行库 DLL）
-
-下载对应平台的压缩包。Windows 请解压后运行 `QTrans.exe`；macOS 上如需请先赋予可执行权限，然后运行。首次使用请打开 **Model** 页面下载模型，再点击 **Load**。
+- `QTrans-<版本>-mingw-x64.zip` — Windows x64（`QTrans.exe` + `libomp.dll`）
+下载对应平台的压缩包。Windows 解压后直接运行 `QTrans.exe`；macOS 上如需请先赋予可执行权限，然后运行。首次使用请打开 **Model** 页面下载模型，再点击 **Load**。默认模型为 **Q4**。
 
 ## 从源码构建
 
@@ -53,7 +52,7 @@
 cmake --preset arm64-osx-release
 cmake --build --preset arm64-osx-release
 
-# Windows MinGW x64（Release）
+# Windows MinGW x64（Release，Vulkan GPU）
 cmake --preset x64-mingw-release
 cmake --build --preset x64-mingw-release
 

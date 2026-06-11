@@ -2,7 +2,9 @@
 
 #include "app/string_bridge.h"
 #include "app/widget_utils.h"
+#include "model/inference_resolver.h"
 #include "model/model_catalog.h"
+#include "model/runtime_capabilities.h"
 
 #include <QComboBox>
 #include <QFormLayout>
@@ -10,6 +12,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSignalBlocker>
+#include <QStandardItemModel>
 #include <QVBoxLayout>
 
 ModelPage::ModelPage(QWidget *parent)
@@ -76,6 +79,14 @@ void ModelPage::setSettings(const AppPaths &paths, const AppSettings &settings) 
     const int model_index = model_combo_->findData(qtrans::app::from_utf8(settings_.model_id));
     model_combo_->setCurrentIndex(model_index >= 0 ? model_index : 0);
     models_dir_edit_->setText(qtrans::app::from_utf8(settings_.effectiveModelsDir(paths_)));
+
+    updateModelAvailability();
+}
+
+void ModelPage::setRuntimeCapabilities(const RuntimeCapabilities &caps) {
+    has_runtime_caps_ = true;
+    runtime_caps_ = &caps;
+    updateModelAvailability();
 }
 
 void ModelPage::applyTo(AppSettings &settings) const {
@@ -91,6 +102,55 @@ void ModelPage::setBusy(bool busy) {
 void ModelPage::setModelLoaded(bool loaded) {
     model_loaded_ = loaded;
     updateActions();
+}
+
+void ModelPage::updateModelAvailability() {
+    if (!has_runtime_caps_ || runtime_caps_ == nullptr) {
+        return;
+    }
+
+    const QSignalBlocker block_combo(model_combo_);
+    for (int index = 0; index < model_combo_->count(); ++index) {
+        const std::string model_id = qtrans::app::to_utf8(model_combo_->itemData(index).toString());
+        const ModelCatalogEntry *entry = find_model_by_id(model_id);
+        if (entry == nullptr) {
+            model_combo_->setItemData(index, 0, Qt::UserRole - 1);
+            continue;
+        }
+
+        const bool available = static_cast<bool>(resolve_inference(*entry, *runtime_caps_));
+        const QStandardItemModel *model = qobject_cast<QStandardItemModel *>(model_combo_->model());
+        if (model != nullptr) {
+            QStandardItem *item = model->item(index);
+            if (item != nullptr) {
+                item->setEnabled(available);
+            }
+        }
+        if (!available) {
+            const QString reason = qtrans::app::from_utf8(unavailable_reason(*entry, *runtime_caps_));
+            model_combo_->setItemData(index, reason, Qt::ToolTipRole);
+        } else {
+            model_combo_->setItemData(index, QVariant{}, Qt::ToolTipRole);
+        }
+    }
+
+    const int current_index = model_combo_->currentIndex();
+    if (current_index >= 0) {
+        const QStandardItemModel *model = qobject_cast<QStandardItemModel *>(model_combo_->model());
+        if (model != nullptr) {
+            const QStandardItem *item = model->item(current_index);
+            if (item != nullptr && !item->isEnabled()) {
+                for (int index = 0; index < model_combo_->count(); ++index) {
+                    const QStandardItem *candidate = model->item(index);
+                    if (candidate != nullptr && candidate->isEnabled()) {
+                        model_combo_->setCurrentIndex(index);
+                        applyTo(settings_);
+                        break;
+                    }
+                }
+            }
+        }
+    }
 }
 
 void ModelPage::updateActions() {

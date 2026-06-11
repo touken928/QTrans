@@ -13,6 +13,7 @@ enum class ModelHub {
 struct DownloadSpec {
     ModelHub hub = ModelHub::Auto;
     std::string repo;
+    std::string modelscope_repo;
     std::string filename;
     std::string revision;
 };

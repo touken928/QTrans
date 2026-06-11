@@ -29,16 +29,28 @@ file(WRITE "${LLAMA_CONFIG}" "${LLAMA_CONFIG_CONTENTS}")
 
 string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "dynamic" BUILD_SHARED_LIBS)
 
-set(GGML_OPENMP_OPTIONS -DGGML_OPENMP:BOOL=ON)
+vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
+    FEATURES
+        vulkan  GGML_VULKAN
+)
+
+# GGML_CPU=ON is required even for GPU inference (n_gpu_layers=-1); upstream cannot load
+# models without a CPU backend. See https://github.com/ggml-org/llama.cpp/issues/12346
+if(TARGET_TRIPLET MATCHES "osx")
+    set(GGML_METAL ON)
+else()
+    set(GGML_METAL OFF)
+endif()
 
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS
         -DBUILD_SHARED_LIBS=${BUILD_SHARED_LIBS}
-        ${GGML_OPENMP_OPTIONS}
+        -DGGML_OPENMP:BOOL=ON
         -DGGML_CCACHE=OFF
-        -DGGML_VULKAN=OFF
-        -DGGML_METAL=OFF
+        -DGGML_CPU=ON
+        -DGGML_METAL=${GGML_METAL}
+        ${FEATURE_OPTIONS}
         -DGGML_NATIVE=OFF
         -DLLAMA_USE_SYSTEM_GGML=OFF
         -DLLAMA_ALL_WARNINGS=OFF

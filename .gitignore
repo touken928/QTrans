@@ -1,5 +1,6 @@
 build/
 CMakeUserPresets.json
+triplets/
 .vscode/
 *.user
 .DS_Store

@@ -1,3 +1,4 @@
+#include "model/platform_profile.h"
 #include "storage/app_paths.h"
 #include "storage/settings.h"
 
@@ -58,7 +59,7 @@ TEST_F(AppSettingsTest, LoadOnMissingFileKeepsDefaults) {
     EXPECT_EQ(settings.target_language, "Chinese");
     EXPECT_TRUE(settings.wordselect_enabled);
     EXPECT_TRUE(settings.models_dir.empty());
-    EXPECT_EQ(settings.model_id, default_model()->id);
+    EXPECT_EQ(settings.model_id, default_model_id_for_platform());
 }
 
 TEST_F(AppSettingsTest, SaveAndLoadRoundTrip) {
@@ -164,8 +165,9 @@ TEST_F(AppSettingsTest, EffectiveModelsDirAbsoluteUsedAsIs) {
 TEST_F(AppSettingsTest, EffectiveModelPathJoinsSelectedModelFilename) {
     AppSettings s;
     s.models_dir = "/abs/models";
+    s.model_id = "hymt2-q4";
     const std::string path = s.effectiveModelPath(paths_);
-    EXPECT_EQ(path, std::string("/abs/models/") + default_model()->filename);
+    EXPECT_EQ(path, std::string("/abs/models/") + find_model_by_id("hymt2-q4")->filename);
 }
 
 TEST_F(AppSettingsTest, SetEffectiveModelsDirClearsWhenMatchingDefault) {
@@ -227,7 +229,7 @@ TEST_F(AppSettingsTest, LegacyModelPathMigrationSetsModelsDir) {
     AppSettings s;
     s.load(paths_);
     EXPECT_EQ(s.models_dir, "/legacy/dir");
-    EXPECT_EQ(s.model_id, default_model()->id);
+    EXPECT_EQ(s.model_id, "hymt2-q4");
 }
 
 TEST_F(AppSettingsTest, LegacyModelPathMigrationPreservesExistingModelsDir) {

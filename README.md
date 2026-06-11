@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>An LLM translator that runs <a href="https://huggingface.co/AngelSlim/Hy-MT2-1.8B-1.25Bit-GGUF">Hy-MT</a> models locally, downloads weights automatically, and performs inference on the CPU.</strong>
+  <strong>An LLM translator that runs <a href="https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF">Hy-MT</a> models locally, downloads weights automatically, and performs GPU inference with statically linked backends (Vulkan on Windows x64, Metal on macOS ARM64).</strong>
 </p>
 
 <p align="center">
@@ -33,9 +33,8 @@
 Prebuilt binaries are available on the [Releases](https://github.com/touken928/QTrans/releases) page:
 
 - `QTrans-<version>-macos-arm64` — macOS ARM64
-- `QTrans-<version>-mingw-x64.zip` — Windows x64 (contains `QTrans.exe` and OpenMP runtime DLLs)
-
-Download the archive for your platform. On Windows, unzip and run `QTrans.exe`. On macOS, make the app executable if needed, then run it. On first launch, open **Model**, download the model, and click **Load**.
+- `QTrans-<version>-mingw-x64.zip` — Windows x64 (`QTrans.exe` + `libomp.dll`)
+Download the archive for your platform. On Windows, unzip and run `QTrans.exe`. On macOS, make the app executable if needed, then run it. On first launch, open **Model**, download the model, and click **Load**. Default model: **Q4** on all supported platforms.
 
 ## Build from Source
 
@@ -53,7 +52,7 @@ Download the archive for your platform. On Windows, unzip and run `QTrans.exe`. 
 cmake --preset arm64-osx-release
 cmake --build --preset arm64-osx-release
 
-# Windows MinGW x64 (Release)
+# Windows MinGW x64 (Release, Vulkan GPU)
 cmake --preset x64-mingw-release
 cmake --build --preset x64-mingw-release
 

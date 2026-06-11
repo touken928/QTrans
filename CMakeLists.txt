@@ -15,11 +15,27 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
+if(DEFINED VCPKG_TARGET_TRIPLET AND VCPKG_TARGET_TRIPLET MATCHES "^x64-mingw")
+    set(QTRANS_MULTI_BACKEND_VALUE 1)
+else()
+    set(QTRANS_MULTI_BACKEND_VALUE 0)
+endif()
+
+if(DEFINED VCPKG_TARGET_TRIPLET AND VCPKG_TARGET_TRIPLET MATCHES "osx")
+    set(QTRANS_GPU_METAL_VALUE 1)
+else()
+    set(QTRANS_GPU_METAL_VALUE 0)
+endif()
+
 add_library(qtrans_engine STATIC
     src/storage/app_paths.cpp
     src/storage/settings.cpp
+    src/model/inference_backend.cpp
+    src/model/inference_resolver.cpp
     src/model/model_catalog.cpp
     src/model/model_files.cpp
+    src/model/platform_profile.cpp
+    src/model/runtime_capabilities.cpp
     src/network/download.cpp
     src/text/utf8.cpp
     src/text/utf8_stream_buffer.cpp
@@ -53,6 +69,14 @@ target_link_libraries(qtrans_engine PUBLIC
 target_compile_definitions(qtrans_engine PUBLIC
     $<$<CONFIG:Release>:SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_WARN>
 )
+
+if(QTRANS_MULTI_BACKEND_VALUE)
+    target_compile_definitions(qtrans_engine PUBLIC QTRANS_MULTI_BACKEND)
+endif()
+
+if(QTRANS_GPU_METAL_VALUE)
+    target_compile_definitions(qtrans_engine PUBLIC QTRANS_GPU_METAL)
+endif()
 
 set(QTRANS_SOURCES_COMMON
     src/app/string_bridge.cpp

@@ -28,7 +28,7 @@ git push origin v0.2.1
 | 平台 | 文件名示例 |
 |------|------------|
 | macOS ARM64 | `QTrans-<version>-macos-arm64`（可执行文件） |
-| Windows x64 | `QTrans-<version>-mingw-x64.zip`（含 `QTrans.exe` 与 OpenMP 等 DLL） |
+| Windows x64 | `QTrans-<version>-mingw-x64.zip`（`QTrans.exe` + `libomp.dll`） |
 
 ## Workflow 结构
 

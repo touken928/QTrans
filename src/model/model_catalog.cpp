@@ -6,11 +6,13 @@ namespace {
 
 const ModelCatalogEntry k_models[] = {
     {
-        "hymt2-125bit",
-        "Hy-MT2-1.8B (1.25Bit)",
-        "Hy-MT2-1.8B-1.25Bit.gguf",
-        "AngelSlim/Hy-MT2-1.8B-1.25Bit-GGUF/Hy-MT2-1.8B-1.25Bit.gguf",
+        "hymt2-q4",
+        "Hy-MT2-1.8B (Q4)",
+        "Hy-MT2-1.8B-Q4_K_M.gguf",
+        "tencent/Hy-MT2-1.8B-GGUF/Hy-MT2-1.8B-Q4_K_M.gguf",
+        "Tencent-Hunyuan/Hy-MT2-1.8B-GGUF/Hy-MT2-1.8B-Q4_K_M.gguf",
         2,
+        {InferenceBackend::GpuVulkan, InferenceBackend::GpuMetal},
     },
 };
 
