@@ -27,11 +27,4 @@ struct TranslatorOptions {
     float repeat_penalty = 1.05f;
 };
 
-struct PromptOptions {
-    // Empty means use Hy-MT default templates.
-    std::string user_prompt_template;
-    std::string chat_prompt_template;
-    std::string system_prompt;
-};
-
 }  // namespace qtrans::core

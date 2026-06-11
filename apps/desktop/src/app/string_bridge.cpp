@@ -1,4 +1,4 @@
-#include "ui/string_bridge.h"
+#include "app/string_bridge.h"
 
 #include <QByteArray>
 

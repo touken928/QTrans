@@ -2,6 +2,7 @@
 
 #include "qtrans/core/cancellation.h"
 #include "qtrans/core/options.h"
+#include "qtrans/core/translation_model.h"
 #include "qtrans/core/translator.h"
 #include "qtrans/core/types.h"
 
@@ -27,7 +28,7 @@ public:
 
     bool is_loaded() const;
 
-    void load(const std::string &model_path, const qtrans::core::TranslatorOptions &config);
+    void load(std::unique_ptr<qtrans::core::ITranslationModel> model);
     void unload();
 
     TranslateStepResult translate(

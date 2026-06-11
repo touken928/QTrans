@@ -16,7 +16,8 @@
 - `core/src/runtime/local_runtime.*` wraps local llama-cpp inference; macOS uses Metal and Windows x64 uses Vulkan through vcpkg llama-cpp.
 - `core/src/runtime/remote_runtime.*` calls OpenAI/Anthropic-compatible single-turn translation APIs using curl privately inside `qtrans_core`.
 - `Translator` and `ITranslationRuntime` are the shared runtime abstraction; keep local and network model behavior consistent through this path.
-- Model downloads stay in `apps/desktop/src/network/`; do not move download UI/task behavior into `core/`.
+- Model downloads stay in `apps/desktop/src/services/download/`; do not move download UI/task behavior into `core/`.
+- Desktop layout: `catalog/` (metadata), `models/local/` (per-model adapters), `inference/` (backend resolution), `services/` (download/engine/task), `app/` (entry + string_bridge + task_service), `ui/` (widgets only), `wordselect/`, `storage/`, `log/`.
 - Qt string conversion belongs at `apps/desktop/src/app/string_bridge.*`; do not add `QString` to core or lower app-independent code.
 - `TaskService` runs on a worker `QThread`; UI changes should cross via Qt signals/slots, not direct worker-to-widget calls.
 

@@ -25,6 +25,8 @@ public:
     void unload() override;
     bool is_loaded() const override;
 
+    void set_prompt_formatter(PromptFormatterPtr formatter) override;
+
     std::string translate(
         const std::string &text,
         const std::string &target_language,

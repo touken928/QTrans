@@ -1,8 +1,8 @@
 #include "ui/widgets/wordselect_page.h"
 #include "ui/theme.h"
-#include "ui/string_bridge.h"
+#include "app/string_bridge.h"
 #include "ui/widget_utils.h"
-#include "model/language_list.h"
+#include "catalog/language_list.h"
 
 #include <QCheckBox>
 #include <QComboBox>

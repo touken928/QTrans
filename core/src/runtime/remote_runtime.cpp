@@ -1,7 +1,5 @@
 #include "remote_runtime.h"
 
-#include "text/language_names.h"
-
 #include <curl/curl.h>
 
 #include <spdlog/spdlog.h>
@@ -107,32 +105,11 @@ std::string parse_anthropic_response(const std::string &body) {
     return text;
 }
 
-// ── Prompt builder (same as local runtime) ────────────────────────────────
-
-bool contains_chinese(const std::string &text) {
-    for (size_t i = 0; i < text.size();) {
-        const unsigned char b = static_cast<unsigned char>(text[i]);
-        if (b >= 0xE0 && b <= 0xEF && i + 2 < text.size()) {
-            const uint32_t cp = ((b & 0x0F) << 12) |
-                                ((static_cast<unsigned char>(text[i + 1]) & 0x3F) << 6) |
-                                (static_cast<unsigned char>(text[i + 2]) & 0x3F);
-            if (cp >= 0x4E00 && cp <= 0x9FFF) return true;
-            i += 3;
-        } else {
-            ++i;
-        }
+const PromptFormatter &require_prompt_formatter(const PromptFormatterPtr &formatter) {
+    if (formatter == nullptr || !formatter->is_configured()) {
+        throw std::runtime_error("prompt formatter is not configured");
     }
-    return false;
-}
-
-std::string build_user_prompt(const std::string &text, const std::string &target_language) {
-    if (target_language == "Auto")
-        return "Translate the following segment:\n\n" + text;
-    if (contains_chinese(text) && !is_chinese_language_name(target_language))
-        return "将以下文本翻译为" + translation_chinese_name(target_language) +
-               "，注意只需要输出翻译后的结果，不要额外解释：\n\n" + text;
-    return "Translate the following segment into " + target_language +
-           ", without additional explanation.\n\n" + text;
+    return *formatter;
 }
 
 std::string build_openai_body(const std::string &model,
@@ -233,6 +210,7 @@ std::string curl_post(const std::string &url,
 struct RemoteRuntime::Impl {
     RemoteModelConfig remote_config;
     TranslatorOptions config;
+    PromptFormatterPtr prompt_formatter_;
     bool loaded_ = false;
 };
 
@@ -266,6 +244,10 @@ bool RemoteRuntime::is_loaded() const {
     return impl_->loaded_;
 }
 
+void RemoteRuntime::set_prompt_formatter(PromptFormatterPtr formatter) {
+    impl_->prompt_formatter_ = std::move(formatter);
+}
+
 std::string RemoteRuntime::translate(
     const std::string &text,
     const std::string &target_language,
@@ -276,7 +258,8 @@ std::string RemoteRuntime::translate(
     if (should_cancel && should_cancel())
         throw std::runtime_error("translation cancelled");
 
-    const std::string user_prompt = build_user_prompt(text, target_language);
+    const PromptFormatter &formatter = require_prompt_formatter(impl_->prompt_formatter_);
+    const std::string user_prompt = formatter.build_user_prompt(text, target_language);
     const auto &remote = impl_->remote_config;
 
     std::string api_url;

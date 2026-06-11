@@ -1,6 +1,6 @@
-#include "model/model_catalog.h"
-#include "model/platform_profile.h"
-#include "model/runtime_capabilities.h"
+#include "catalog/model_catalog.h"
+#include "inference/platform_profile.h"
+#include "inference/runtime_capabilities.h"
 
 #include <gtest/gtest.h>
 

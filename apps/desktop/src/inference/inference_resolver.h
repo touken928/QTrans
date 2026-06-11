@@ -1,8 +1,8 @@
 #pragma once
 
-#include "model/inference_backend.h"
-#include "model/model_catalog.h"
-#include "model/runtime_capabilities.h"
+#include "inference/inference_backend.h"
+#include "catalog/model_catalog.h"
+#include "inference/runtime_capabilities.h"
 
 #include <optional>
 #include <string>

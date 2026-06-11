@@ -1,4 +1,4 @@
-#include "ui/single_instance.h"
+#include "app/single_instance.h"
 
 #include <QDir>
 #include <QLockFile>

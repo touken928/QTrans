@@ -1,6 +1,7 @@
 #pragma once
 
 #include "qtrans/core/options.h"
+#include "qtrans/core/prompt_formatter.h"
 #include "qtrans/core/types.h"
 
 #include <filesystem>
@@ -39,6 +40,8 @@ public:
 
     virtual void unload() = 0;
     virtual bool is_loaded() const = 0;
+
+    virtual void set_prompt_formatter(PromptFormatterPtr formatter) = 0;
 
     virtual std::string translate(
         const std::string &text,

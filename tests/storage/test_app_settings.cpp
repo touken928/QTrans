@@ -1,4 +1,4 @@
-#include "model/platform_profile.h"
+#include "inference/platform_profile.h"
 #include "storage/app_paths.h"
 #include "storage/settings.h"
 

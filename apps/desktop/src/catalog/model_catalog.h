@@ -1,6 +1,6 @@
 #pragma once
 
-#include "model/inference_backend.h"
+#include "inference/inference_backend.h"
 
 #include <string>
 #include <vector>
