@@ -114,9 +114,10 @@ TranslateStepResult InferenceEngine::run_translate_pipeline(
         return make_failure("model is not loaded");
     }
 
-    auto should_cancel = cancel_token != nullptr
-                             ? cancel_token->checker()
-                             : std::function<bool()>();
+    std::function<bool()> should_cancel;
+    if (cancel_token != nullptr) {
+        should_cancel = cancel_token->checker();
+    }
 
     if (on_reset) on_reset(false);
 
