@@ -41,9 +41,13 @@ QLabel *makeStatusBadge(const QString &text, const QString &dot_color,
 }
 
 void setCardSelected(QWidget *card, bool selected) {
-    card->setProperty("selected", selected);
-    card->style()->unpolish(card);
-    card->style()->polish(card);
+    if (selected) {
+        card->setStyleSheet(
+            QStringLiteral("QFrame#modelCard { border: 2px solid %1; }")
+                .arg(Theme::Color::primary));
+    } else {
+        card->setStyleSheet(QString{});
+    }
 }
 
 }  // namespace

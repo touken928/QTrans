@@ -172,10 +172,10 @@ QString menuQss() {
         .arg(C::surface)
         .arg(C::border)
         .arg(Theme::Radius::sm)
+        .arg(C::textDisabled)
         .arg(Theme::Space::xs)
         .arg(Theme::Radius::xs)
-        .arg(C::selection)
-        .arg(C::textDisabled);
+        .arg(C::selection);
 }
 
 // -- Text inputs (QLineEdit, QPlainTextEdit) ---------------------------------
@@ -566,10 +566,7 @@ QString applicationStyleSheet() {
                "QFrame#modelCard:hover {"
                "  border-color: %12;"
                "}"
-               "QFrame#modelCard[selected=\"true\"] {"
-               "  border-color: %12;"
-               "  background-color: %13;"
-               "}"
+
                "QLabel#modelCardName {"
                "  font-size: %14px;"
                "  font-weight: bold;"
@@ -596,7 +593,6 @@ QString applicationStyleSheet() {
                .arg(C::surface)
                .arg(Theme::Radius::md)
                .arg(C::primary)
-               .arg(C::hover)
                .arg(Theme::Font::xl)
                .arg(S::md)
                .arg(Theme::Font::md)
