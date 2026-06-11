@@ -244,7 +244,7 @@ QString applicationStyleSheet() {
             background-color: #ffffff;
         }
         QCheckBox::indicator:checked {
-            background-color: #0071e3;
+            background-color: #e8f0fe;
             border-color: #0071e3;
         }
         QCheckBox:disabled {

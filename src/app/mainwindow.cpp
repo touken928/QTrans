@@ -112,6 +112,7 @@ MainWindow::MainWindow(
     syncLanguagesToSettings();
 
     wordselect_page_->setEnabled(settings_.wordselect_enabled);
+    wordselect_page_->setCloseToTray(settings_.close_to_tray);
     wordselect_page_->setTargetLanguage(qtrans::app::from_utf8(settings_.wordselect_target_language));
     wordselect_page_->setHotkey(hotkeyStr);
     wordselect_page_->setAutoCloseMs(settings_.auto_close_ms);
@@ -139,9 +140,13 @@ void MainWindow::bringToForeground() {
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {
-    Q_UNUSED(event);
-    hide();
-    event->ignore();
+    if (settings_.close_to_tray) {
+        hide();
+        event->ignore();
+    } else {
+        event->accept();
+        QCoreApplication::quit();
+    }
 }
 
 void MainWindow::showEvent(QShowEvent *event) {
@@ -206,11 +211,13 @@ void MainWindow::syncLanguagesToSettings() {
 
 void MainWindow::onWordSelectSettingsChanged() {
     const bool enabled = wordselect_page_->isEnabled();
+    const bool close_to_tray = wordselect_page_->isCloseToTray();
     const QString target = wordselect_page_->targetLanguage();
     const QString hotkey = wordselect_page_->hotkey();
     const int auto_close = wordselect_page_->autoCloseMs();
 
     settings_.wordselect_enabled = enabled;
+    settings_.close_to_tray = close_to_tray;
     settings_.wordselect_target_language = qtrans::app::to_utf8(target);
     settings_.hotkey = qtrans::app::to_utf8(hotkey);
     settings_.auto_close_ms = auto_close;
