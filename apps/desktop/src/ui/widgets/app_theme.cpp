@@ -1,146 +1,469 @@
 #include "ui/widgets/app_theme.h"
+#include "ui/theme.h"
 
 #include <QWidget>
 
 // =============================================================================
-// Shared sub-stylesheets (reused by both applicationStyleSheet and modalPanel)
+// Internal helpers — each returns a QSS fragment for one widget family.
+// All dimensions / colours come from Theme:: so that a single change in
+// theme.h propagates everywhere.
 // =============================================================================
 
 namespace {
 
 // -- Buttons ----------------------------------------------------------------
 
-QString buttonStyleSheet() {
-    return QStringLiteral(R"(
-        QPushButton {
-            background-color: #ffffff;
-            border: 1px solid #d1d1d6;
-            border-radius: 6px;
-            padding: 8px 14px;
-            color: #1d1d1f;
-        }
-        QPushButton:hover {
-            background-color: #f2f2f7;
-            border-color: #c7c7cc;
-        }
-        QPushButton:pressed {
-            background-color: #e5e5ea;
-        }
-        QPushButton:disabled {
-            color: #aeaeb2;
-            background-color: #f2f2f7;
-        }
-        QPushButton#primaryButton,
-        QPushButton#translateButton {
-            background-color: #0071e3;
-            border-color: #0071e3;
-            color: #ffffff;
-            font-weight: bold;
-        }
-        QPushButton#primaryButton:hover,
-        QPushButton#translateButton:hover {
-            background-color: #0077ed;
-            border-color: #0077ed;
-        }
-        QPushButton#primaryButton:pressed,
-        QPushButton#translateButton:pressed {
-            background-color: #006edb;
-            border-color: #006edb;
-            color: #ffffff;
-        }
-        QPushButton#primaryButton:disabled,
-        QPushButton#translateButton:disabled {
-            background-color: #aeaeb2;
-            border-color: #aeaeb2;
-            color: #ffffff;
-        }
-    )");
+QString buttonQss() {
+    namespace C = Theme::Color;
+    return QStringLiteral(
+               "QPushButton {"
+               "  background-color: %1;"
+               "  border: 1px solid %2;"
+               "  border-radius: %3px;"
+               "  padding: 8px 16px;"
+               "  color: %4;"
+               "  font-size: %5px;"
+               "}"
+               "QPushButton:hover {"
+               "  background-color: %6;"
+               "  border-color: %7;"
+               "}"
+               "QPushButton:pressed {"
+               "  background-color: %8;"
+               "}"
+               "QPushButton:disabled {"
+               "  color: %9;"
+               "  background-color: %6;"
+               "  border-color: %2;"
+               "}"
+               "QPushButton#primaryButton,"
+               "QPushButton#translateButton {"
+               "  background-color: %10;"
+               "  border-color: %10;"
+               "  color: %11;"
+               "  font-weight: bold;"
+               "}"
+               "QPushButton#primaryButton:hover,"
+               "QPushButton#translateButton:hover {"
+               "  background-color: %12;"
+               "  border-color: %12;"
+               "}"
+               "QPushButton#primaryButton:pressed,"
+               "QPushButton#translateButton:pressed {"
+               "  background-color: %13;"
+               "  border-color: %13;"
+               "  color: %11;"
+               "}"
+               "QPushButton#primaryButton:disabled,"
+               "QPushButton#translateButton:disabled {"
+               "  background-color: %9;"
+               "  border-color: %9;"
+               "  color: %11;"
+               "}"
+               "QPushButton#dangerButton {"
+               "  background-color: transparent;"
+               "  border-color: %14;"
+               "  color: %14;"
+               "}"
+               "QPushButton#dangerButton:hover {"
+               "  background-color: %14;"
+               "  color: %11;"
+               "}")
+        .arg(C::surface)
+        .arg(C::border)
+        .arg(Theme::Radius::sm)
+        .arg(C::text)
+        .arg(Theme::Font::md)
+        .arg(C::hover)
+        .arg(C::border)
+        .arg(C::pressed)
+        .arg(C::textDisabled)
+        .arg(C::primary)
+        .arg(C::surface)
+        .arg(C::primaryHover)
+        .arg(C::primaryPressed)
+        .arg(C::danger);
 }
 
 // -- Drop-down lists --------------------------------------------------------
 
-QString comboBoxStyleSheet() {
-    return QStringLiteral(R"(
-        QComboBox {
-            background-color: #ffffff;
-            border: 1px solid #d1d1d6;
-            border-radius: 6px;
-            padding: 6px 30px 6px 10px;
-            min-height: 24px;
-            color: #1d1d1f;
-        }
-        QComboBox:disabled {
-            color: #aeaeb2;
-            background-color: #f2f2f7;
-        }
-        QComboBox::drop-down {
-            subcontrol-origin: padding;
-            subcontrol-position: top right;
-            width: 26px;
-            border: none;
-            border-left: 1px solid #d1d1d6;
-            border-top-right-radius: 6px;
-            border-bottom-right-radius: 6px;
-            background-color: #ffffff;
-        }
-        QComboBox::down-arrow {
-            width: 12px;
-            height: 12px;
-        }
-        QComboBox QAbstractItemView {
-            background-color: #ffffff;
-            color: #1d1d1f;
-            border: 1px solid #d1d1d6;
-            border-radius: 6px;
-            padding: 4px;
-            outline: none;
-            selection-background-color: #0071e3;
-            selection-color: #ffffff;
-        }
-        QComboBox QAbstractItemView::item {
-            min-height: 30px;
-            padding: 6px 12px;
-            color: #1d1d1f;
-            background-color: #ffffff;
-        }
-        QComboBox QAbstractItemView::item:selected {
-            background-color: #0071e3;
-            color: #ffffff;
-        }
-        QComboBox QAbstractItemView::item:hover {
-            background-color: #f2f2f7;
-            color: #1d1d1f;
-        }
-    )");
+QString comboBoxQss() {
+    namespace C = Theme::Color;
+    return QStringLiteral(
+               "QComboBox {"
+               "  background-color: %1;"
+               "  border: 1px solid %2;"
+               "  border-radius: %3px;"
+               "  padding: 6px 30px 6px 10px;"
+               "  min-height: 24px;"
+               "  color: %4;"
+               "  font-size: %5px;"
+               "}"
+               "QComboBox:disabled {"
+               "  color: %6;"
+               "  background-color: %7;"
+               "}"
+               "QComboBox::drop-down {"
+               "  subcontrol-origin: padding;"
+               "  subcontrol-position: top right;"
+               "  width: 26px;"
+               "  border: none;"
+               "  border-left: 1px solid %2;"
+               "  border-top-right-radius: %3px;"
+               "  border-bottom-right-radius: %3px;"
+               "  background-color: %1;"
+               "}"
+               "QComboBox QAbstractItemView {"
+               "  background-color: %1;"
+               "  color: %4;"
+               "  border: 1px solid %2;"
+               "  border-radius: %3px;"
+               "  padding: %8px;"
+               "  outline: none;"
+               "  selection-background-color: %9;"
+               "  selection-color: %1;"
+               "}"
+               "QComboBox QAbstractItemView::item {"
+               "  min-height: 30px;"
+               "  padding: 6px 12px;"
+               "}"
+               "QComboBox QAbstractItemView::item:hover {"
+               "  background-color: %7;"
+               "  color: %4;"
+               "}")
+        .arg(C::surface)
+        .arg(C::border)
+        .arg(Theme::Radius::sm)
+        .arg(C::text)
+        .arg(Theme::Font::md)
+        .arg(C::textDisabled)
+        .arg(C::hover)
+        .arg(Theme::Space::xs)
+        .arg(C::selection);
 }
 
-// -- Context menus ---------------------------------------------------------
+// -- Context menus ----------------------------------------------------------
 
-QString menuStyleSheet() {
-    return QStringLiteral(R"(
-        QMenu {
-            background-color: #ffffff;
-            border: 1px solid #d1d1d6;
-            border-radius: 6px;
-            padding: 4px;
-        }
-        QMenu::item {
-            padding: 6px 24px;
-            border-radius: 4px;
-        }
-        QMenu::item:selected {
-            background-color: #0071e3;
-            color: #ffffff;
-        }
-        QMenu::item:disabled {
-            color: #aeaeb2;
-        }
-        QMenu::separator {
-            height: 1px;
-            background-color: #d1d1d6;
-            margin: 4px 8px;
-        }
-    )");
+QString menuQss() {
+    namespace C = Theme::Color;
+    return QStringLiteral(
+               "QMenu {"
+               "  background-color: %1;"
+               "  border: 1px solid %2;"
+               "  border-radius: %3px;"
+               "  padding: %8px;"
+               "}"
+               "QMenu::item {"
+               "  padding: 6px 24px;"
+               "  border-radius: %9px;"
+               "}"
+               "QMenu::item:selected {"
+               "  background-color: %10;"
+               "  color: %1;"
+               "}"
+               "QMenu::item:disabled {"
+               "  color: %7;"
+               "}"
+               "QMenu::separator {"
+               "  height: 1px;"
+               "  background-color: %2;"
+               "  margin: 4px 8px;"
+               "}")
+        .arg(C::surface)
+        .arg(C::border)
+        .arg(Theme::Radius::sm)
+        .arg(C::textDisabled)
+        .arg(Theme::Space::xs)
+        .arg(Theme::Radius::xs)
+        .arg(C::selection);
+}
+
+// -- Text inputs (QLineEdit, QPlainTextEdit) ---------------------------------
+
+QString inputQss() {
+    namespace C = Theme::Color;
+    return QStringLiteral(
+               "QLineEdit, QPlainTextEdit {"
+               "  background-color: %1;"
+               "  border: 1px solid %2;"
+               "  border-radius: %3px;"
+               "  padding: 8px 10px;"
+               "  selection-background-color: %4;"
+               "  selection-color: %1;"
+               "  color: %5;"
+               "  font-size: %6px;"
+               "}"
+               "QPlainTextEdit:focus {"
+               "  border-color: %4;"
+               "}"
+               "QLineEdit:focus {"
+               "  border-color: %4;"
+               "}")
+        .arg(C::surface)
+        .arg(C::border)
+        .arg(Theme::Radius::sm)
+        .arg(C::selection)
+        .arg(C::text)
+        .arg(Theme::Font::lg);
+}
+
+// -- Checkboxes -------------------------------------------------------------
+
+QString checkboxQss() {
+    namespace C = Theme::Color;
+    return QStringLiteral(
+               "QCheckBox {"
+               "  spacing: 8px;"
+               "  color: %4;"
+               "  font-size: %5px;"
+               "}"
+               "QCheckBox::indicator {"
+               "  width: 18px;"
+               "  height: 18px;"
+               "  border: 1px solid %3;"
+               "  border-radius: %6px;"
+               "  background-color: %1;"
+               "}"
+               "QCheckBox::indicator:checked {"
+               "  background-color: %2;"
+               "  border-color: %2;"
+               "}"
+               "QCheckBox:disabled {"
+               "  color: %3;"
+               "}")
+        .arg(C::surface)
+        .arg(C::primary)
+        .arg(C::textDisabled)
+        .arg(C::text)
+        .arg(Theme::Font::md)
+        .arg(Theme::Radius::xs);
+}
+
+// -- Spin boxes -------------------------------------------------------------
+
+QString spinBoxQss() {
+    namespace C = Theme::Color;
+    return QStringLiteral(
+               "QSpinBox {"
+               "  background-color: %1;"
+               "  border: 1px solid %2;"
+               "  border-radius: %3px;"
+               "  padding: 6px 8px;"
+               "  min-height: 24px;"
+               "  color: %4;"
+               "  font-size: %5px;"
+               "}"
+               "QSpinBox:disabled {"
+               "  color: %6;"
+               "  background-color: %7;"
+               "}"
+               "QSpinBox::up-button, QSpinBox::down-button {"
+               "  subcontrol-origin: border;"
+               "  width: 24px;"
+               "  border: none;"
+               "}")
+        .arg(C::surface)
+        .arg(C::border)
+        .arg(Theme::Radius::sm)
+        .arg(C::text)
+        .arg(Theme::Font::md)
+        .arg(C::textDisabled)
+        .arg(C::hover);
+}
+
+// -- Progress bars ----------------------------------------------------------
+
+QString progressBarQss() {
+    namespace C = Theme::Color;
+    return QStringLiteral(
+               "QProgressBar {"
+               "  background-color: %1;"
+               "  border: 1px solid %2;"
+               "  border-radius: %3px;"
+               "  text-align: center;"
+               "  min-height: 8px;"
+               "}"
+               "QProgressBar::chunk {"
+               "  background-color: %4;"
+               "  border-radius: %5px;"
+               "}")
+        .arg(C::progressTrack)
+        .arg(C::border)
+        .arg(Theme::Radius::sm)
+        .arg(C::primary)
+        .arg(Theme::Radius::sm);
+}
+
+// -- Scroll bars ------------------------------------------------------------
+
+QString scrollBarQss() {
+    namespace C = Theme::Color;
+    return QStringLiteral(
+               "QScrollBar:vertical {"
+               "  background-color: transparent;"
+               "  width: 8px;"
+               "  margin: 0;"
+               "}"
+               "QScrollBar::handle:vertical {"
+               "  background-color: %1;"
+               "  border-radius: 4px;"
+               "  min-height: 30px;"
+               "}"
+               "QScrollBar::handle:vertical:hover {"
+               "  background-color: %2;"
+               "}"
+               "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {"
+               "  height: 0;"
+               "}"
+               "QScrollBar:horizontal {"
+               "  background-color: transparent;"
+               "  height: 8px;"
+               "  margin: 0;"
+               "}"
+               "QScrollBar::handle:horizontal {"
+               "  background-color: %1;"
+               "  border-radius: 4px;"
+               "  min-width: 30px;"
+               "}"
+               "QScrollBar::handle:horizontal:hover {"
+               "  background-color: %2;"
+               "}"
+               "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {"
+               "  width: 0;"
+               "}")
+        .arg(C::border)
+        .arg(C::textDisabled);
+}
+
+// -- Splitter ---------------------------------------------------------------
+
+QString splitterQss() {
+    return QStringLiteral(
+        "QSplitter::handle {"
+        "  background-color: transparent;"
+        "}"
+        "QSplitter::handle:horizontal {"
+        "  width: 16px;"
+        "}"
+        "QSplitter::handle:horizontal:hover {"
+        "  background-color: transparent;"
+        "}");
+}
+
+// -- Sidebar nav buttons ----------------------------------------------------
+
+QString navButtonQss() {
+    namespace C = Theme::Color;
+    return QStringLiteral(
+               "QPushButton#navButton {"
+               "  text-align: left;"
+               "  padding: 10px 16px;"
+               "  border: none;"
+               "  border-radius: %1px;"
+               "  background-color: transparent;"
+               "  color: %2;"
+               "  font-size: %3px;"
+               "  icon-size: 16px;"
+               "}"
+               "QPushButton#navButton:hover {"
+               "  background-color: %4;"
+               "}"
+               "QPushButton#navButton:checked {"
+               "  background-color: %5;"
+               "  color: %6;"
+               "  font-weight: bold;"
+               "}")
+        .arg(Theme::Radius::md)
+        .arg(Theme::Color::text)
+        .arg(Theme::Font::lg)
+        .arg(C::hover)
+        .arg(C::primary)
+        .arg(C::surface);
+}
+
+// -- Popup window (word-select result) --------------------------------------
+
+QString popupFrameQss() {
+    namespace C = Theme::Color;
+    return QStringLiteral(
+               "QFrame#popupFrame {"
+               "  background-color: %1;"
+               "  border: 1px solid %2;"
+               "  border-radius: %3px;"
+               "}"
+               "QLabel#popupResult {"
+               "  color: %4;"
+               "  font-size: %5px;"
+               "  padding: 2px 0;"
+               "  background: transparent;"
+               "}"
+               "QLabel#popupStatus {"
+               "  color: %6;"
+               "  font-size: %7px;"
+               "  padding: 2px 0;"
+               "  background: transparent;"
+               "}"
+               "QPushButton#popupCopyBtn {"
+               "  background-color: transparent;"
+               "  border: none;"
+               "  color: %8;"
+               "  font-size: %7px;"
+               "  padding: 0 6px;"
+               "}"
+               "QPushButton#popupCopyBtn:hover {"
+               "  color: %9;"
+               "}"
+               "QPushButton#popupCloseBtn {"
+               "  background-color: transparent;"
+               "  border: none;"
+               "  color: %10;"
+               "  font-size: %7px;"
+               "  padding: 0;"
+               "}"
+               "QPushButton#popupCloseBtn:hover {"
+               "  color: %11;"
+               "}")
+        .arg(C::surface)
+        .arg(C::border)
+        .arg(Theme::Radius::md)
+        .arg(C::text)
+        .arg(Theme::Font::lg)
+        .arg(C::textMuted)
+        .arg(Theme::Font::xs)
+        .arg(C::primary)
+        .arg(C::primaryHover)
+        .arg(C::danger)
+        .arg(C::dangerHover);
+}
+
+// -- Modal dialog panel -----------------------------------------------------
+
+QString modalPanelQss() {
+    namespace C = Theme::Color;
+    return QStringLiteral(
+               "QFrame#modalPanel {"
+               "  background-color: %1;"
+               "  border: 1px solid %2;"
+               "  border-radius: %3px;"
+               "  color: %4;"
+               "}"
+               "QFrame#modalPanel QLabel {"
+               "  background-color: transparent;"
+               "  color: %4;"
+               "}"
+               "QFrame#modalPanel QLabel#mutedLabel {"
+               "  color: %5;"
+               "}"
+               "QFrame#modalPanel QLabel#titleLabel {"
+               "  font-size: %6px;"
+               "  font-weight: bold;"
+               "}")
+        .arg(C::surface)
+        .arg(C::border)
+        .arg(Theme::Radius::lg)
+        .arg(C::text)
+        .arg(C::textMuted)
+        .arg(Theme::Font::title);
 }
 
 }  // namespace
@@ -151,161 +474,154 @@ QString menuStyleSheet() {
 
 namespace AppTheme {
 
-// -- Main application stylesheet -------------------------------------------
-// Order: root > window > sidebar > form controls > checkboxes > labels >
-//        scrollbars > progress > structural widgets > navigation buttons.
-// Sub-stylesheets are appended in the same logical order.
-// --------------------------------------------------------------------------
-
 QString applicationStyleSheet() {
-    return QStringLiteral(R"(
-        /* ---- Root defaults ---- */
-        QWidget {
-            color: #1d1d1f;
-        }
+    namespace C = Theme::Color;
+    namespace S = Theme::Space;
 
-        /* ---- Window & page structure ---- */
-        QMainWindow, QWidget#centralRoot {
-            background-color: #f5f5f7;
-        }
-        QStackedWidget {
-            background-color: transparent;
-        }
-        QSplitter::handle {
-            background-color: transparent;
-        }
+    return QStringLiteral(
+               "/* ── Root ── */"
+               "QWidget {"
+               "  color: %1;"
+               "}"
+               ""
+               "/* ── Window structure ── */"
+               "QMainWindow, QWidget#centralRoot {"
+               "  background-color: %2;"
+               "}"
+               "QStackedWidget {"
+               "  background-color: transparent;"
+               "}"
+               ""
+               "/* ── Sidebar ── */"
+               "QWidget#sidebar {"
+               "  background-color: %3;"
+               "  border-right: 1px solid %4;"
+               "}"
+               "QLabel#sidebarLogo {"
+               "  background: transparent;"
+               "  margin: 0;"
+               "  padding: 0;"
+               "}"
+               ""
+               "/* ── Labels ── */"
+               "QLabel#panelLabel {"
+               "  color: %5;"
+               "  font-size: %6px;"
+               "  font-weight: bold;"
+               "  padding-bottom: %7px;"
+               "}"
+               "QLabel#statusLabel {"
+               "  color: %5;"
+               "  font-size: %6px;"
+               "}"
+               "QLabel#sectionTitle {"
+               "  font-size: %8px;"
+               "  font-weight: bold;"
+               "  color: %9;"
+               "  padding: 0;"
+               "}"
+               ""
+               "/* ── Page content cards ── */"
+               "QFrame#pageCard {"
+               "  background-color: %10;"
+               "  border: 1px solid %4;"
+               "  border-radius: %11px;"
+               "}"
+               ""
+               "/* ── Toolbar ── */"
+               "QWidget#translateToolbar {"
+               "  background-color: %10;"
+               "  border: 1px solid %4;"
+               "  border-radius: %11px;"
+               "  padding: %15px;"
+               "}"
+               ""
+               "/* ── Footer ── */"
+               "QWidget#pageFooter {"
+               "  background-color: transparent;"
+               "  padding-top: %7px;"
+               "}"
+               ""
+               "/* ── Form rows ── */"
+               "QLabel#formLabel {"
+               "  color: %9;"
+               "  font-size: %16px;"
+               "  font-weight: bold;"
+               "  padding: 0;"
+               "}"
+               ""
+               "/* ── Settings sections ── */"
+               "QFrame#settingsSection {"
+               "  background-color: %10;"
+               "  border: 1px solid %4;"
+               "  border-radius: %11px;"
+               "}"
+               ""
+               "/* ── Model cards ── */"
+               "QFrame#modelCard {"
+               "  background-color: %10;"
+               "  border: 1px solid %4;"
+               "  border-radius: %11px;"
+               "}"
+               "QFrame#modelCard:hover {"
+               "  border-color: %12;"
+               "}"
 
-        /* ---- Sidebar ---- */
-        QWidget#sidebar {
-            background-color: #ffffff;
-            border-right: 1px solid #d1d1d6;
-        }
-        QLabel#sidebarLogo {
-            background: transparent;
-            margin: 0;
-            padding: 0;
-        }
-        QPushButton#navButton {
-            text-align: left;
-            padding: 10px 14px;
-            border: none;
-            border-radius: 8px;
-            background-color: transparent;
-        }
-        QPushButton#navButton:hover {
-            background-color: #f2f2f7;
-        }
-        QPushButton#navButton:checked {
-            background-color: #0071e3;
-            color: #ffffff;
-            font-weight: bold;
-        }
-
-        /* ---- Text inputs ---- */
-        QLineEdit, QPlainTextEdit {
-            background-color: #ffffff;
-            border: 1px solid #d1d1d6;
-            border-radius: 6px;
-            padding: 8px;
-            selection-background-color: #0071e3;
-            selection-color: #ffffff;
-        }
-        QPlainTextEdit {
-            font-size: 14px;
-        }
-
-        /* ---- Numeric input ---- */
-        QSpinBox {
-            background-color: #ffffff;
-            border: 1px solid #d1d1d6;
-            border-radius: 6px;
-            padding: 6px 8px;
-            min-height: 24px;
-        }
-        QSpinBox:disabled {
-            color: #aeaeb2;
-            background-color: #f2f2f7;
-        }
-        QSpinBox::up-button, QSpinBox::down-button {
-            subcontrol-origin: border;
-            width: 24px;
-            border: none;
-        }
-
-        /* ---- Checkboxes ---- */
-        QCheckBox {
-            spacing: 8px;
-        }
-        QCheckBox::indicator {
-            width: 18px;
-            height: 18px;
-            border: 1px solid #aeaeb2;
-            border-radius: 4px;
-            background-color: #ffffff;
-        }
-        QCheckBox::indicator:checked {
-            background-color: #e8f0fe;
-            border-color: #0071e3;
-        }
-        QCheckBox:disabled {
-            color: #aeaeb2;
-        }
-
-        /* ---- Labels ---- */
-        QLabel#panelLabel,
-        QLabel#statusLabel,
-        QLabel#modelStatus,
-        QLabel#mutedLabel {
-            color: #6e6e73;
-        }
-
-        /* ---- Progress bars ---- */
-        QProgressBar {
-            background-color: #e5e5ea;
-            border: 1px solid #d1d1d6;
-            border-radius: 6px;
-            text-align: center;
-        }
-        QProgressBar::chunk {
-            background-color: #0071e3;
-            border-radius: 5px;
-        }
-    )") + buttonStyleSheet() +
-           comboBoxStyleSheet() + menuStyleSheet();
+               "QLabel#modelCardName {"
+               "  font-size: %14px;"
+               "  font-weight: bold;"
+               "  color: %9;"
+               "}"
+               "QLabel#modelCardFile {"
+               "  font-size: %6px;"
+               "  color: %5;"
+               "}"
+               ""
+               "/* ── Scroll area ── */"
+               "QWidget#modelCardsContainer {"
+               "  background-color: transparent;"
+               "}")
+               .arg(C::text)
+               .arg(C::bg)
+               .arg(C::sidebar)
+               .arg(C::border)
+               .arg(C::textMuted)
+               .arg(Theme::Font::sm)
+               .arg(S::xs)
+               .arg(Theme::Font::xl)
+               .arg(C::text)
+               .arg(C::surface)
+               .arg(Theme::Radius::md)
+               .arg(C::primary)
+               .arg(Theme::Font::xl)
+               .arg(S::md)
+               .arg(Theme::Font::md)
+           // Sub-stylesheets — order does not matter for the final cascade.
+           + buttonQss() + comboBoxQss() + menuQss() + inputQss() + checkboxQss() + spinBoxQss() + progressBarQss() + scrollBarQss() + splitterQss() + navButtonQss();
 }
-
-// -- Modal overlay ---------------------------------------------------------
 
 QString modalOverlayStyleSheet() {
-    return QStringLiteral("#modalOverlay { background-color: rgba(60, 60, 67, 0.28); }");
+    return QStringLiteral("#modalOverlay { background-color: %1; }")
+        .arg(Theme::Color::overlay);
 }
-
-// -- Modal dialog panel ----------------------------------------------------
 
 QString modalPanelStyleSheet() {
-    return QStringLiteral(R"(
-        QFrame#modalPanel {
-            background-color: #ffffff;
-            border: 1px solid #d1d1d6;
-            border-radius: 12px;
-            color: #1d1d1f;
-        }
-        QFrame#modalPanel QLabel {
-            background-color: transparent;
-            color: #1d1d1f;
-        }
-        QFrame#modalPanel QLabel#mutedLabel {
-            color: #6e6e73;
-        }
-    )") + buttonStyleSheet() +
-           comboBoxStyleSheet() + menuStyleSheet();
+    return modalPanelQss() + buttonQss() + comboBoxQss() + menuQss();
 }
 
-// -- Apply stylesheet to a widget and its children -------------------------
+QString popupWindowStyleSheet() {
+    return popupFrameQss();
+}
 
 void apply(QWidget *widget) {
     if (widget != nullptr) {
         widget->setStyleSheet(applicationStyleSheet());
+    }
+}
+
+void applyPopup(QWidget *widget) {
+    if (widget != nullptr) {
+        widget->setStyleSheet(popupWindowStyleSheet());
     }
 }
 

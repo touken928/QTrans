@@ -109,7 +109,7 @@ jobs:
         shell: pwsh
         run: |
           $version = $env:GITHUB_REF_NAME -replace '^v', ''
-          $binary = "build/$env:CMAKE_PRESET/QTrans.exe"
+          $binary = "build/$env:CMAKE_PRESET/apps/desktop/QTrans.exe"
           $objdump = "$env:LLVM_MINGW/bin/llvm-objdump.exe"
           $stage = "dist/QTrans-$version-$env:DIST_SUFFIX"
           $zip = "$stage.zip"

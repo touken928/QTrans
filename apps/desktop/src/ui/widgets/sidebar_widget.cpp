@@ -1,11 +1,10 @@
 #include "ui/widgets/sidebar_widget.h"
-
+#include "ui/theme.h"
 #include "ui/widgets/image_utils.h"
 
 #include <QButtonGroup>
 #include <QEvent>
 #include <QGuiApplication>
-#include <QHBoxLayout>
 #include <QImage>
 #include <QLabel>
 #include <QPushButton>
@@ -14,43 +13,45 @@
 #include <QVBoxLayout>
 #include <QWindow>
 
-namespace {
-
-constexpr int kSidebarWidth = 180;
-constexpr int kHorizontalMargin = 12;
-
-}  // namespace
-
 SidebarWidget::SidebarWidget(QWidget *parent)
     : QWidget(parent) {
     setObjectName(QStringLiteral("sidebar"));
-    setFixedWidth(kSidebarWidth);
+    setFixedWidth(Theme::Size::sidebarWidth);
 
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(kHorizontalMargin, 16, kHorizontalMargin, 16);
-    layout->setSpacing(8);
+    layout->setContentsMargins(Theme::Space::md, Theme::Space::xl,
+                               Theme::Space::md, Theme::Space::xl);
+    layout->setSpacing(Theme::Space::xs);
 
+    // ── Logo ──────────────────────────────────────────────────────────
     logo_label_ = new QLabel(this);
     logo_label_->setObjectName(QStringLiteral("sidebarLogo"));
     logo_label_->setAlignment(Qt::AlignCenter);
     logo_label_->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(logo_label_, 0, Qt::AlignHCenter);
-    layout->addSpacing(12);
+    layout->addSpacing(Theme::Space::lg);
 
-    translate_button_ = new QPushButton(QStringLiteral("Translate"), this);
+    // ── Nav items ─────────────────────────────────────────────────────
+    translate_button_ = new QPushButton(
+        QString(Theme::NavIcon::translate) + QStringLiteral("  Translate"), this);
     translate_button_->setObjectName(QStringLiteral("navButton"));
     translate_button_->setCheckable(true);
     translate_button_->setChecked(true);
+    translate_button_->setCursor(Qt::PointingHandCursor);
     layout->addWidget(translate_button_);
 
-    wordselect_button_ = new QPushButton(QStringLiteral("Word Select"), this);
+    wordselect_button_ = new QPushButton(
+        QString(Theme::NavIcon::wordSelect) + QStringLiteral("  Word Select"), this);
     wordselect_button_->setObjectName(QStringLiteral("navButton"));
     wordselect_button_->setCheckable(true);
+    wordselect_button_->setCursor(Qt::PointingHandCursor);
     layout->addWidget(wordselect_button_);
 
-    model_button_ = new QPushButton(QStringLiteral("Model"), this);
+    model_button_ = new QPushButton(
+        QString(Theme::NavIcon::model) + QStringLiteral("  Model"), this);
     model_button_->setObjectName(QStringLiteral("navButton"));
     model_button_->setCheckable(true);
+    model_button_->setCursor(Qt::PointingHandCursor);
     layout->addWidget(model_button_);
 
     auto *nav_group = new QButtonGroup(this);
@@ -94,7 +95,7 @@ void SidebarWidget::refreshLogo() {
         return;
     }
 
-    const int logo_width = qMax(1, width() - (kHorizontalMargin * 2));
+    const int logo_width = qMax(1, width() - (Theme::Space::md * 2));
     const QImage source(QStringLiteral(":/branding/logo.png"));
     if (source.isNull()) {
         logo_label_->setText(QStringLiteral("QTrans"));
@@ -102,7 +103,10 @@ void SidebarWidget::refreshLogo() {
     }
 
     const QImage cropped = trimNearSolidBorder(source);
-    const QPixmap pixmap = scaledPixmapForWidth(cropped, logo_width, currentDevicePixelRatio());
+    const QPixmap pixmap = scaledPixmapForWidth(cropped, logo_width,
+                                                (windowHandle() != nullptr ? windowHandle()->screen()
+                                                                           : QGuiApplication::primaryScreen())
+                                                    ->devicePixelRatio());
     if (pixmap.isNull()) {
         logo_label_->setText(QStringLiteral("QTrans"));
         return;
@@ -111,13 +115,4 @@ void SidebarWidget::refreshLogo() {
     logo_label_->clear();
     logo_label_->setPixmap(pixmap);
     logo_label_->setFixedSize(pixmap.size() / pixmap.devicePixelRatioF());
-}
-
-qreal SidebarWidget::currentDevicePixelRatio() const {
-    const QWindow *native_window = windowHandle();
-    const QScreen *screen = native_window != nullptr ? native_window->screen() : nullptr;
-    if (screen == nullptr) {
-        screen = QGuiApplication::primaryScreen();
-    }
-    return screen != nullptr ? screen->devicePixelRatio() : 1.0;
 }

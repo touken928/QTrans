@@ -4,7 +4,6 @@
 
 class QLabel;
 class QPushButton;
-class QScreen;
 
 class SidebarWidget : public QWidget {
     Q_OBJECT
@@ -24,7 +23,6 @@ protected:
 
 private:
     void refreshLogo();
-    qreal currentDevicePixelRatio() const;
 
     QLabel *logo_label_ = nullptr;
     QPushButton *translate_button_ = nullptr;

@@ -1,16 +1,10 @@
 #include "ui/widget_utils.h"
 
-#include "ui/widgets/app_theme.h"
-
 #include <QAbstractItemView>
 #include <QComboBox>
 #include <QFontMetrics>
 #include <QListView>
 #include <QtGlobal>
-
-QString comboBoxStyleSheet() {
-    return AppTheme::applicationStyleSheet();
-}
 
 namespace {
 

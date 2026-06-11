@@ -1,4 +1,5 @@
 #include "wordselect/popup_window.h"
+#include "ui/widgets/app_theme.h"
 
 #include <QApplication>
 #include <QClipboard>
@@ -14,7 +15,7 @@
 PopupWindow::PopupWindow(QWidget *parent)
     : QWidget(parent) {
     setWindowFlags(
-        Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::ToolTip | Qt::NoDropShadowWindowHint);
+        Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::ToolTip);
     setAttribute(Qt::WA_ShowWithoutActivating, true);
     setAttribute(Qt::WA_DeleteOnClose, false);
 
@@ -68,59 +69,11 @@ void PopupWindow::setupUI() {
     outerLayout->setContentsMargins(0, 0, 0, 0);
     outerLayout->addWidget(m_frame);
 
+    // Apply shared theme stylesheet instead of hardcoded QSS
+    AppTheme::applyPopup(this);
+
     connect(m_closeBtn, &QPushButton::clicked, this, &PopupWindow::onCloseClicked);
     connect(m_copyBtn, &QPushButton::clicked, this, &PopupWindow::onCopyClicked);
-
-    m_frame->setStyleSheet(QStringLiteral(R"(
-        QFrame#popupFrame {
-            background-color: #ffffff;
-            border: 1px solid #d1d1d6;
-            border-radius: 8px;
-        }
-    )"));
-
-    m_resultLabel->setStyleSheet(QStringLiteral(R"(
-        QLabel#popupResult {
-            color: #1d1d1f;
-            font-size: 14px;
-            padding: 2px 0px;
-        }
-    )"));
-
-    m_statusLabel->setStyleSheet(QStringLiteral(R"(
-        QLabel#popupStatus {
-            color: #6e6e73;
-            font-size: 11px;
-            padding: 2px 0px;
-        }
-    )"));
-
-    m_copyBtn->setStyleSheet(QStringLiteral(R"(
-        QPushButton#popupCopyBtn {
-            background-color: transparent;
-            border: none;
-            color: #0071e3;
-            font-size: 11px;
-            padding: 0px 6px;
-        }
-        QPushButton#popupCopyBtn:hover {
-            color: #0077ed;
-            text-decoration: underline;
-        }
-    )"));
-
-    m_closeBtn->setStyleSheet(QStringLiteral(R"(
-        QPushButton#popupCloseBtn {
-            background-color: transparent;
-            border: none;
-            color: #ff3b30;
-            font-size: 12px;
-            padding: 0px;
-        }
-        QPushButton#popupCloseBtn:hover {
-            color: #ff453a;
-        }
-    )"));
 }
 
 void PopupWindow::showLoading(const QString &sourceText) {
@@ -128,14 +81,6 @@ void PopupWindow::showLoading(const QString &sourceText) {
     m_isStreaming = true;
 
     m_resultLabel->setText(QStringLiteral("Translating\u2026"));
-    m_resultLabel->setStyleSheet(QStringLiteral(R"(
-        QLabel#popupResult {
-            color: #0071e3;
-            font-size: 14px;
-            padding: 2px 0px;
-        }
-    )"));
-
     m_statusLabel->setText(QStringLiteral("AI Translating\u2026"));
     m_copyBtn->setVisible(false);
 
@@ -161,15 +106,6 @@ void PopupWindow::finishStreaming() {
     if (!m_isStreaming) return;
 
     m_isStreaming = false;
-
-    m_resultLabel->setStyleSheet(QStringLiteral(R"(
-        QLabel#popupResult {
-            color: #1d1d1f;
-            font-size: 14px;
-            padding: 2px 0px;
-        }
-    )"));
-
     m_statusLabel->setText(QStringLiteral("AI Translate"));
     m_copyBtn->setVisible(true);
     adjustPopupSize();
@@ -180,14 +116,6 @@ void PopupWindow::showError(const QString &message) {
     m_isStreaming = false;
 
     m_resultLabel->setText(message);
-    m_resultLabel->setStyleSheet(QStringLiteral(R"(
-        QLabel#popupResult {
-            color: #ff3b30;
-            font-size: 13px;
-            padding: 2px 0px;
-        }
-    )"));
-
     m_statusLabel->setText(QStringLiteral("Error"));
     m_copyBtn->setVisible(false);
 

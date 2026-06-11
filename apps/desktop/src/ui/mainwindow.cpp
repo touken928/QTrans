@@ -75,10 +75,19 @@ MainWindow::MainWindow(
     switchPage(0);
 
     connect(sidebar_, &SidebarWidget::pageSelected, this, &MainWindow::onPageSelected);
-    connect(model_page_, &ModelPage::saveRequested, this, &MainWindow::onSaveModelSettings);
-    connect(model_page_, &ModelPage::loadModelRequested, this, &MainWindow::onLoadModelFromPage);
-    connect(model_page_, &ModelPage::unloadModelRequested, this, &MainWindow::onUnloadModelFromPage);
-    connect(model_page_, &ModelPage::deleteModelRequested, this, &MainWindow::onDeleteModel);
+    connect(model_page_, &ModelPage::loadModelRequested, this, [this](const QString &model_id) {
+        settings_.setSelectedModelId(qtrans::app::to_utf8(model_id));
+        applySettingsFromPage();
+        onLoadModelFromPage();
+    });
+    connect(model_page_, &ModelPage::unloadModelRequested, this, [this](const QString &model_id) {
+        if (model_id == loaded_model_id_ || model_id.isEmpty()) {
+            onUnloadModelFromPage();
+        }
+    });
+    connect(model_page_, &ModelPage::deleteModelRequested, this, [this](const QString &model_id) {
+        onDeleteModelForId(model_id);
+    });
     connect(model_page_, &ModelPage::modelEdited, this, &MainWindow::applySettingsFromPage);
     connect(translate_page_, &TranslatePage::translateRequested, this, &MainWindow::onTranslateRequested);
     connect(translate_page_, &TranslatePage::cancelRequested, this, &MainWindow::onCancelRequested);
@@ -180,6 +189,7 @@ void MainWindow::refreshModelPage() {
     model_page_->setRuntimeCapabilities(RuntimeCapabilities::instance());
     model_page_->setSettings(paths_, settings_);
     model_page_->setModelLoaded(model_loaded_);
+    model_page_->setLoadedModelId(loaded_model_id_);
 }
 
 void MainWindow::initializeInferenceBackend() {
@@ -275,7 +285,16 @@ void MainWindow::onUnloadModelFromPage() {
 }
 
 void MainWindow::onDeleteModel() {
-    const QString model_path = currentModelPath();
+    onDeleteModelForId(qtrans::app::from_utf8(settings_.model_id));
+}
+
+void MainWindow::onDeleteModelForId(const QString &model_id) {
+    const auto *entry = find_model_by_id(qtrans::app::to_utf8(model_id));
+    if (entry == nullptr) {
+        return;
+    }
+    const QString model_path = qtrans::app::from_utf8(
+        (std::filesystem::path(settings_.effectiveModelsDir(paths_)) / entry->filename).string());
 
     auto *msg = new QMessageBox(this);
     msg->setObjectName(QStringLiteral("alertPanel"));
@@ -299,6 +318,7 @@ void MainWindow::onDeleteModel() {
     }
 
     translate_page_->setStatus(QStringLiteral("Model file deleted."));
+    refreshModelPage();
 }
 
 void MainWindow::setUiBusy(bool busy) {
@@ -461,8 +481,10 @@ void MainWindow::onModelLoadFinished(
     const QString &error_message,
     const QString &backend_label) {
     model_loaded_ = success;
+    loaded_model_id_ = success ? qtrans::app::from_utf8(settings_.model_id) : QString{};
     translate_page_->setModelLoaded(success);
     model_page_->setModelLoaded(success);
+    model_page_->setLoadedModelId(loaded_model_id_);
     setUiBusy(busy_);
 
     if (success) {
@@ -485,8 +507,10 @@ void MainWindow::onModelLoadFinished(
 
 void MainWindow::onModelUnloadFinished() {
     model_loaded_ = false;
+    loaded_model_id_.clear();
     translate_page_->setModelLoaded(false);
     model_page_->setModelLoaded(false);
+    model_page_->setLoadedModelId({});
     setUiBusy(busy_);
 }
 

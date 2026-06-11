@@ -1,5 +1,5 @@
 #include "ui/widgets/translate_page.h"
-
+#include "ui/theme.h"
 #include "ui/string_bridge.h"
 #include "ui/widget_utils.h"
 #include "log/component.h"
@@ -10,14 +10,13 @@
 #include <QCheckBox>
 #include <QClipboard>
 #include <QComboBox>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSplitter>
-#include <QString>
 #include <QTextCursor>
-#include <QThread>
 #include <QVBoxLayout>
 
 namespace {
@@ -46,20 +45,27 @@ TranslatePage::TranslatePage(QWidget *parent)
     setObjectName(QStringLiteral("page"));
 
     auto *root = new QVBoxLayout(this);
-    root->setContentsMargins(16, 16, 16, 16);
-    root->setSpacing(10);
+    root->setContentsMargins(Theme::Space::xxl, Theme::Space::xxl,
+                             Theme::Space::xxl, Theme::Space::xxl);
+    root->setSpacing(Theme::Space::lg);
 
-    auto *toolbar = new QHBoxLayout();
+    // ── Toolbar (transparent, no card wrapper) ────────────────────────
+    auto *toolbar_layout = new QHBoxLayout();
+    toolbar_layout->setContentsMargins(0, 0, 0, 0);
+    toolbar_layout->setSpacing(Theme::Space::sm);
+
     source_lang_combo_ = new QComboBox(this);
     for (int i = 0; i < translation_language_count(); ++i) {
         source_lang_combo_->addItem(qtrans::app::from_utf8(translation_languages()[i].label));
     }
     source_lang_combo_->setCurrentIndex(defaultLanguageIndex("en"));
     configureComboBox(source_lang_combo_, 140);
-    toolbar->addWidget(source_lang_combo_);
+    toolbar_layout->addWidget(source_lang_combo_);
 
     swap_button_ = new QPushButton(QStringLiteral("Swap"), this);
-    toolbar->addWidget(swap_button_);
+    swap_button_->setCursor(Qt::PointingHandCursor);
+    swap_button_->setToolTip(QStringLiteral("Swap source and target languages"));
+    toolbar_layout->addWidget(swap_button_);
 
     target_lang_combo_ = new QComboBox(this);
     for (int i = 0; i < translation_language_count(); ++i) {
@@ -67,57 +73,73 @@ TranslatePage::TranslatePage(QWidget *parent)
     }
     target_lang_combo_->setCurrentIndex(defaultLanguageIndex("zh"));
     configureComboBox(target_lang_combo_, 140);
-    toolbar->addWidget(target_lang_combo_);
+    toolbar_layout->addWidget(target_lang_combo_);
 
     translate_button_ = new QPushButton(QStringLiteral("Translate"), this);
     translate_button_->setObjectName(QStringLiteral("translateButton"));
+    translate_button_->setCursor(Qt::PointingHandCursor);
     {
-        QPushButton width_probe(QStringLiteral("Stop"), this);
-        width_probe.setObjectName(translate_button_->objectName());
-        width_probe.setFont(translate_button_->font());
-        const int action_width = qMax(
-                                     translate_button_->sizeHint().width(),
-                                     width_probe.sizeHint().width()) +
-                                 16;
-        translate_button_->setFixedWidth(action_width);
+        QPushButton probe(QStringLiteral("Stop"), this);
+        probe.setObjectName(translate_button_->objectName());
+        probe.setFont(translate_button_->font());
+        const int w = qMax(translate_button_->sizeHint().width(),
+                           probe.sizeHint().width()) +
+                      16;
+        translate_button_->setFixedWidth(w);
     }
-    toolbar->addWidget(translate_button_);
-    toolbar->addStretch(1);
-    root->addLayout(toolbar);
+    toolbar_layout->addWidget(translate_button_);
+    toolbar_layout->addStretch(1);
 
+    root->addLayout(toolbar_layout);
+
+    // ── Splitter panels ───────────────────────────────────────────────
     splitter_ = new QSplitter(Qt::Horizontal, this);
-    splitter_->setHandleWidth(4);
+    splitter_->setHandleWidth(1);
     splitter_->setChildrenCollapsible(false);
 
+    // Source panel
     auto *source_panel = new QWidget(splitter_);
-    source_panel->setMinimumWidth(200);
-    auto *source_layout = new QVBoxLayout(source_panel);
-    source_layout->setContentsMargins(0, 0, 0, 0);
-    auto *source_label = new QLabel(QStringLiteral("Source"), source_panel);
-    source_label->setObjectName(QStringLiteral("panelLabel"));
-    source_layout->addWidget(source_label);
+    source_panel->setMinimumWidth(Theme::Size::minPanelWidth);
+    auto *src_layout = new QVBoxLayout(source_panel);
+    src_layout->setContentsMargins(0, 0, 0, 0);
+    src_layout->setSpacing(Theme::Space::sm);
+
+    auto *src_header = new QLabel(QStringLiteral("Source"), source_panel);
+    src_header->setObjectName(QStringLiteral("panelLabel"));
+    src_layout->addWidget(src_header);
+
     source_edit_ = new QPlainTextEdit(source_panel);
     source_edit_->setPlaceholderText(QStringLiteral("Enter text to translate..."));
-    source_layout->addWidget(source_edit_, 1);
+    source_edit_->setTabChangesFocus(true);
+    src_layout->addWidget(source_edit_, 1);
 
+    // Target panel
     auto *target_panel = new QWidget(splitter_);
-    target_panel->setMinimumWidth(200);
-    auto *target_layout = new QVBoxLayout(target_panel);
-    target_layout->setContentsMargins(0, 0, 0, 0);
-    auto *target_label = new QLabel(QStringLiteral("Target"), target_panel);
-    target_label->setObjectName(QStringLiteral("panelLabel"));
-    target_layout->addWidget(target_label);
+    target_panel->setMinimumWidth(Theme::Size::minPanelWidth);
+    auto *tgt_layout = new QVBoxLayout(target_panel);
+    tgt_layout->setContentsMargins(0, 0, 0, 0);
+    tgt_layout->setSpacing(Theme::Space::sm);
+
+    auto *tgt_header = new QLabel(QStringLiteral("Target"), target_panel);
+    tgt_header->setObjectName(QStringLiteral("panelLabel"));
+    tgt_layout->addWidget(tgt_header);
+
     target_edit_ = new QPlainTextEdit(target_panel);
     target_edit_->setReadOnly(true);
-    target_layout->addWidget(target_edit_, 1);
+    target_edit_->setTabChangesFocus(true);
+    tgt_layout->addWidget(target_edit_, 1);
 
+    // Back-translate panel
     back_panel_ = new QWidget(splitter_);
-    back_panel_->setMinimumWidth(200);
+    back_panel_->setMinimumWidth(Theme::Size::minPanelWidth);
     auto *back_layout = new QVBoxLayout(back_panel_);
     back_layout->setContentsMargins(0, 0, 0, 0);
-    auto *back_label = new QLabel(QStringLiteral("Back-translate"), back_panel_);
-    back_label->setObjectName(QStringLiteral("panelLabel"));
-    back_layout->addWidget(back_label);
+    back_layout->setSpacing(Theme::Space::sm);
+
+    auto *back_header = new QLabel(QStringLiteral("Back-translate"), back_panel_);
+    back_header->setObjectName(QStringLiteral("panelLabel"));
+    back_layout->addWidget(back_header);
+
     back_edit_ = new QPlainTextEdit(back_panel_);
     back_edit_->setReadOnly(true);
     back_layout->addWidget(back_edit_, 1);
@@ -130,28 +152,37 @@ TranslatePage::TranslatePage(QWidget *parent)
     splitter_->setStretchFactor(2, 1);
     root->addWidget(splitter_, 1);
 
-    auto *footer = new QHBoxLayout();
-    status_label_ = new QLabel(QStringLiteral("Ready"), this);
+    // ── Footer ────────────────────────────────────────────────────────
+    auto *footer = new QWidget(this);
+    footer->setObjectName(QStringLiteral("pageFooter"));
+
+    auto *footer_layout = new QHBoxLayout(footer);
+    footer_layout->setContentsMargins(0, 0, 0, 0);
+    footer_layout->setSpacing(Theme::Space::md);
+
+    status_label_ = new QLabel(QStringLiteral("Ready"), footer);
     status_label_->setObjectName(QStringLiteral("statusLabel"));
-    footer->addWidget(status_label_, 1);
+    footer_layout->addWidget(status_label_, 1);
 
-    clear_button_ = new QPushButton(QStringLiteral("Clear"), this);
-    copy_button_ = new QPushButton(QStringLiteral("Copy Result"), this);
-    footer->addWidget(clear_button_);
-    footer->addWidget(copy_button_);
+    clear_button_ = new QPushButton(QStringLiteral("Clear"), footer);
+    copy_button_ = new QPushButton(QStringLiteral("Copy Result"), footer);
+    footer_layout->addWidget(clear_button_);
+    footer_layout->addWidget(copy_button_);
 
-    back_translate_checkbox_ = new QCheckBox(QStringLiteral("Back-translate"), this);
+    back_translate_checkbox_ = new QCheckBox(QStringLiteral("Back-translate"), footer);
     back_translate_checkbox_->setToolTip(
         QStringLiteral("Show a third column and translate the result back to the source language"));
-    footer->addWidget(back_translate_checkbox_);
+    footer_layout->addWidget(back_translate_checkbox_);
 
-    root->addLayout(footer);
+    root->addWidget(footer);
 
+    // ── Connections ───────────────────────────────────────────────────
     connect(translate_button_, &QPushButton::clicked, this, &TranslatePage::onTranslate);
     connect(swap_button_, &QPushButton::clicked, this, &TranslatePage::onSwap);
     connect(clear_button_, &QPushButton::clicked, this, &TranslatePage::onClear);
     connect(copy_button_, &QPushButton::clicked, this, &TranslatePage::onCopyResult);
-    connect(back_translate_checkbox_, &QCheckBox::toggled, this, &TranslatePage::onBackTranslateToggled);
+    connect(back_translate_checkbox_, &QCheckBox::toggled,
+            this, &TranslatePage::onBackTranslateToggled);
     connect(source_lang_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &TranslatePage::languageChanged);
     connect(target_lang_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -169,7 +200,8 @@ void TranslatePage::setBusy(bool busy) {
 
 void TranslatePage::setTranslating(bool translating) {
     translating_ = translating;
-    translate_button_->setText(translating ? QStringLiteral("Stop") : QStringLiteral("Translate"));
+    translate_button_->setText(translating ? QStringLiteral("Stop")
+                                           : QStringLiteral("Translate"));
     source_edit_->setReadOnly(busy_ || translating_);
     updateActions();
 }
@@ -257,7 +289,6 @@ void TranslatePage::onSwap() {
     const int source_index = source_lang_combo_->currentIndex();
     source_lang_combo_->setCurrentIndex(target_lang_combo_->currentIndex());
     target_lang_combo_->setCurrentIndex(source_index);
-
     emit languageChanged();
 }
 
