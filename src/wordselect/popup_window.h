@@ -4,6 +4,7 @@
 
 class QFrame;
 class QLabel;
+class QPushButton;
 class QTimer;
 class QVBoxLayout;
 
@@ -31,6 +32,10 @@ protected:
     void leaveEvent(QEvent *event) override;
     void hideEvent(QHideEvent *event) override;
 
+private slots:
+    void onCloseClicked();
+    void onCopyClicked();
+
 private:
     void setupUI();
     void positionNearCursor();
@@ -40,6 +45,8 @@ private:
     QFrame *m_frame = nullptr;
     QLabel *m_resultLabel = nullptr;
     QLabel *m_statusLabel = nullptr;
+    QPushButton *m_closeBtn = nullptr;
+    QPushButton *m_copyBtn = nullptr;
     QTimer *m_closeTimer = nullptr;
 
     int m_autoCloseMs = 5000;

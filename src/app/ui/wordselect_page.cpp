@@ -41,6 +41,9 @@ WordSelectPage::WordSelectPage(QWidget *parent)
     enabled_checkbox_ = new QCheckBox(QStringLiteral("Enable word selection translation"), this);
     form->addRow(enabled_checkbox_);
 
+    close_to_tray_checkbox_ = new QCheckBox(QStringLiteral("Close to system tray instead of quitting"), this);
+    form->addRow(close_to_tray_checkbox_);
+
     target_lang_combo_ = new QComboBox(this);
     for (int i = 0; i < translation_language_count(); ++i) {
         target_lang_combo_->addItem(qtrans::app::from_utf8(translation_languages()[i].label));
@@ -66,6 +69,7 @@ WordSelectPage::WordSelectPage(QWidget *parent)
     form->addRow(QStringLiteral("Auto-close popup after:"), auto_close_spin_);
 
     connect(enabled_checkbox_, &QCheckBox::toggled, this, &WordSelectPage::settingsChanged);
+    connect(close_to_tray_checkbox_, &QCheckBox::toggled, this, &WordSelectPage::settingsChanged);
     connect(target_lang_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &WordSelectPage::settingsChanged);
     connect(hotkey_edit_, &QLineEdit::editingFinished, this, &WordSelectPage::settingsChanged);
@@ -75,6 +79,10 @@ WordSelectPage::WordSelectPage(QWidget *parent)
 
 void WordSelectPage::setEnabled(bool enabled) {
     enabled_checkbox_->setChecked(enabled);
+}
+
+void WordSelectPage::setCloseToTray(bool close_to_tray) {
+    close_to_tray_checkbox_->setChecked(close_to_tray);
 }
 
 void WordSelectPage::setTargetLanguage(const QString &model_name) {
@@ -94,6 +102,10 @@ void WordSelectPage::setAutoCloseMs(int ms) {
 
 bool WordSelectPage::isEnabled() const {
     return enabled_checkbox_->isChecked();
+}
+
+bool WordSelectPage::isCloseToTray() const {
+    return close_to_tray_checkbox_->isChecked();
 }
 
 QString WordSelectPage::targetLanguage() const {

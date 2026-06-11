@@ -18,6 +18,7 @@ struct AppSettings {
     std::string wordselect_source_language = "English";
     std::string wordselect_target_language = "Auto";
     bool wordselect_enabled = true;
+    bool close_to_tray = true;
 
     void load(const AppPaths &paths);
     void save(const AppPaths &paths) const;

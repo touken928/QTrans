@@ -1,9 +1,12 @@
 #include "wordselect/popup_window.h"
 
 #include <QApplication>
+#include <QClipboard>
 #include <QCursor>
 #include <QFrame>
+#include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
 #include <QScreen>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -40,13 +43,33 @@ void PopupWindow::setupUI() {
     m_resultLabel->setTextFormat(Qt::PlainText);
     layout->addWidget(m_resultLabel);
 
+    auto *bottomRow = new QHBoxLayout();
+    bottomRow->setContentsMargins(0, 0, 0, 0);
+    bottomRow->setSpacing(8);
+
     m_statusLabel = new QLabel(QStringLiteral(""), m_frame);
     m_statusLabel->setObjectName(QStringLiteral("popupStatus"));
-    layout->addWidget(m_statusLabel);
+    bottomRow->addWidget(m_statusLabel, 1);
+
+    m_copyBtn = new QPushButton(QStringLiteral("Copy"), m_frame);
+    m_copyBtn->setObjectName(QStringLiteral("popupCopyBtn"));
+    m_copyBtn->setFixedHeight(22);
+    m_copyBtn->setVisible(false);
+    bottomRow->addWidget(m_copyBtn);
+
+    m_closeBtn = new QPushButton(QStringLiteral("\u2715"), m_frame);
+    m_closeBtn->setObjectName(QStringLiteral("popupCloseBtn"));
+    m_closeBtn->setFixedSize(22, 22);
+    bottomRow->addWidget(m_closeBtn);
+
+    layout->addLayout(bottomRow);
 
     auto *outerLayout = new QVBoxLayout(this);
     outerLayout->setContentsMargins(0, 0, 0, 0);
     outerLayout->addWidget(m_frame);
+
+    connect(m_closeBtn, &QPushButton::clicked, this, &PopupWindow::onCloseClicked);
+    connect(m_copyBtn, &QPushButton::clicked, this, &PopupWindow::onCopyClicked);
 
     m_frame->setStyleSheet(QStringLiteral(R"(
         QFrame#popupFrame {
@@ -71,6 +94,33 @@ void PopupWindow::setupUI() {
             padding: 2px 0px;
         }
     )"));
+
+    m_copyBtn->setStyleSheet(QStringLiteral(R"(
+        QPushButton#popupCopyBtn {
+            background-color: transparent;
+            border: none;
+            color: #0071e3;
+            font-size: 11px;
+            padding: 0px 6px;
+        }
+        QPushButton#popupCopyBtn:hover {
+            color: #0077ed;
+            text-decoration: underline;
+        }
+    )"));
+
+    m_closeBtn->setStyleSheet(QStringLiteral(R"(
+        QPushButton#popupCloseBtn {
+            background-color: transparent;
+            border: none;
+            color: #ff3b30;
+            font-size: 12px;
+            padding: 0px;
+        }
+        QPushButton#popupCloseBtn:hover {
+            color: #ff453a;
+        }
+    )"));
 }
 
 void PopupWindow::showLoading(const QString &sourceText) {
@@ -87,6 +137,7 @@ void PopupWindow::showLoading(const QString &sourceText) {
     )"));
 
     m_statusLabel->setText(QStringLiteral("AI Translating\u2026"));
+    m_copyBtn->setVisible(false);
 
     positionNearCursor();
     show();
@@ -120,6 +171,7 @@ void PopupWindow::finishStreaming() {
     )"));
 
     m_statusLabel->setText(QStringLiteral("AI Translate"));
+    m_copyBtn->setVisible(true);
     adjustPopupSize();
     startAutoClose();
 }
@@ -137,6 +189,8 @@ void PopupWindow::showError(const QString &message) {
     )"));
 
     m_statusLabel->setText(QStringLiteral("Error"));
+    m_copyBtn->setVisible(false);
+
     positionNearCursor();
     show();
     startAutoClose();
@@ -152,6 +206,15 @@ int PopupWindow::autoCloseMs() const {
 
 bool PopupWindow::isStreaming() const {
     return m_isStreaming;
+}
+
+void PopupWindow::onCloseClicked() {
+    m_closeTimer->stop();
+    hide();
+}
+
+void PopupWindow::onCopyClicked() {
+    QApplication::clipboard()->setText(m_resultLabel->text());
 }
 
 void PopupWindow::enterEvent(QEnterEvent *event) {
