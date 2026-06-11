@@ -9,6 +9,8 @@
 #include "task/task_types.h"
 #include "translation/translation_model.h"
 
+class ModelProfile;
+
 #include <functional>
 #include <memory>
 #include <string>
@@ -28,7 +30,8 @@ public:
 
     bool is_loaded() const;
 
-    void load(const std::string &model_path, const TranslationModelConfig &config);
+    void load(const std::string &model_path, const TranslationModelConfig &config,
+              const ModelProfile &profile);
     void unload();
 
     TranslateStepResult translate(

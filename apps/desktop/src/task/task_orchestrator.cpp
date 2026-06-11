@@ -347,12 +347,15 @@ void TaskOrchestrator::execute_task(Task task) {
                 engine_.set_backend_options(backend_opts);
 
                 TranslationModelConfig config = make_translation_config(*resolved);
+                if (entry->profile == nullptr) {
+                    throw std::runtime_error("no profile for model: " + model_id);
+                }
                 {
                     std::lock_guard<std::mutex> lock(mutex_);
                     model_config_ = config;
                 }
 
-                engine_.load(payload.model_path, config);
+                engine_.load(payload.model_path, config, *entry->profile);
 
                 {
                     std::lock_guard<std::mutex> lock(mutex_);

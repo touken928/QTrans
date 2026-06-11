@@ -57,7 +57,8 @@ add_library(qtrans_engine STATIC
     apps/desktop/src/log/console_progress.cpp
     apps/desktop/src/translation/translation_languages.cpp
     apps/desktop/src/translation/translation_model.cpp
-    apps/desktop/src/translation/hymt.cpp
+    apps/desktop/src/translation/model_profile.cpp
+    apps/desktop/src/translation/local_model.cpp
     apps/desktop/src/translation/inference_engine.cpp
     apps/desktop/src/task/task_queue.cpp
     apps/desktop/src/task/task_orchestrator.cpp

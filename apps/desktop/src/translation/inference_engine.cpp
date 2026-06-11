@@ -46,7 +46,8 @@ bool InferenceEngine::is_loaded() const {
     return translator_ != nullptr && translator_->is_loaded();
 }
 
-void InferenceEngine::load(const std::string &model_path, const TranslationModelConfig &config) {
+void InferenceEngine::load(const std::string &model_path, const TranslationModelConfig &config,
+                           const ModelProfile & /*profile*/) {
     qtrans::core::TranslatorOptions opts;
     opts.n_ctx = config.n_ctx;
     opts.max_tokens = config.max_tokens;
