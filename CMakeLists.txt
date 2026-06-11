@@ -27,135 +27,15 @@ else()
     set(QTRANS_GPU_METAL_VALUE 0)
 endif()
 
-add_library(qtrans_engine STATIC
-    src/storage/app_paths.cpp
-    src/storage/settings.cpp
-    src/model/inference_backend.cpp
-    src/model/inference_resolver.cpp
-    src/model/model_catalog.cpp
-    src/model/model_files.cpp
-    src/model/platform_profile.cpp
-    src/model/runtime_capabilities.cpp
-    src/network/download.cpp
-    src/text/utf8.cpp
-    src/text/utf8_stream_buffer.cpp
-    src/text/sentence_splitter.cpp
-    src/text/chunker.cpp
-    src/log/init.cpp
-    src/log/logger.cpp
-    src/log/registry.cpp
-    src/log/component.cpp
-    src/log/ai_trace.cpp
-    src/log/console_progress.cpp
-    src/translation/translation_languages.cpp
-    src/translation/translation_model.cpp
-    src/translation/model_profile.cpp
-    src/translation/local_model.cpp
-    src/translation/inference_engine.cpp
-    src/task/task_queue.cpp
-    src/task/task_orchestrator.cpp
-)
-
-target_include_directories(qtrans_engine PUBLIC src)
-target_link_libraries(qtrans_engine PUBLIC
-    llama
-    CURL::libcurl
-    ICU::uc
-    ICU::i18n
-    ICU::data
-    simdutf::simdutf
-    spdlog::spdlog
-)
-
-target_compile_definitions(qtrans_engine PUBLIC
-    $<$<CONFIG:Release>:SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_WARN>
-)
-
-if(QTRANS_MULTI_BACKEND_VALUE)
-    target_compile_definitions(qtrans_engine PUBLIC QTRANS_MULTI_BACKEND)
-endif()
-
-if(QTRANS_GPU_METAL_VALUE)
-    target_compile_definitions(qtrans_engine PUBLIC QTRANS_GPU_METAL)
-endif()
-
-set(QTRANS_SOURCES_COMMON
-    src/app/string_bridge.cpp
-    src/app/main.cpp
-    src/app/single_instance.cpp
-    src/app/single_instance.h
-    src/app/mainwindow.cpp
-    src/app/mainwindow.h
-    src/app/task_service.cpp
-    src/app/task_service.h
-    src/app/modal_overlay.cpp
-    src/app/modal_overlay.h
-    src/app/ui/alert_panel.cpp
-    src/app/ui/alert_panel.h
-    src/app/ui/app_theme.cpp
-    src/app/ui/app_theme.h
-    src/app/ui/download_progress_panel.cpp
-    src/app/ui/download_progress_panel.h
-    src/app/ui/image_utils.cpp
-    src/app/ui/image_utils.h
-    src/app/ui/model_missing_panel.cpp
-    src/app/ui/model_missing_panel.h
-    src/app/ui/model_page.cpp
-    src/app/ui/model_page.h
-    src/app/ui/sidebar_widget.cpp
-    src/app/ui/sidebar_widget.h
-    src/app/ui/translate_page.cpp
-    src/app/ui/translate_page.h
-    src/app/ui/wordselect_page.cpp
-    src/app/ui/wordselect_page.h
-    src/app/widget_utils.cpp
-    src/app/widget_utils.h
-    src/wordselect/popup_window.cpp
-    src/wordselect/popup_window.h
-    src/wordselect/clipboard_capture.cpp
-    src/wordselect/clipboard_capture.h
-    src/wordselect/hotkey_manager.h
-    src/wordselect/session_controller.cpp
-    src/wordselect/session_controller.h
-    src/wordselect/system_tray.cpp
-    src/wordselect/system_tray.h
-    resources/qtrans.qrc
-)
-
-set(QTRANS_SOURCES_WIN
-    src/wordselect/win/clipboard_capture.cpp
-    src/wordselect/win/hotkey_manager.cpp
-)
-
-set(QTRANS_SOURCES_MAC
-    src/wordselect/mac/clipboard_capture.cpp
-    src/wordselect/mac/hotkey_manager.cpp
-    src/wordselect/mac/platform_utils.cpp
-    src/wordselect/mac/platform_utils.h
-)
-
-add_executable(QTrans ${QTRANS_SOURCES_COMMON})
-
-target_link_libraries(QTrans PRIVATE qtrans_engine Qt6::Widgets)
-
-if(WIN32)
-    target_sources(QTrans PRIVATE ${QTRANS_SOURCES_WIN} src/app/win/single_instance_activate.cpp)
-elseif(APPLE)
-    target_sources(QTrans PRIVATE ${QTRANS_SOURCES_MAC} src/app/mac/single_instance.mm)
-    target_link_libraries(QTrans PRIVATE "-framework AppKit" "-framework ApplicationServices" "-framework Carbon" "-framework CoreGraphics")
-    qt_import_plugins(QTrans
-        INCLUDE BY_TYPE platforms Qt6::QCocoaIntegrationPlugin
-        INCLUDE BY_TYPE platformthemes Qt6::QMacStylePlugin
-    )
-endif()
-
-if(MINGW)
-    target_link_options(QTrans PRIVATE -static-libgcc -static-libstdc++ -static -mwindows)
-endif()
-
 option(QTRANS_BUILD_TESTS "Build unit tests" OFF)
 
 if(QTRANS_BUILD_TESTS)
     enable_testing()
+endif()
+
+add_subdirectory(core)
+add_subdirectory(apps/desktop)
+
+if(QTRANS_BUILD_TESTS)
     add_subdirectory(tests)
 endif()

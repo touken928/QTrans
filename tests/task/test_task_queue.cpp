@@ -1,5 +1,5 @@
-#include "task/task_queue.h"
-#include "task/task_types.h"
+#include "services/task/task_queue.h"
+#include "services/task/task_types.h"
 
 #include <gtest/gtest.h>
 
