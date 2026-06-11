@@ -1,7 +1,5 @@
 #include "model/model_catalog.h"
 
-#include "model/model_profile.h"
-
 #include <filesystem>
 
 namespace {
@@ -15,7 +13,6 @@ const ModelCatalogEntry k_models[] = {
         "Tencent-Hunyuan/Hy-MT2-1.8B-GGUF/Hy-MT2-1.8B-Q4_K_M.gguf",
         2,
         {InferenceBackend::GpuVulkan, InferenceBackend::GpuMetal},
-        &hymt18b_q4_profile(),
     },
     {
         "hymt2-7b-q4",
@@ -25,7 +22,6 @@ const ModelCatalogEntry k_models[] = {
         "Tencent-Hunyuan/Hy-MT2-7B-GGUF/Hy-MT2-7B-Q4_K_M.gguf",
         2,
         {InferenceBackend::GpuVulkan, InferenceBackend::GpuMetal},
-        &hymt7b_q4_profile(),
     },
 };
 

@@ -347,16 +347,13 @@ void TaskOrchestrator::execute_task(Task task) {
                 engine_.set_backend_options(backend_opts);
 
                 qtrans::core::TranslatorOptions opts = make_translator_options(*resolved);
-                if (entry->profile == nullptr) {
-                    throw std::runtime_error("no profile for model: " + model_id);
-                }
                 {
                     std::lock_guard<std::mutex> lock(mutex_);
                     translator_options_ = opts;
                     active_backend_ = resolved->backend;
                 }
 
-                engine_.load(payload.model_path, opts, *entry->profile);
+                engine_.load(payload.model_path, opts);
 
                 {
                     std::lock_guard<std::mutex> lock(mutex_);

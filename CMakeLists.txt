@@ -41,7 +41,6 @@ add_library(qtrans_engine STATIC
     apps/desktop/src/model/inference_backend.cpp
     apps/desktop/src/model/inference_resolver.cpp
     apps/desktop/src/model/model_catalog.cpp
-    apps/desktop/src/model/model_profile.cpp
     apps/desktop/src/model/language_list.cpp
     apps/desktop/src/model/platform_profile.cpp
     apps/desktop/src/model/runtime_capabilities.cpp

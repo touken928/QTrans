@@ -5,8 +5,6 @@
 #include <string>
 #include <vector>
 
-class ModelProfile;
-
 struct ModelCatalogEntry {
     std::string id;
     std::string display_name;
@@ -15,7 +13,6 @@ struct ModelCatalogEntry {
     std::string modelscope_remote_spec;
     int download_hub = 2;
     std::vector<InferenceBackend> backend_priority;
-    const ModelProfile *profile = nullptr;
 };
 
 const std::vector<ModelCatalogEntry> &model_catalog();

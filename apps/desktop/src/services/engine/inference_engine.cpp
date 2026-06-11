@@ -46,8 +46,7 @@ bool InferenceEngine::is_loaded() const {
     return translator_ != nullptr && translator_->is_loaded();
 }
 
-void InferenceEngine::load(const std::string &model_path, const qtrans::core::TranslatorOptions &opts,
-                           const ModelProfile & /*profile*/) {
+void InferenceEngine::load(const std::string &model_path, const qtrans::core::TranslatorOptions &opts) {
     options_ = opts;
 
     auto t = std::make_unique<qtrans::core::Translator>(options_);
