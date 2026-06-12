@@ -1,8 +1,10 @@
 add_library(qtrans_core STATIC
+    src/backend_environment.cpp
     src/translation_model.cpp
     src/translator.cpp
     src/runtime/local_runtime.cpp
     src/runtime/remote_runtime.cpp
+    src/runtime/default_runtime_factory.cpp
     src/text/utf8.cpp
     src/text/utf8_stream_buffer.cpp
     src/text/sentence_splitter.cpp

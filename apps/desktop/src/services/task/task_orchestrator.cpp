@@ -7,10 +7,9 @@
 #include "inference/inference_backend.h"
 #include "inference/inference_resolver.h"
 #include "catalog/model_catalog.h"
+#include "qtrans/core/backend_environment.h"
 #include "inference/runtime_capabilities.h"
 #include "services/download/download.h"
-#include "qtrans/core/options.h"
-#include "qtrans/core/runtime.h"
 
 #include <stdexcept>
 
@@ -52,7 +51,7 @@ void TaskOrchestrator::initialize_backend() {
     }
     qtrans::core::BackendOptions opts;
     opts.plugin_dir = plugin_dir;
-    qtrans::core::ITranslationRuntime::initialize_default_backend(opts);
+    qtrans::core::BackendEnvironment::initialize(opts);
 
     RuntimeCapabilities::instance().set_plugin_dir(plugin_dir);
     RuntimeCapabilities::instance().refresh();
@@ -353,12 +352,12 @@ void TaskOrchestrator::execute_task(Task task) {
                     active_backend_ = resolved->backend;
                 }
 
-                auto model = create_local_model(*entry, payload.model_path, resolved->n_gpu_layers);
+                auto profile = create_local_model(*entry, payload.model_path, resolved->n_gpu_layers);
                 {
                     std::lock_guard<std::mutex> lock(mutex_);
-                    translator_options_ = model->translator_options();
+                    translator_options_ = profile.options;
                 }
-                engine_.load(std::move(model));
+                engine_.load(std::move(profile));
 
                 {
                     std::lock_guard<std::mutex> lock(mutex_);

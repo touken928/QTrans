@@ -30,28 +30,28 @@ std::filesystem::path write_temp_bytes(const std::vector<std::uint8_t> &data) {
 
 TEST(HyMt2_18BLocalModel, SetsContextAndChatTemplate) {
     const std::filesystem::path path = write_temp_bytes({0x47, 0x47, 0x55, 0x46});
-    const std::unique_ptr<HyMt2_18BLocalModel> model = HyMt2_18BLocalModel::from_path(path, -1);
-    ASSERT_NE(model, nullptr);
-    EXPECT_EQ(model->translator_options().n_ctx, 4096);
-    EXPECT_EQ(model->translator_options().max_tokens, 4096);
-    EXPECT_EQ(model->translator_options().n_gpu_layers, -1);
+    const qtrans::core::TranslationProfile profile = make_hymt2_18b_local_profile(path, -1);
+    ASSERT_NE(profile.prompt_strategy, nullptr);
+    EXPECT_EQ(profile.options.context.n_ctx, 4096);
+    EXPECT_EQ(profile.options.context.max_tokens, 4096);
+    EXPECT_EQ(profile.options.n_gpu_layers, -1);
 
-    const std::string user = model->build_user_prompt("Hello", "Chinese");
-    const std::string chat = model->format_translation_prompt("Hello", "Chinese");
+    const std::string user = profile.prompt_strategy->build_user_prompt("Hello", "Chinese");
+    const std::string chat = profile.prompt_strategy->format_translation_prompt("Hello", "Chinese");
     EXPECT_NE(chat.find(u8"<\xEF\xBD\x9Chy_User\xEF\xBD\x9C>"), std::string::npos);
-    EXPECT_EQ(chat, model->format_chat_prompt(user));
+    EXPECT_EQ(chat, profile.prompt_strategy->format_chat_prompt(user));
     std::filesystem::remove(path);
 }
 
 TEST(HyMt2_7BLocalModel, SetsContextAndChatTemplate) {
     const std::filesystem::path path = write_temp_bytes({0x47, 0x47, 0x55, 0x46});
-    const std::unique_ptr<HyMt2_7BLocalModel> model = HyMt2_7BLocalModel::from_path(path, -1);
-    ASSERT_NE(model, nullptr);
-    EXPECT_EQ(model->translator_options().n_ctx, 8192);
-    EXPECT_EQ(model->translator_options().max_tokens, 8192);
+    const qtrans::core::TranslationProfile profile = make_hymt2_7b_local_profile(path, -1);
+    ASSERT_NE(profile.prompt_strategy, nullptr);
+    EXPECT_EQ(profile.options.context.n_ctx, 8192);
+    EXPECT_EQ(profile.options.context.max_tokens, 8192);
 
-    const std::string user = model->build_user_prompt("Hello", "Chinese");
-    const std::string chat = model->format_translation_prompt("Hello", "Chinese");
+    const std::string user = profile.prompt_strategy->build_user_prompt("Hello", "Chinese");
+    const std::string chat = profile.prompt_strategy->format_translation_prompt("Hello", "Chinese");
     EXPECT_EQ(chat, "<|startoftext|>" + user + "<|extra_0|>");
     std::filesystem::remove(path);
 }

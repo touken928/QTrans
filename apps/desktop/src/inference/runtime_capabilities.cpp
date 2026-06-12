@@ -1,54 +1,6 @@
 #include "inference/runtime_capabilities.h"
 
-#include "ggml-backend.h"
-
-namespace {
-
-bool probe_vulkan_gpu() {
-#ifdef QTRANS_MULTI_BACKEND
-    const ggml_backend_reg_t reg = ggml_backend_reg_by_name("Vulkan");
-    if (reg == nullptr) {
-        return false;
-    }
-
-    const size_t device_count = ggml_backend_reg_dev_count(reg);
-    for (size_t i = 0; i < device_count; ++i) {
-        const ggml_backend_dev_t device = ggml_backend_reg_dev_get(reg, i);
-        if (ggml_backend_dev_type(device) == GGML_BACKEND_DEVICE_TYPE_GPU) {
-            return true;
-        }
-    }
-
-    const ggml_backend_dev_t gpu = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU);
-    return gpu != nullptr;
-#else
-    return false;
-#endif
-}
-
-bool probe_metal_gpu() {
-#ifdef QTRANS_GPU_METAL
-    const ggml_backend_reg_t reg = ggml_backend_reg_by_name("MTL");
-    if (reg == nullptr) {
-        return false;
-    }
-
-    const size_t device_count = ggml_backend_reg_dev_count(reg);
-    for (size_t i = 0; i < device_count; ++i) {
-        const ggml_backend_dev_t device = ggml_backend_reg_dev_get(reg, i);
-        if (ggml_backend_dev_type(device) == GGML_BACKEND_DEVICE_TYPE_GPU) {
-            return true;
-        }
-    }
-
-    const ggml_backend_dev_t gpu = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU);
-    return gpu != nullptr;
-#else
-    return false;
-#endif
-}
-
-}  // namespace
+#include "qtrans/core/backend_environment.h"
 
 RuntimeCapabilities &RuntimeCapabilities::instance() {
     static RuntimeCapabilities caps;
@@ -60,8 +12,8 @@ void RuntimeCapabilities::set_plugin_dir(std::filesystem::path plugin_dir) {
 }
 
 void RuntimeCapabilities::refresh() {
-    gpu_vulkan_ = probe_vulkan_gpu();
-    gpu_metal_ = probe_metal_gpu();
+    gpu_vulkan_ = qtrans::core::BackendEnvironment::has_vulkan();
+    gpu_metal_ = qtrans::core::BackendEnvironment::has_metal();
     refreshed_ = true;
 }
 

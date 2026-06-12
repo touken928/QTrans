@@ -1,5 +1,7 @@
 #include "local_runtime.h"
 
+#include "qtrans/core/backend_environment.h"
+
 #include "text/utf8_stream_buffer.h"
 
 #include "ggml-backend.h"
@@ -16,11 +18,11 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <new>
 #include <memory>
 #include <mutex>
 #include <sstream>
 #include <stdexcept>
-#include <string_view>
 #include <vector>
 
 namespace qtrans::core {
@@ -101,91 +103,15 @@ LlamaModelHolder load_llama_model(const std::vector<std::uint8_t> &data,
 }
 
 // ---------------------------------------------------------------------------
-// Backend probing — moved from runtime_capabilities.cpp
-// ---------------------------------------------------------------------------
-
-bool probe_vulkan_gpu() {
-#ifdef QTRANS_MULTI_BACKEND
-    const ggml_backend_reg_t reg = ggml_backend_reg_by_name("Vulkan");
-    if (reg == nullptr) return false;
-    const size_t device_count = ggml_backend_reg_dev_count(reg);
-    for (size_t i = 0; i < device_count; ++i) {
-        const ggml_backend_dev_t device = ggml_backend_reg_dev_get(reg, i);
-        if (ggml_backend_dev_type(device) == GGML_BACKEND_DEVICE_TYPE_GPU) return true;
-    }
-    const ggml_backend_dev_t gpu = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU);
-    return gpu != nullptr;
-#else
-    return false;
-#endif
-}
-
-bool probe_metal_gpu() {
-#ifdef QTRANS_GPU_METAL
-    const ggml_backend_reg_t reg = ggml_backend_reg_by_name("MTL");
-    if (reg == nullptr) return false;
-    const size_t device_count = ggml_backend_reg_dev_count(reg);
-    for (size_t i = 0; i < device_count; ++i) {
-        const ggml_backend_dev_t device = ggml_backend_reg_dev_get(reg, i);
-        if (ggml_backend_dev_type(device) == GGML_BACKEND_DEVICE_TYPE_GPU) return true;
-    }
-    const ggml_backend_dev_t gpu = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU);
-    return gpu != nullptr;
-#else
-    return false;
-#endif
-}
-
-// ---------------------------------------------------------------------------
-// Log redirect from llama
-// ---------------------------------------------------------------------------
-
-void log_llama_text(ggml_log_level level, const char *text) {
-    if (text == nullptr) return;
-    std::string_view message(text);
-    while (!message.empty() && (message.back() == '\n' || message.back() == '\r'))
-        message.remove_suffix(1);
-    if (message.empty()) return;
-
-    auto logger = spdlog::get("hymt");
-    if (!logger) return;
-    switch (level) {
-        case GGML_LOG_LEVEL_ERROR:
-            logger->error("{}", message);
-            break;
-#ifndef NDEBUG
-        case GGML_LOG_LEVEL_WARN:
-            logger->warn("{}", message);
-            break;
-        case GGML_LOG_LEVEL_INFO:
-            logger->info("{}", message);
-            break;
-        case GGML_LOG_LEVEL_DEBUG:
-            logger->debug("{}", message);
-            break;
-#endif
-        default:
-            break;
-    }
-}
-
-void set_llama_log_callback() {
-    llama_log_set([](ggml_log_level level, const char *text, void *) {
-        log_llama_text(level, text);
-    },
-                  nullptr);
-}
-
-// ---------------------------------------------------------------------------
 // Sampler creation
 // ---------------------------------------------------------------------------
 
 llama_sampler *create_sampler(const TranslatorOptions &config) {
     llama_sampler *chain = llama_sampler_chain_init(llama_sampler_chain_default_params());
-    llama_sampler_chain_add(chain, llama_sampler_init_penalties(-1, config.repeat_penalty, 0.0f, 0.0f));
-    llama_sampler_chain_add(chain, llama_sampler_init_top_k(config.top_k));
-    llama_sampler_chain_add(chain, llama_sampler_init_top_p(config.top_p, 1));
-    llama_sampler_chain_add(chain, llama_sampler_init_temp(config.temperature));
+    llama_sampler_chain_add(chain, llama_sampler_init_penalties(-1, config.generation.repeat_penalty, 0.0f, 0.0f));
+    llama_sampler_chain_add(chain, llama_sampler_init_top_k(config.generation.top_k));
+    llama_sampler_chain_add(chain, llama_sampler_init_top_p(config.generation.top_p, 1));
+    llama_sampler_chain_add(chain, llama_sampler_init_temp(config.generation.temperature));
     llama_sampler_chain_add(chain, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
     return chain;
 }
@@ -270,11 +196,6 @@ struct LocalRuntime::Impl {
     llama_sampler *sampler_ = nullptr;
     TranslatorOptions config_;
     bool loaded_ = false;
-    // Probing results
-    static std::string &s_backend_label() {
-        static std::string label = "CPU";
-        return label;
-    }
 
     ~Impl() {
         if (sampler_ != nullptr) {
@@ -305,33 +226,17 @@ LocalRuntime &LocalRuntime::operator=(LocalRuntime &&other) noexcept {
     return *this;
 }
 
-void ITranslationRuntime::initialize_default_backend(const BackendOptions &opts) {
-    LocalRuntime temp;
-    temp.initialize_backend(opts);
-}
-
 void LocalRuntime::initialize_backend(const BackendOptions &opts) {
-    static std::once_flag flag;
-    std::call_once(flag, [&opts]() {
-        set_llama_log_callback();
-        llama_backend_init();
-#ifdef QTRANS_MULTI_BACKEND
-        ggml_backend_load_all();
-        if (!opts.plugin_dir.empty())
-            ggml_backend_load_all_from_path(opts.plugin_dir.string().c_str());
-#endif
-        const bool has_vulkan = probe_vulkan_gpu();
-        const bool has_metal = probe_metal_gpu();
-        if (has_vulkan)
-            Impl::s_backend_label() = "Vulkan";
-        else if (has_metal)
-            Impl::s_backend_label() = "Metal";
-        else
-            Impl::s_backend_label() = "CPU";
-    });
+    BackendEnvironment::initialize(opts);
 }
 
-void LocalRuntime::load_model(const std::vector<std::uint8_t> &data, const TranslatorOptions &config) {
+void LocalRuntime::load(const ModelLoadSpec &model, const TranslatorOptions &config) {
+    const auto *local = std::get_if<LocalModelConfig>(&model);
+    if (local == nullptr) {
+        throw std::runtime_error("local runtime requires local model data");
+    }
+
+    const std::vector<std::uint8_t> &data = local->weights;
     if (data.empty()) throw std::invalid_argument("model data is empty");
 
     impl_->config_ = config;
@@ -353,16 +258,16 @@ void LocalRuntime::load_model(const std::vector<std::uint8_t> &data, const Trans
     impl_->model_holder_ = load_llama_model(data, model_params);
 
     const int train_ctx = llama_model_n_ctx_train(impl_->model_holder_.model);
-    if (train_ctx > 0 && impl_->config_.n_ctx > train_ctx) {
-        impl_->config_.n_ctx = train_ctx;
-        if (impl_->config_.max_tokens > train_ctx) {
-            impl_->config_.max_tokens = train_ctx;
+    if (train_ctx > 0 && impl_->config_.context.n_ctx > train_ctx) {
+        impl_->config_.context.n_ctx = train_ctx;
+        if (impl_->config_.context.max_tokens > train_ctx) {
+            impl_->config_.context.max_tokens = train_ctx;
         }
     }
 
     llama_context_params ctx_params = llama_context_default_params();
-    ctx_params.n_ctx = static_cast<uint32_t>(impl_->config_.n_ctx);
-    ctx_params.n_batch = static_cast<uint32_t>(impl_->config_.n_ctx);
+    ctx_params.n_ctx = static_cast<uint32_t>(impl_->config_.context.n_ctx);
+    ctx_params.n_batch = static_cast<uint32_t>(impl_->config_.context.n_ctx);
 
     impl_->ctx_ = llama_init_from_model(impl_->model_holder_.model, ctx_params);
     if (impl_->ctx_ == nullptr) {
@@ -381,11 +286,6 @@ void LocalRuntime::unload() {
 
 bool LocalRuntime::is_loaded() const {
     return impl_->loaded_;
-}
-
-void LocalRuntime::load_remote(const RemoteModelConfig & /*remote*/,
-                               const TranslatorOptions & /*config*/) {
-    throw std::runtime_error("local runtime does not support remote models");
 }
 
 RuntimeKind LocalRuntime::kind() const {
@@ -411,20 +311,7 @@ std::string LocalRuntime::translate(
 }
 
 std::string LocalRuntime::backend_label() const {
-    return Impl::s_backend_label();
-}
-
-std::vector<std::uint8_t> ITranslationRuntime::read_file(const std::filesystem::path &path) {
-    std::ifstream input(path, std::ios::binary);
-    if (!input) throw std::runtime_error("failed to open model file: " + path.string());
-    input.seekg(0, std::ios::end);
-    const std::streamsize size = input.tellg();
-    if (size <= 0) throw std::runtime_error("model file is empty: " + path.string());
-    input.seekg(0, std::ios::beg);
-    std::vector<std::uint8_t> data(static_cast<size_t>(size));
-    if (!input.read(reinterpret_cast<char *>(data.data()), size))
-        throw std::runtime_error("failed to read model file: " + path.string());
-    return data;
+    return BackendEnvironment::backend_label();
 }
 
 std::string LocalRuntime::generate(
@@ -470,13 +357,13 @@ std::string LocalRuntime::generate(
         prompt_tokens.data(), static_cast<int32_t>(prompt_tokens.size()));
     std::string response;
 
-    const int ctx_room = impl_->config_.n_ctx - n_prompt;
+    const int ctx_room = impl_->config_.context.n_ctx - n_prompt;
     if (ctx_room <= 0) throw std::runtime_error("prompt exceeds model context");
-    const int max_gen = std::min(impl_->config_.max_tokens, ctx_room);
+    const int max_gen = std::min(impl_->config_.context.max_tokens, ctx_room);
 
     if (logger)
         logger->debug("starting decode loop, max_gen={} prompt_tokens={} n_ctx={}",
-                      max_gen, n_prompt, impl_->config_.n_ctx);
+                      max_gen, n_prompt, impl_->config_.context.n_ctx);
 
     core::Utf8StreamBuffer utf8_stream;
     for (int i = 0; i < max_gen; ++i) {
@@ -525,6 +412,17 @@ std::string LocalRuntime::generate(
 
     write_ai_trace(prompt, response);
     return response;
+}
+
+RuntimeTraits LocalRuntime::traits() const {
+    RuntimeTraits t;
+    t.kind = RuntimeKind::Local;
+    t.context_handling = ContextHandling::LocalEnforced;
+    t.streaming = StreamingSupport::TokenByToken;
+    t.has_precise_token_counting = true;
+    t.max_input_tokens = impl_->config_.context.n_ctx;
+    t.max_output_tokens = impl_->config_.context.max_tokens;
+    return t;
 }
 
 }  // namespace qtrans::core

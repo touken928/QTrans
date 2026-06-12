@@ -47,16 +47,16 @@ bool InferenceEngine::is_loaded() const {
     return translator_ != nullptr && translator_->is_loaded();
 }
 
-void InferenceEngine::load(std::unique_ptr<qtrans::core::ITranslationModel> model) {
-    if (model == nullptr) {
-        throw std::invalid_argument("translation model is required");
+void InferenceEngine::load(qtrans::core::TranslationProfile profile) {
+    if (profile.prompt_strategy == nullptr) {
+        throw std::invalid_argument("translation prompt strategy is required");
     }
 
-    options_ = model->translator_options();
+    options_ = profile.options;
 
     auto t = std::make_unique<qtrans::core::Translator>(options_);
     t->initialize_backend(backend_options_);
-    t->load(std::move(model));
+    t->load(std::move(profile));
 
     translator_ = std::move(t);
 }
