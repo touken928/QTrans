@@ -1,6 +1,7 @@
 #include "models/local/hymt2_18b_local_model.h"
 
 #include <cstring>
+#include <memory>
 #include <utility>
 
 namespace {
@@ -102,30 +103,27 @@ std::string format_chat_prompt(const std::string &user_prompt) {
 qtrans::core::TranslatorOptions make_translator_options(int n_gpu_layers) {
     qtrans::core::TranslatorOptions opts;
     opts.n_gpu_layers = n_gpu_layers;
-    opts.n_ctx = 4096;
-    opts.max_tokens = 4096;
+    opts.context.n_ctx = 4096;
+    opts.context.max_tokens = 4096;
     return opts;
 }
 
 }  // namespace
 
-HyMt2_18BLocalModel::HyMt2_18BLocalModel(std::vector<std::uint8_t> weights,
-                                         qtrans::core::TranslatorOptions options)
-    : qtrans::core::LocalGgufModelBase(std::move(weights), options) {
-}
-
-std::unique_ptr<HyMt2_18BLocalModel> HyMt2_18BLocalModel::from_path(
+qtrans::core::TranslationProfile make_hymt2_18b_local_profile(
     const std::filesystem::path &path,
     int n_gpu_layers) {
-    return std::unique_ptr<HyMt2_18BLocalModel>(new HyMt2_18BLocalModel(
-        load_weights(path), make_translator_options(n_gpu_layers)));
-}
+    auto prompt = std::make_shared<qtrans::core::FunctionPromptStrategy>(
+        [](std::string_view text, std::string_view target_language) {
+            return build_user_prompt(std::string(text), std::string(target_language));
+        },
+        [](std::string_view user_prompt) {
+            return format_chat_prompt(std::string(user_prompt));
+        });
 
-std::string HyMt2_18BLocalModel::build_user_prompt(const std::string &text,
-                                                   const std::string &target_language) const {
-    return ::build_user_prompt(text, target_language);
-}
-
-std::string HyMt2_18BLocalModel::format_chat_prompt(const std::string &user_prompt) const {
-    return ::format_chat_prompt(user_prompt);
+    qtrans::core::TranslationProfile profile;
+    profile.model = qtrans::core::LocalModelConfig{qtrans::core::read_binary_file(path)};
+    profile.prompt_strategy = std::move(prompt);
+    profile.options = make_translator_options(n_gpu_layers);
+    return profile;
 }

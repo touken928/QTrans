@@ -21,6 +21,8 @@ struct TranslationCallbacks {
 class Translator {
 public:
     explicit Translator(TranslatorOptions options = {});
+    explicit Translator(std::unique_ptr<ITranslationRuntimeFactory> factory,
+                        TranslatorOptions options = {});
     explicit Translator(std::unique_ptr<ITranslationRuntime> runtime,
                         TranslatorOptions options = {});
     ~Translator();
@@ -33,7 +35,7 @@ public:
     void initialize_backend(const BackendOptions &options);
     std::string backend_label() const;
 
-    void load(std::unique_ptr<ITranslationModel> model);
+    void load(TranslationProfile profile);
     void unload_model();
     bool is_loaded() const;
 

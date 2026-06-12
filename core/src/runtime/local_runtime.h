@@ -20,9 +20,8 @@ public:
     LocalRuntime(LocalRuntime &&) noexcept;
     LocalRuntime &operator=(LocalRuntime &&) noexcept;
 
-    void initialize_backend(const BackendOptions &opts) override;
-    void load_model(const std::vector<std::uint8_t> &data, const TranslatorOptions &config) override;
-    void load_remote(const RemoteModelConfig &remote, const TranslatorOptions &config) override;
+    void initialize_backend(const BackendOptions &opts);
+    void load(const ModelLoadSpec &model, const TranslatorOptions &config) override;
     void unload() override;
     bool is_loaded() const override;
 
@@ -35,6 +34,7 @@ public:
 
     std::string backend_label() const override;
     RuntimeKind kind() const override;
+    RuntimeTraits traits() const override;
 
 private:
     std::string generate(

@@ -67,5 +67,5 @@ TEST(InferenceResolver, MakeTranslatorOptionsSetsGpuLayersOnly) {
 
     const qtrans::core::TranslatorOptions opts = make_translator_options(*resolved);
     EXPECT_EQ(opts.n_gpu_layers, -1);
-    EXPECT_EQ(opts.n_ctx, 4096);
+    EXPECT_EQ(opts.context.n_ctx, 4096);
 }

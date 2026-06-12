@@ -112,8 +112,8 @@ std::string build_openai_body(const std::string &model,
     ss << "{"
        << "\"model\":\"" << json_escape(model) << "\","
        << "\"messages\":[{\"role\":\"user\",\"content\":\"" << json_escape(user_prompt) << "\"}],"
-       << "\"temperature\":" << config.temperature << ","
-       << "\"max_tokens\":" << config.max_tokens
+       << "\"temperature\":" << config.generation.temperature << ","
+       << "\"max_tokens\":" << config.context.max_tokens
        << "}";
     return ss.str();
 }
@@ -125,7 +125,7 @@ std::string build_anthropic_body(const std::string &model,
     ss << "{"
        << "\"model\":\"" << json_escape(model) << "\","
        << "\"messages\":[{\"role\":\"user\",\"content\":\"" << json_escape(user_prompt) << "\"}],"
-       << "\"max_tokens\":" << config.max_tokens
+       << "\"max_tokens\":" << config.context.max_tokens
        << "}";
     return ss.str();
 }
@@ -213,17 +213,13 @@ RemoteRuntime::~RemoteRuntime() = default;
 RemoteRuntime::RemoteRuntime(RemoteRuntime &&) noexcept = default;
 RemoteRuntime &RemoteRuntime::operator=(RemoteRuntime &&) noexcept = default;
 
-void RemoteRuntime::initialize_backend(const BackendOptions & /*opts*/) {
-}
+void RemoteRuntime::load(const ModelLoadSpec &model, const TranslatorOptions &config) {
+    const auto *remote = std::get_if<RemoteModelConfig>(&model);
+    if (remote == nullptr) {
+        throw std::runtime_error("remote runtime requires remote model config");
+    }
 
-void RemoteRuntime::load_model(const std::vector<std::uint8_t> & /*data*/,
-                               const TranslatorOptions & /*config*/) {
-    throw std::runtime_error("remote runtime does not support local model files");
-}
-
-void RemoteRuntime::load_remote(const RemoteModelConfig &remote,
-                                const TranslatorOptions &config) {
-    impl_->remote_config = remote;
+    impl_->remote_config = *remote;
     impl_->config = config;
     impl_->loaded_ = true;
 }
@@ -284,8 +280,8 @@ std::string RemoteRuntime::translate(
     return result;
 }
 
-int RemoteRuntime::count_prompt_tokens(const std::string & /*prompt*/) const {
-    return 1;
+int RemoteRuntime::count_prompt_tokens(const std::string &prompt) const {
+    return std::max(1, static_cast<int>(prompt.size()) / 4);
 }
 
 std::string RemoteRuntime::backend_label() const {
@@ -296,6 +292,17 @@ std::string RemoteRuntime::backend_label() const {
 
 RuntimeKind RemoteRuntime::kind() const {
     return RuntimeKind::Remote;
+}
+
+RuntimeTraits RemoteRuntime::traits() const {
+    RuntimeTraits t;
+    t.kind = RuntimeKind::Remote;
+    t.context_handling = ContextHandling::RuntimeManaged;
+    t.streaming = StreamingSupport::FullResultCallback;
+    t.has_precise_token_counting = false;
+    t.max_input_tokens = 0;
+    t.max_output_tokens = impl_->config.context.max_tokens;
+    return t;
 }
 
 }  // namespace qtrans::core

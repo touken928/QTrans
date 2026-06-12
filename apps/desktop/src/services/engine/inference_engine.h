@@ -4,7 +4,6 @@
 #include "qtrans/core/options.h"
 #include "qtrans/core/translation_model.h"
 #include "qtrans/core/translator.h"
-#include "qtrans/core/types.h"
 
 #include "services/task/cancel_token.h"
 #include "services/task/task_types.h"
@@ -28,7 +27,7 @@ public:
 
     bool is_loaded() const;
 
-    void load(std::unique_ptr<qtrans::core::ITranslationModel> model);
+    void load(qtrans::core::TranslationProfile profile);
     void unload();
 
     TranslateStepResult translate(

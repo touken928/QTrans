@@ -1,13 +1,12 @@
 #pragma once
 
 #include "qtrans/core/options.h"
+#include "qtrans/core/translation_model.h"
 #include "qtrans/core/types.h"
 
-#include <filesystem>
 #include <functional>
 #include <memory>
 #include <string>
-#include <vector>
 
 namespace qtrans::core {
 
@@ -16,26 +15,30 @@ enum class RuntimeKind {
     Remote,
 };
 
-struct RemoteModelConfig {
-    std::string endpoint_url;
-    std::string api_key;
-    std::string model_name;
-    std::string api_provider;
+enum class ContextHandling {
+    LocalEnforced,
+    RuntimeManaged,
+};
+
+enum class StreamingSupport {
+    TokenByToken,
+    FullResultCallback,
+};
+
+struct RuntimeTraits {
+    RuntimeKind kind = RuntimeKind::Local;
+    ContextHandling context_handling = ContextHandling::LocalEnforced;
+    StreamingSupport streaming = StreamingSupport::TokenByToken;
+    bool has_precise_token_counting = false;
+    int max_input_tokens = 0;
+    int max_output_tokens = 0;
 };
 
 class ITranslationRuntime {
 public:
     virtual ~ITranslationRuntime() = default;
 
-    static void initialize_default_backend(const BackendOptions &opts);
-
-    virtual void initialize_backend(const BackendOptions &opts) = 0;
-
-    virtual void load_model(const std::vector<std::uint8_t> &data,
-                            const TranslatorOptions &config) = 0;
-
-    virtual void load_remote(const RemoteModelConfig &remote,
-                             const TranslatorOptions &config) = 0;
+    virtual void load(const ModelLoadSpec &model, const TranslatorOptions &config) = 0;
 
     virtual void unload() = 0;
     virtual bool is_loaded() const = 0;
@@ -49,8 +52,13 @@ public:
 
     virtual std::string backend_label() const = 0;
     virtual RuntimeKind kind() const = 0;
+    virtual RuntimeTraits traits() const = 0;
+};
 
-    static std::vector<std::uint8_t> read_file(const std::filesystem::path &path);
+class ITranslationRuntimeFactory {
+public:
+    virtual ~ITranslationRuntimeFactory() = default;
+    virtual std::unique_ptr<ITranslationRuntime> create_runtime(const ModelLoadSpec &model) = 0;
 };
 
 }  // namespace qtrans::core
