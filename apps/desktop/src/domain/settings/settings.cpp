@@ -105,6 +105,12 @@ void AppSettings::load(const AppPaths &paths) {
             wordselect_enabled = (value == "1" || value == "true");
         } else if (key == "close_to_tray") {
             close_to_tray = (value == "1" || value == "true");
+        } else if (key == "batch_source_language") {
+            batch_source_language = value;
+        } else if (key == "batch_target_language") {
+            batch_target_language = value;
+        } else if (key == "batch_preserve_structure") {
+            batch_preserve_structure = (value == "1" || value == "true");
         }
     }
 
@@ -129,6 +135,9 @@ void AppSettings::save(const AppPaths &paths) const {
     output << "wordselect_target_language=" << wordselect_target_language << '\n';
     output << "wordselect_enabled=" << (wordselect_enabled ? "true" : "false") << '\n';
     output << "close_to_tray=" << (close_to_tray ? "true" : "false") << '\n';
+    output << "batch_source_language=" << batch_source_language << '\n';
+    output << "batch_target_language=" << batch_target_language << '\n';
+    output << "batch_preserve_structure=" << (batch_preserve_structure ? "true" : "false") << '\n';
 }
 
 void AppSettings::ensureStorage(const AppPaths &paths) const {

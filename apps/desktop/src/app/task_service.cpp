@@ -51,6 +51,10 @@ void TaskService::wireCallbacks() {
         emit translationFinished(task_id, static_cast<int>(state));
     };
 
+    callbacks.on_task_failed = [this](std::uint64_t task_id, const std::string &message) {
+        emit taskFailed(task_id, qtrans::app::from_utf8(message));
+    };
+
     callbacks.on_target_reset = [this](std::uint64_t task_id) {
         qtrans::log::get(qtrans::log::Component::Task)->debug("targetReset task:{}", task_id);
         emit targetReset(task_id);
@@ -131,8 +135,19 @@ TaskId TaskService::submitTranslatePipeline(
     return id;
 }
 
+TaskId TaskService::submitBatchTranslate(const TranslatePipelinePayload &payload) {
+    const TaskId id = orchestrator_.submit_translate_pipeline(payload, TaskPriority::Background);
+    emit batchTaskStarted(id.value);
+    scheduleProcessNext();
+    return id;
+}
+
 bool TaskService::cancel(TaskId id) {
     return orchestrator_.cancel(id);
+}
+
+bool TaskService::preemptBatchTask() {
+    return orchestrator_.preempt_running_background();
 }
 
 TaskState TaskService::taskState(TaskId id) const {

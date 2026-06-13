@@ -16,6 +16,9 @@ struct AppPaths {
     std::filesystem::path settings_dir;
     std::filesystem::path settings_file;
     std::filesystem::path logs_dir;
+    std::filesystem::path batch_dir;
+    std::filesystem::path batch_queue_file;
+    std::filesystem::path batch_output_dir;
 
     static AppPaths detect(const std::filesystem::path &executable_dir);
 

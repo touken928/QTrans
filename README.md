@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>An LLM translator that runs <a href="https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF">Hy-MT</a> models locally, downloads weights automatically, and performs GPU inference with statically linked backends (Vulkan on Windows x64, Metal on macOS ARM64).</strong>
+  <strong>An LLM translator for local and remote models with built-in model downloads, GPU inference for local backends (Vulkan on Windows x64, Metal on macOS ARM64), word selection translation, and batch file translation.</strong>
 </p>
 
 <p align="center">
@@ -21,6 +21,7 @@
 - Translate and back-translate
 - Built-in model download and management
 - Word selection translation (hover or clipboard capture)
+- Batch file translation for `.txt`, `.md`, and `.srt` with queueing, pause/resume, and saved outputs
 
 ## Screenshot
 
@@ -34,7 +35,7 @@ Prebuilt binaries are available on the [Releases](https://github.com/touken928/Q
 
 - `QTrans-<version>-macos-arm64` — macOS ARM64
 - `QTrans-<version>-mingw-x64.zip` — Windows x64 (`QTrans.exe` + `libomp.dll`)
-Download the archive for your platform. On Windows, unzip and run `QTrans.exe`. On macOS, make the app executable if needed, then run it. On first launch, open **Model**, download the model, and click **Load**. Default model: **Q4** on all supported platforms.
+Download the archive for your platform. On Windows, unzip and run `QTrans.exe`. On macOS, make the app executable if needed, then run it. On first launch, open **Model**, download the model, and click **Load**. Default model: **Q4** on all supported platforms. App data is stored under `~/.qtrans/` in system mode; batch queue state persists under `~/.qtrans/batch/`, and translated batch outputs are written to `~/.qtrans/batch/output/`.
 
 ## Build from Source
 
@@ -74,6 +75,13 @@ cmake --preset default
 ## Development
 
 See [docs/develop/](docs/develop/) (Chinese) for workflow, CI, branch protection, and releases.
+
+## Project Layout
+
+- `core/` - reusable translation runtime, backends, and remote/local runtime integration
+- `apps/desktop/src/domain/` - desktop-side non-UI logic such as download, settings, storage, tasks, and batch translation
+- `apps/desktop/src/ui/` - Qt Widgets UI including translate, word selection, batch, model, and shell pages
+- `apps/desktop/src/app/` - desktop entry and worker-thread glue such as `main.cpp`, `task_service.*`, and `batch_controller.*`
 
 ## License
 

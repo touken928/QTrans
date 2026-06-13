@@ -19,6 +19,9 @@ struct AppSettings {
     std::string wordselect_target_language = "Auto";
     bool wordselect_enabled = true;
     bool close_to_tray = true;
+    std::string batch_source_language = "English";
+    std::string batch_target_language = "Chinese";
+    bool batch_preserve_structure = true;
 
     void load(const AppPaths &paths);
     void save(const AppPaths &paths) const;

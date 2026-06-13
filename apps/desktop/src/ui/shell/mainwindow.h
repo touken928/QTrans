@@ -5,6 +5,9 @@
 
 #include <QMainWindow>
 
+class BatchController;
+class BatchLangPanel;
+class BatchPage;
 class DownloadProgressPanel;
 class HotkeyManager;
 class ModalOverlay;
@@ -25,6 +28,7 @@ class MainWindow : public QMainWindow {
 public:
     explicit MainWindow(
         TaskService *task_service,
+        BatchController *batch_controller,
         QThread *worker_thread,
         const AppPaths &paths,
         QWidget *parent = nullptr);
@@ -63,6 +67,23 @@ private slots:
     void onBackTranslateReset(quint64 task_id);
     void onBackTranslateAppended(quint64 task_id, const QString &piece);
 
+    // ── Batch slots ─────────────────────────────────────────────────────
+    void onBatchShowLanguagePicker();
+    void onBatchAddFiles(const QString &source_lang, const QString &target_lang);
+    void onBatchLanguagePickerCancelled();
+    void onBatchRemoveEntry(const QStringList &entry_ids);
+    void onBatchStart();
+    void onBatchPause();
+    void onBatchResume();
+    void onBatchEntryAdded(const QString &entry_id,
+                           const QString &source_language,
+                           const QString &target_language);
+    void onBatchEntryRemoved(const QString &entry_id);
+    void onBatchEntryStateChanged(const QString &entry_id, int state);
+    void onBatchSegmentProgress(const QString &entry_id, int completed, int total);
+    void onBatchSaveEntry(const QStringList &entry_ids);
+    void onBatchError(const QString &message);
+
 private:
     void performStartupCheck();
     void initializeInferenceBackend();
@@ -84,6 +105,7 @@ private:
     void startLoadModel();
 
     TaskService *task_service_ = nullptr;
+    BatchController *batch_controller_ = nullptr;
     QThread *worker_thread_ = nullptr;
     AppPaths paths_;
     AppSettings settings_;
@@ -94,6 +116,8 @@ private:
     TranslatePage *translate_page_ = nullptr;
     ModelPage *model_page_ = nullptr;
     WordSelectPage *wordselect_page_ = nullptr;
+    BatchPage *batch_page_ = nullptr;
+    BatchLangPanel *batch_lang_panel_ = nullptr;
     ModalOverlay *modal_ = nullptr;
     DownloadProgressPanel *download_panel_ = nullptr;
 
