@@ -15,7 +15,7 @@
 
 namespace {
 
-LoadModelPayload make_load_payload(std::string model_path) {
+LoadModelPayload make_load_payload(std::filesystem::path model_path) {
     LoadModelPayload payload;
     payload.model_path = std::move(model_path);
     return payload;
@@ -128,10 +128,10 @@ TaskId TaskOrchestrator::submit_download_model(TaskPriority priority) {
 }
 
 TaskId TaskOrchestrator::submit_load_model(TaskPriority priority) {
-    std::string model_path;
+    std::filesystem::path model_path;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        model_path = model_path_;
+        model_path = std::filesystem::u8path(model_path_);
     }
 
     Task task{};
@@ -472,6 +472,7 @@ void TaskOrchestrator::execute_task(Task task) {
             if (callbacks_.on_download_finished) {
                 callbacks_.on_download_finished(false);
             }
+            finalize_task(task_id, task.kind, TaskState::Failed);
         } else if (task.kind == TaskKind::LoadModel) {
             engine_.unload();
             {
@@ -482,6 +483,7 @@ void TaskOrchestrator::execute_task(Task task) {
             if (callbacks_.on_model_load_finished) {
                 callbacks_.on_model_load_finished(false, ex.what());
             }
+            finalize_task(task_id, task.kind, TaskState::Failed);
         } else {
             emit_status(std::string("Error: ") + ex.what(), false);
             if (task.kind == TaskKind::TranslatePipeline) {

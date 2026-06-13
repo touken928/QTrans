@@ -61,7 +61,12 @@ struct LlamaModelHolder {
     }
     LlamaModelHolder &operator=(LlamaModelHolder &&other) noexcept {
         if (this != &other) {
-            this->~LlamaModelHolder();
+            if (model != nullptr) {
+                llama_model_free(model);
+            }
+            if (file != nullptr) {
+                std::fclose(file);
+            }
             buffer = std::move(other.buffer);
             file = other.file;
             model = other.model;
@@ -86,6 +91,20 @@ FILE *open_memory_as_file(std::vector<std::uint8_t> &buffer) {
 #else
     return fmemopen(buffer.data(), buffer.size(), "rb");
 #endif
+}
+
+LlamaModelHolder load_llama_model(const std::filesystem::path &path,
+                                  const llama_model_params &params) {
+    if (path.empty()) throw std::invalid_argument("model path is empty");
+    const auto path_utf8 = path.u8string();
+    LlamaModelHolder holder;
+    llama_model_params model_params = params;
+    // leave use_mmap as default (true) for direct file loading
+    holder.model = llama_model_load_from_file(
+        reinterpret_cast<const char *>(path_utf8.c_str()), model_params);
+    if (holder.model == nullptr)
+        throw std::runtime_error("failed to load llama model from file: " + path.string());
+    return holder;
 }
 
 LlamaModelHolder load_llama_model(const std::vector<std::uint8_t> &data,
@@ -236,10 +255,12 @@ void LocalRuntime::load(const ModelLoadSpec &model, const TranslatorOptions &con
         throw std::runtime_error("local runtime requires local model data");
     }
 
-    const std::vector<std::uint8_t> &data = local->weights;
-    if (data.empty()) throw std::invalid_argument("model data is empty");
+    if (local->path.empty() && local->weights.empty()) {
+        throw std::invalid_argument("local model requires a file path or in-memory weights");
+    }
 
     impl_->config_ = config;
+    impl_->loaded_ = false;
 
     // Clean up previous state.
     if (impl_->sampler_ != nullptr) {
@@ -255,7 +276,11 @@ void LocalRuntime::load(const ModelLoadSpec &model, const TranslatorOptions &con
     llama_model_params model_params = llama_model_default_params();
     model_params.n_gpu_layers = config.n_gpu_layers;
 
-    impl_->model_holder_ = load_llama_model(data, model_params);
+    if (!local->path.empty()) {
+        impl_->model_holder_ = load_llama_model(local->path, model_params);
+    } else {
+        impl_->model_holder_ = load_llama_model(local->weights, model_params);
+    }
 
     const int train_ctx = llama_model_n_ctx_train(impl_->model_holder_.model);
     if (train_ctx > 0 && impl_->config_.context.n_ctx > train_ctx) {

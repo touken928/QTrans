@@ -3,6 +3,7 @@
 #include "services/download/download.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <string>
 #include <variant>
 
@@ -46,7 +47,7 @@ struct DownloadModelPayload {
 };
 
 struct LoadModelPayload {
-    std::string model_path;
+    std::filesystem::path model_path;
 };
 
 struct TranslatePipelinePayload {

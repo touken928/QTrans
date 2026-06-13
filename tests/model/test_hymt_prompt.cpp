@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <stdexcept>
+#include <variant>
 #include <vector>
 
 namespace {
@@ -31,7 +32,11 @@ std::filesystem::path write_temp_bytes(const std::vector<std::uint8_t> &data) {
 TEST(HyMt2_18BLocalModel, SetsContextAndChatTemplate) {
     const std::filesystem::path path = write_temp_bytes({0x47, 0x47, 0x55, 0x46});
     const qtrans::core::TranslationProfile profile = make_hymt2_18b_local_profile(path, -1);
+    const auto *local = std::get_if<qtrans::core::LocalModelConfig>(&profile.model);
     ASSERT_NE(profile.prompt_strategy, nullptr);
+    ASSERT_NE(local, nullptr);
+    EXPECT_EQ(local->path, path);
+    EXPECT_TRUE(local->weights.empty());
     EXPECT_EQ(profile.options.context.n_ctx, 4096);
     EXPECT_EQ(profile.options.context.max_tokens, 4096);
     EXPECT_EQ(profile.options.n_gpu_layers, -1);
@@ -46,7 +51,11 @@ TEST(HyMt2_18BLocalModel, SetsContextAndChatTemplate) {
 TEST(HyMt2_7BLocalModel, SetsContextAndChatTemplate) {
     const std::filesystem::path path = write_temp_bytes({0x47, 0x47, 0x55, 0x46});
     const qtrans::core::TranslationProfile profile = make_hymt2_7b_local_profile(path, -1);
+    const auto *local = std::get_if<qtrans::core::LocalModelConfig>(&profile.model);
     ASSERT_NE(profile.prompt_strategy, nullptr);
+    ASSERT_NE(local, nullptr);
+    EXPECT_EQ(local->path, path);
+    EXPECT_TRUE(local->weights.empty());
     EXPECT_EQ(profile.options.context.n_ctx, 8192);
     EXPECT_EQ(profile.options.context.max_tokens, 8192);
 

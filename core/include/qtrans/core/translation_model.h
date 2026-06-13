@@ -56,6 +56,7 @@ private:
 };
 
 struct LocalModelConfig {
+    std::filesystem::path path;
     std::vector<std::uint8_t> weights;
 };
 
