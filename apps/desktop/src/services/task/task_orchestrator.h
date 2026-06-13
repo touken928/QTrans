@@ -5,7 +5,7 @@
 #include "services/task/task_queue.h"
 #include "services/task/task_types.h"
 #include "services/engine/inference_engine.h"
-#include "inference/inference_backend.h"
+#include "qtrans/core/backend_environment.h"
 
 #include <filesystem>
 #include <functional>
@@ -38,7 +38,6 @@ public:
 
     void set_model_path(const std::string &path);
     void set_model_id(const std::string &id);
-    void set_backend_plugin_dir(const std::filesystem::path &plugin_dir);
     void initialize_backend();
     void set_remote_spec(const std::string &spec);
     void set_modelscope_remote_spec(const std::string &spec);
@@ -75,13 +74,10 @@ private:
 
     std::string model_path_;
     std::string model_id_;
-    std::filesystem::path backend_plugin_dir_;
     std::string remote_spec_ = "tencent/Hy-MT2-1.8B-GGUF/Hy-MT2-1.8B-Q4_K_M.gguf";
     std::string modelscope_remote_spec_ =
         "Tencent-Hunyuan/Hy-MT2-1.8B-GGUF/Hy-MT2-1.8B-Q4_K_M.gguf";
     int download_hub_ = 2;
-    qtrans::core::TranslatorOptions translator_options_{};
-    InferenceBackend active_backend_ = InferenceBackend::GpuMetal;
 
     TaskId running_task_id_{};
     TaskPriority running_priority_ = TaskPriority::Normal;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "qtrans/core/backend_environment.h"
 #include "qtrans/core/cancellation.h"
 #include "qtrans/core/options.h"
 #include "qtrans/core/runtime.h"
@@ -21,6 +22,9 @@ struct TranslationCallbacks {
 class Translator {
 public:
     explicit Translator(TranslatorOptions options = {});
+    Translator(ResolvedBackendEnvironment environment,
+               BackendOptions backend_options = {},
+               TranslatorOptions options = {});
     explicit Translator(std::unique_ptr<ITranslationRuntimeFactory> factory,
                         TranslatorOptions options = {});
     explicit Translator(std::unique_ptr<ITranslationRuntime> runtime,
@@ -32,7 +36,6 @@ public:
     Translator(Translator &&) noexcept;
     Translator &operator=(Translator &&) noexcept;
 
-    void initialize_backend(const BackendOptions &options);
     std::string backend_label() const;
 
     void load(TranslationProfile profile);

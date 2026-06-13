@@ -1,9 +1,8 @@
 #include "qtrans/core/translator.h"
 
+#include "diagnostics.h"
 #include "runtime/default_runtime_factory.h"
 #include "text/chunker.h"
-
-#include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <stdexcept>
@@ -11,6 +10,31 @@
 namespace qtrans::core {
 
 namespace {
+
+bool backend_request_available(const BackendOptions &options,
+                               const ResolvedBackendEnvironment &environment) {
+    switch (options.backend_type) {
+        case BackendType::Metal:
+            return environment.capabilities.metal_available;
+        case BackendType::Vulkan:
+            return environment.capabilities.vulkan_available;
+        case BackendType::Auto:
+        default:
+            return true;
+    }
+}
+
+std::string unavailable_backend_message(const BackendOptions &options) {
+    switch (options.backend_type) {
+        case BackendType::Metal:
+            return "requested backend Metal is unavailable";
+        case BackendType::Vulkan:
+            return "requested backend Vulkan is unavailable";
+        case BackendType::Auto:
+        default:
+            return "requested backend is unavailable";
+    }
+}
 
 TranslationResult make_failure(const std::string &message) {
     TranslationResult result;
@@ -72,12 +96,22 @@ struct Translator::Impl {
     TranslationProfile profile;
     std::unique_ptr<ITranslationRuntime> runtime;
     std::unique_ptr<ITranslationRuntimeFactory> factory;
+    ResolvedBackendEnvironment backend_environment;
     BackendOptions backend_options;
     TranslatorOptions fallback_options;
 };
 
 Translator::Translator(TranslatorOptions options)
     : impl_(std::make_unique<Impl>()) {
+    impl_->fallback_options = std::move(options);
+}
+
+Translator::Translator(ResolvedBackendEnvironment environment,
+                       BackendOptions backend_options,
+                       TranslatorOptions options)
+    : impl_(std::make_unique<Impl>()) {
+    impl_->backend_environment = std::move(environment);
+    impl_->backend_options = std::move(backend_options);
     impl_->fallback_options = std::move(options);
 }
 
@@ -98,12 +132,9 @@ Translator::~Translator() = default;
 Translator::Translator(Translator &&) noexcept = default;
 Translator &Translator::operator=(Translator &&) noexcept = default;
 
-void Translator::initialize_backend(const BackendOptions &options) {
-    impl_->backend_options = options;
-}
-
 std::string Translator::backend_label() const {
     if (impl_->runtime) return impl_->runtime->backend_label();
+    if (impl_->backend_environment.initialized) return impl_->backend_environment.label;
     return "uninitialized";
 }
 
@@ -112,11 +143,22 @@ void Translator::load(TranslationProfile profile) {
         throw std::invalid_argument(std::move(*err));
     }
 
+    if (!impl_->runtime && std::holds_alternative<LocalModelConfig>(profile.model)) {
+        const ResolvedBackendEnvironment &environment = impl_->backend_environment;
+        if (!environment.initialized) {
+            throw std::runtime_error("backend environment is not initialized");
+        }
+        if (!backend_request_available(impl_->backend_options, environment)) {
+            throw std::runtime_error(unavailable_backend_message(impl_->backend_options));
+        }
+    }
+
     if (impl_->runtime) {
         impl_->runtime->unload();
     } else {
         if (!impl_->factory) {
-            impl_->factory = std::make_unique<DefaultRuntimeFactory>(impl_->backend_options);
+            impl_->factory = std::make_unique<DefaultRuntimeFactory>(impl_->backend_environment,
+                                                                     impl_->backend_options);
         }
         impl_->runtime = impl_->factory->create_runtime(profile.model);
     }
@@ -167,7 +209,6 @@ TranslationResult Translator::translate(
     const ITranslationPromptStrategy &prompt_strategy = *impl_->profile.prompt_strategy;
     const TranslatorOptions &options = impl_->profile.options;
     const RuntimeTraits traits = impl_->runtime->traits();
-    auto logger = spdlog::get("inference");
 
     auto do_step = [&](const std::string &text,
                        const std::string &target_language,
@@ -205,7 +246,8 @@ TranslationResult Translator::translate(
                                               target_language, on_token, should_cancel);
             }
 
-            if (logger) logger->debug("translating in {} chunks", chunks.size());
+            diagnostics::emit(DiagnosticLevel::Debug, "translator",
+                              "translating in " + std::to_string(chunks.size()) + " chunks");
 
             std::string combined;
             for (size_t i = 0; i < chunks.size(); ++i) {

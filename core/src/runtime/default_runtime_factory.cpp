@@ -7,16 +7,16 @@
 
 namespace qtrans::core {
 
-DefaultRuntimeFactory::DefaultRuntimeFactory(BackendOptions backend_opts)
-    : backend_opts_(std::move(backend_opts)) {
+DefaultRuntimeFactory::DefaultRuntimeFactory(ResolvedBackendEnvironment environment,
+                                             BackendOptions backend_opts)
+    : environment_(std::move(environment)),
+      backend_opts_(std::move(backend_opts)) {
 }
 
 std::unique_ptr<ITranslationRuntime> DefaultRuntimeFactory::create_runtime(
     const ModelLoadSpec &model) {
     if (std::holds_alternative<LocalModelConfig>(model)) {
-        auto rt = std::make_unique<LocalRuntime>();
-        rt->initialize_backend(backend_opts_);
-        return rt;
+        return std::make_unique<LocalRuntime>(environment_, backend_opts_);
     }
     return std::make_unique<RemoteRuntime>();
 }

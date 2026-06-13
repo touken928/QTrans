@@ -81,10 +81,6 @@ void TaskService::setModelId(const QString &id) {
     orchestrator_.set_model_id(qtrans::app::to_utf8(id));
 }
 
-void TaskService::setBackendPluginDir(const QString &path) {
-    orchestrator_.set_backend_plugin_dir(qtrans::app::to_utf8(path));
-}
-
 void TaskService::initializeBackend() {
     orchestrator_.initialize_backend();
 }

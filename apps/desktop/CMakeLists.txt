@@ -1,7 +1,6 @@
 add_library(qtrans_engine STATIC
     src/storage/app_paths.cpp
     src/storage/settings.cpp
-    src/inference/inference_backend.cpp
     src/inference/inference_resolver.cpp
     src/catalog/model_catalog.cpp
     src/models/local/hymt2_18b_local_model.cpp
@@ -25,11 +24,7 @@ add_library(qtrans_engine STATIC
 target_include_directories(qtrans_engine PUBLIC src)
 target_link_libraries(qtrans_engine PUBLIC qtrans_core)
 
-target_link_libraries(qtrans_engine PUBLIC
-    llama
-    CURL::libcurl
-    spdlog::spdlog
-)
+target_link_libraries(qtrans_engine PUBLIC spdlog::spdlog)
 
 target_compile_definitions(qtrans_engine PUBLIC
     $<$<CONFIG:Release>:SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_WARN>

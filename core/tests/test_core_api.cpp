@@ -183,9 +183,42 @@ TEST(CorePromptStrategy, FunctionStrategyFormatsPrompt) {
 }
 
 TEST(CoreBackendEnvironment, BackendLabelAccessible) {
-    BackendOptions opts;
-    EXPECT_NO_THROW(BackendEnvironment::initialize(opts));
-    EXPECT_FALSE(BackendEnvironment::backend_label().empty());
+    const auto &environment = BackendEnvironment::initialize_and_resolve({});
+    EXPECT_TRUE(environment.initialized);
+    EXPECT_FALSE(environment.label.empty());
+}
+
+TEST(CoreBackendEnvironment, ResolveApiProvidesCapabilitiesAndLabel) {
+    const auto &resolved = BackendEnvironment::current();
+    EXPECT_FALSE(resolved.label.empty());
+    EXPECT_TRUE(resolved.label == "CPU" || resolved.label == "Metal" || resolved.label == "Vulkan");
+}
+
+TEST(CoreTranslator, ExplicitUnavailableBackendFailsLoad) {
+    BackendOptions backend_options;
+    const auto &environment = BackendEnvironment::initialize_and_resolve({});
+    BackendType explicit_backend = BackendType::Auto;
+    if (!environment.capabilities.vulkan_available) {
+        explicit_backend = BackendType::Vulkan;
+    } else if (!environment.capabilities.metal_available) {
+        explicit_backend = BackendType::Metal;
+    }
+
+    if (explicit_backend == BackendType::Auto) {
+        GTEST_SKIP() << "No unavailable explicit backend available on this platform";
+    }
+
+    backend_options.backend_type = explicit_backend;
+    Translator translator(environment, backend_options, TranslatorOptions{});
+
+    TranslationProfile profile;
+    LocalModelConfig local;
+    local.weights = {1, 2, 3};
+    profile.model = local;
+    profile.prompt_strategy = std::make_shared<FunctionPromptStrategy>(
+        [](std::string_view text, std::string_view) { return std::string(text); });
+
+    EXPECT_THROW(translator.load(std::move(profile)), std::runtime_error);
 }
 
 TEST(CoreRuntime, FactoryInterface) {

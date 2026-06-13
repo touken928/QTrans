@@ -193,7 +193,6 @@ void MainWindow::refreshModelPage() {
 }
 
 void MainWindow::initializeInferenceBackend() {
-    task_service_->setBackendPluginDir(qtrans::app::from_utf8(paths_.app_dir.string()));
     QMetaObject::invokeMethod(task_service_, "initializeBackend", Qt::BlockingQueuedConnection);
 }
 
