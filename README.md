@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="resources/logo.png" width="250" alt="QTrans">
+  <img src="apps/desktop/resources/logo.png" width="250" alt="QTrans">
 </p>
 
 <p align="center">

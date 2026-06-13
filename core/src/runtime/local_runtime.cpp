@@ -94,7 +94,7 @@ FILE *open_memory_as_file(std::vector<std::uint8_t> &buffer) {
 }
 
 LlamaModelHolder load_llama_model(const std::filesystem::path &path,
-                                   const llama_model_params &params) {
+                                  const llama_model_params &params) {
     if (path.empty()) throw std::invalid_argument("model path is empty");
     const auto path_utf8 = path.u8string();
     LlamaModelHolder holder;
@@ -108,7 +108,7 @@ LlamaModelHolder load_llama_model(const std::filesystem::path &path,
 }
 
 LlamaModelHolder load_llama_model(const std::vector<std::uint8_t> &data,
-                                   const llama_model_params &params) {
+                                  const llama_model_params &params) {
     if (data.empty()) throw std::invalid_argument("gguf data is empty");
     LlamaModelHolder holder;
     holder.buffer = data;
