@@ -39,6 +39,9 @@ AppPaths AppPaths::detect(const std::filesystem::path &executable_dir) {
     paths.settings_dir = paths.data_root / "settings";
     paths.settings_file = paths.settings_dir / "settings.ini";
     paths.logs_dir = paths.data_root / "logs";
+    paths.batch_dir = paths.data_root / "batch";
+    paths.batch_queue_file = paths.batch_dir / "queue.bq";
+    paths.batch_output_dir = paths.batch_dir / "output";
     return paths;
 }
 
@@ -59,4 +62,6 @@ void AppPaths::ensureDirectories() const {
     std::filesystem::create_directories(models_dir, ec);
     std::filesystem::create_directories(settings_dir, ec);
     std::filesystem::create_directories(logs_dir, ec);
+    std::filesystem::create_directories(batch_dir, ec);
+    std::filesystem::create_directories(batch_output_dir, ec);
 }

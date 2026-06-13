@@ -1,15 +1,19 @@
 #include "ui/shell/mainwindow.h"
 
 #include "ui/shared/modal_overlay.h"
+#include "app/batch_controller.h"
 #include "app/task_service.h"
+#include "ui/pages/batch/batch_lang_panel.h"
 #include "ui/shared/theme/app_theme.h"
 #include "ui/shared/panels/alert_panel.h"
 #include "ui/shared/panels/download_progress_panel.h"
 #include "ui/shared/panels/model_missing_panel.h"
+#include "ui/pages/batch/batch_page.h"
 #include "ui/pages/models/model_page.h"
 #include "ui/sidebar/sidebar_widget.h"
 #include "ui/pages/translate/translate_page.h"
 #include "ui/pages/wordselect/wordselect_page.h"
+#include "domain/batch/batch_enums.h"
 #include "domain/download/download.h"
 #include "domain/model-catalog/model_catalog.h"
 #include "domain/inference/runtime_capabilities.h"
@@ -23,7 +27,9 @@
 
 #include <QCloseEvent>
 #include <QCoreApplication>
+#include <QDesktopServices>
 #include <QFile>
+#include <QFileDialog>
 #include <QHBoxLayout>
 #include <QMessageBox>
 #include <QMetaObject>
@@ -31,13 +37,16 @@
 #include <QShowEvent>
 #include <QStackedWidget>
 #include <QThread>
+#include <QUrl>
+#include <QVariantMap>
 
 MainWindow::MainWindow(
     TaskService *task_service,
+    BatchController *batch_controller,
     QThread *worker_thread,
     const AppPaths &paths,
     QWidget *parent)
-    : QMainWindow(parent), task_service_(task_service), worker_thread_(worker_thread), paths_(paths) {
+    : QMainWindow(parent), task_service_(task_service), batch_controller_(batch_controller), worker_thread_(worker_thread), paths_(paths) {
     setWindowTitle(QStringLiteral("QTrans"));
     resize(960, 600);
     setMinimumSize(720, 480);
@@ -61,11 +70,13 @@ MainWindow::MainWindow(
     model_page_ = new ModelPage(central_root_);
     model_page_->setSettings(paths_, settings_);
     wordselect_page_ = new WordSelectPage(central_root_);
+    batch_page_ = new BatchPage(central_root_);
 
     content_stack_ = new QStackedWidget(central_root_);
-    content_stack_->addWidget(translate_page_);
-    content_stack_->addWidget(wordselect_page_);
-    content_stack_->addWidget(model_page_);
+    content_stack_->addWidget(translate_page_);   // index 0
+    content_stack_->addWidget(wordselect_page_);  // index 1
+    content_stack_->addWidget(batch_page_);       // index 2
+    content_stack_->addWidget(model_page_);       // index 3
     shell->addWidget(content_stack_, 1);
 
     setCentralWidget(central_root_);
@@ -104,6 +115,52 @@ MainWindow::MainWindow(
     connect(task_service_, &TaskService::translationFinished, this, &MainWindow::onTranslationFinished);
     connect(task_service_, &TaskService::translateTaskStarted, this, &MainWindow::onTranslateTaskStarted);
 
+    // ── Batch page wiring (batch controller lives on worker thread;
+    //     use queued invocations for UI→worker calls) ─────────────────────
+    connect(batch_page_, &BatchPage::addFilesRequested,
+            this, &MainWindow::onBatchShowLanguagePicker);
+    connect(batch_page_, &BatchPage::removeSelectedRequested,
+            this, &MainWindow::onBatchRemoveEntry);
+    connect(batch_page_, &BatchPage::startRequested,
+            this, &MainWindow::onBatchStart);
+    connect(batch_page_, &BatchPage::pauseRequested,
+            this, &MainWindow::onBatchPause);
+    connect(batch_page_, &BatchPage::resumeRequested,
+            this, &MainWindow::onBatchResume);
+    connect(batch_page_, &BatchPage::saveRequested,
+            this, &MainWindow::onBatchSaveEntry);
+
+    // BatchController signals (emitted from worker thread) → page updates
+    // on UI thread. Auto-connection becomes queued cross-thread.
+    connect(batch_controller_, &BatchController::entryAdded,
+            this, &MainWindow::onBatchEntryAdded);
+    connect(batch_controller_, &BatchController::entryRemoved,
+            this, &MainWindow::onBatchEntryRemoved);
+    connect(batch_controller_, &BatchController::entrySaved,
+            this, [this](const QString &entry_id, const QString &path) {
+                batch_page_->setCardSaved(entry_id, path);
+            });
+    connect(batch_controller_, &BatchController::entryStateChanged,
+            this, &MainWindow::onBatchEntryStateChanged);
+    connect(batch_controller_, &BatchController::segmentProgress,
+            this, &MainWindow::onBatchSegmentProgress);
+    connect(batch_controller_, &BatchController::batchStateChanged,
+            this, [this](bool running, bool paused) {
+                batch_page_->setRunning(running);
+                batch_page_->setPaused(paused);
+            });
+    connect(batch_controller_, &BatchController::batchFinished,
+            this, [this]() {
+                batch_page_->setRunning(false);
+                batch_page_->setStatusText(QStringLiteral("Batch finished"));
+            });
+    connect(batch_controller_, &BatchController::errorOccurred,
+            this, &MainWindow::onBatchError);
+
+    // Load persisted queue entries so the UI auto-syncs.
+    QMetaObject::invokeMethod(batch_controller_, "loadPersistedEntries",
+                              Qt::QueuedConnection);
+
     hotkey_manager_ = new HotkeyManager(this);
 
     popup_window_ = new PopupWindow(nullptr);
@@ -139,12 +196,7 @@ MainWindow::MainWindow(
     connect(system_tray_, &SystemTray::quitApp, qApp, &QCoreApplication::quit);
 }
 
-MainWindow::~MainWindow() {
-    if (worker_thread_ != nullptr) {
-        worker_thread_->quit();
-        worker_thread_->wait();
-    }
-}
+MainWindow::~MainWindow() = default;
 
 void MainWindow::bringToForeground() {
     show();
@@ -180,7 +232,7 @@ void MainWindow::switchPage(int index) {
     content_stack_->setCurrentIndex(index);
     sidebar_->setCurrentPage(index);
 
-    if (index == 2) {
+    if (index == 3) {
         refreshModelPage();
     }
 }
@@ -553,4 +605,131 @@ void MainWindow::onBackTranslateAppended(quint64 task_id, const QString &piece) 
         return;
     }
     translate_page_->appendBackTranslate(piece);
+}
+
+// ── Batch UI slots ───────────────────────────────────────────────────────────
+// All UI→worker calls use QueuedConnection since BatchController lives on the
+// worker thread alongside TaskService.
+
+void MainWindow::onBatchAddFiles(const QString &source_lang,
+                                 const QString &target_lang) {
+    hideModal();
+    const QStringList file_paths = QFileDialog::getOpenFileNames(
+        this,
+        QStringLiteral("Select file(s) for batch translation"),
+        QString(),
+        QStringLiteral("Text files (*.txt *.md *.srt);;All files (*)"));
+    if (file_paths.isEmpty()) return;
+
+    for (const QString &path : file_paths) {
+        QMetaObject::invokeMethod(
+            batch_controller_, "addFile",
+            Qt::QueuedConnection,
+            Q_ARG(QString, path),
+            Q_ARG(QString, source_lang),
+            Q_ARG(QString, target_lang));
+    }
+}
+
+void MainWindow::onBatchShowLanguagePicker() {
+    batch_lang_panel_ = new BatchLangPanel();
+    batch_lang_panel_->setDefaultLanguages(
+        translate_page_->sourceLanguageName(),
+        translate_page_->targetLanguageName());
+    connect(batch_lang_panel_, &BatchLangPanel::confirmed,
+            this, &MainWindow::onBatchAddFiles);
+    connect(batch_lang_panel_, &BatchLangPanel::cancelled,
+            this, &MainWindow::onBatchLanguagePickerCancelled);
+    modal_->setContent(batch_lang_panel_, QSize(460, 260));
+    modal_->showModal();
+}
+
+void MainWindow::onBatchLanguagePickerCancelled() {
+    hideModal();
+}
+
+void MainWindow::onBatchRemoveEntry(const QStringList &entry_ids) {
+    for (const QString &id : entry_ids) {
+        QMetaObject::invokeMethod(
+            batch_controller_, "removeEntry",
+            Qt::QueuedConnection,
+            Q_ARG(QString, id));
+    }
+}
+
+void MainWindow::onBatchStart() {
+    batch_page_->setRunning(true);
+    batch_page_->setStatusText(QStringLiteral("Batch running..."));
+    QMetaObject::invokeMethod(batch_controller_, "start", Qt::QueuedConnection);
+}
+
+void MainWindow::onBatchPause() {
+    batch_page_->setPaused(true);
+    batch_page_->setStatusText(QStringLiteral("Batch paused"));
+    QMetaObject::invokeMethod(batch_controller_, "pause", Qt::QueuedConnection);
+}
+
+void MainWindow::onBatchResume() {
+    batch_page_->setPaused(false);
+    batch_page_->setStatusText(QStringLiteral("Batch running..."));
+    QMetaObject::invokeMethod(batch_controller_, "resume", Qt::QueuedConnection);
+}
+
+void MainWindow::onBatchEntryAdded(const QString &entry_id,
+                                   const QString &source_language,
+                                   const QString &target_language) {
+    QString file_name;
+    QMetaObject::invokeMethod(
+        batch_controller_, "entryFileName",
+        Qt::BlockingQueuedConnection,
+        Q_RETURN_ARG(QString, file_name),
+        Q_ARG(QString, entry_id));
+    batch_page_->addCard(entry_id, file_name, source_language, target_language);
+
+    // Check if already saved (e.g. restored from persisted queue).
+    QVariantMap meta;
+    QMetaObject::invokeMethod(
+        batch_controller_, "entryMetadata",
+        Qt::BlockingQueuedConnection,
+        Q_RETURN_ARG(QVariantMap, meta),
+        Q_ARG(QString, entry_id));
+    if (meta.value(QStringLiteral("saved")).toBool()) {
+        batch_page_->setCardSaved(entry_id,
+                                  meta.value(QStringLiteral("save_path")).toString());
+    }
+}
+
+void MainWindow::onBatchEntryRemoved(const QString &entry_id) {
+    batch_page_->removeCard(entry_id);
+}
+
+void MainWindow::onBatchEntryStateChanged(const QString &entry_id, int state) {
+    batch_page_->setCardState(entry_id, state);
+}
+
+void MainWindow::onBatchSegmentProgress(const QString &entry_id, int completed, int total) {
+    batch_page_->setCardProgress(entry_id, completed, total);
+}
+
+void MainWindow::onBatchSaveEntry(const QStringList &entry_ids) {
+    if (entry_ids.isEmpty()) return;
+
+    const QString dest_dir = QFileDialog::getExistingDirectory(
+        this,
+        QStringLiteral("Select destination for translated files"),
+        QString());
+    if (dest_dir.isEmpty()) return;
+
+    QMetaObject::invokeMethod(
+        batch_controller_, "saveEntriesToDirectory",
+        Qt::QueuedConnection,
+        Q_ARG(QStringList, entry_ids),
+        Q_ARG(QString, dest_dir));
+    batch_page_->setStatusText(
+        QStringLiteral("Saving %1 file(s)...").arg(entry_ids.size()));
+}
+
+void MainWindow::onBatchError(const QString &message) {
+    batch_page_->setStatusText(QStringLiteral("Error: ") + message);
+    qtrans::log::get(qtrans::log::Component::App)->error("batch error: {}", qtrans::app::to_utf8(message));
 }

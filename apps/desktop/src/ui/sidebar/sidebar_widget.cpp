@@ -47,6 +47,13 @@ SidebarWidget::SidebarWidget(QWidget *parent)
     wordselect_button_->setCursor(Qt::PointingHandCursor);
     layout->addWidget(wordselect_button_);
 
+    batch_button_ = new QPushButton(
+        QString(Theme::NavIcon::batch) + QStringLiteral("  Batch"), this);
+    batch_button_->setObjectName(QStringLiteral("navButton"));
+    batch_button_->setCheckable(true);
+    batch_button_->setCursor(Qt::PointingHandCursor);
+    layout->addWidget(batch_button_);
+
     model_button_ = new QPushButton(
         QString(Theme::NavIcon::model) + QStringLiteral("  Model"), this);
     model_button_->setObjectName(QStringLiteral("navButton"));
@@ -58,7 +65,8 @@ SidebarWidget::SidebarWidget(QWidget *parent)
     nav_group->setExclusive(true);
     nav_group->addButton(translate_button_, 0);
     nav_group->addButton(wordselect_button_, 1);
-    nav_group->addButton(model_button_, 2);
+    nav_group->addButton(batch_button_, 2);
+    nav_group->addButton(model_button_, 3);
 
     connect(nav_group, &QButtonGroup::idClicked, this, &SidebarWidget::pageSelected);
 
@@ -69,12 +77,14 @@ SidebarWidget::SidebarWidget(QWidget *parent)
 void SidebarWidget::setCurrentPage(int index) {
     translate_button_->setChecked(index == 0);
     wordselect_button_->setChecked(index == 1);
-    model_button_->setChecked(index == 2);
+    batch_button_->setChecked(index == 2);
+    model_button_->setChecked(index == 3);
 }
 
 void SidebarWidget::setNavigationEnabled(bool enabled) {
     translate_button_->setEnabled(enabled);
     wordselect_button_->setEnabled(enabled);
+    batch_button_->setEnabled(enabled);
     model_button_->setEnabled(enabled);
 }
 

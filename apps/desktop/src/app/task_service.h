@@ -26,8 +26,10 @@ public:
     TaskId submitTranslatePipeline(
         const TranslatePipelinePayload &payload,
         TaskPriority priority = TaskPriority::Interactive);
+    TaskId submitBatchTranslate(const TranslatePipelinePayload &payload);
 
     bool cancel(TaskId id);
+    bool preemptBatchTask();
     TaskState taskState(TaskId id) const;
     bool isModelLoaded() const;
 
@@ -47,12 +49,14 @@ public slots:
 
 signals:
     void translateTaskStarted(quint64 task_id);
+    void batchTaskStarted(quint64 task_id);
     void statusChanged(const QString &message, bool busy);
     void modelLoadFinished(bool success, const QString &error_message, const QString &backend_label);
     void modelUnloadFinished();
     void downloadProgress(qint64 downloaded_bytes, qint64 total_bytes, double speed_bps, double eta_seconds);
     void downloadFinished(bool success);
     void taskStateChanged(quint64 task_id, int state);
+    void taskFailed(quint64 task_id, const QString &message);
     void targetReset(quint64 task_id);
     void targetAppended(quint64 task_id, const QString &piece);
     void backTranslateReset(quint64 task_id);

@@ -1,5 +1,6 @@
 #include "domain/platform/single_instance/single_instance.h"
 #include "shared/string_bridge.h"
+#include "app/batch_controller.h"
 #include "app/task_service.h"
 #include "ui/shell/mainwindow.h"
 #include "domain/logging/config.h"
@@ -48,9 +49,16 @@ int main(int argc, char *argv[]) {
     QThread worker_thread;
     TaskService task_service;
     task_service.moveToThread(&worker_thread);
+
+    BatchController batch_controller(
+        &task_service,
+        paths.batch_queue_file,
+        paths.batch_output_dir);
+    batch_controller.moveToThread(&worker_thread);
+
     worker_thread.start();
 
-    MainWindow window(&task_service, &worker_thread, paths);
+    MainWindow window(&task_service, &batch_controller, &worker_thread, paths);
     QObject::connect(&app, &QGuiApplication::applicationStateChanged, &window,
                      [&window](Qt::ApplicationState state) {
                          if (state == Qt::ApplicationActive && !window.isVisible()) {

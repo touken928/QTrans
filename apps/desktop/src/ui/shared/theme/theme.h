@@ -77,6 +77,7 @@ namespace NavIcon {
 inline constexpr const char *translate = "\u21C4";
 inline constexpr const char *wordSelect = "\u2318";
 inline constexpr const char *model = "\u2699";
+inline constexpr const char *batch = "\u2601";  // cloud icon for batch
 }  // namespace NavIcon
 
 }  // namespace Theme

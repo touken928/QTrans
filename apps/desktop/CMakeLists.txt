@@ -19,6 +19,8 @@ add_library(qtrans_engine STATIC
     src/domain/logging/component.cpp
     src/domain/logging/ai_trace.cpp
     src/domain/logging/console_progress.cpp
+    src/domain/batch/batch_store.cpp
+    src/domain/batch/batch_file_handler.cpp
 )
 
 target_include_directories(qtrans_engine PUBLIC src)
@@ -50,6 +52,8 @@ set(_QT_SOURCES_COMMON
     src/ui/shell/mainwindow.h
     src/app/task_service.cpp
     src/app/task_service.h
+    src/app/batch_controller.cpp
+    src/app/batch_controller.h
     src/ui/shared/modal_overlay.cpp
     src/ui/shared/modal_overlay.h
     src/ui/shared/panels/alert_panel.cpp
@@ -70,6 +74,12 @@ set(_QT_SOURCES_COMMON
     src/ui/pages/translate/translate_page.h
     src/ui/pages/wordselect/wordselect_page.cpp
     src/ui/pages/wordselect/wordselect_page.h
+    src/ui/pages/batch/batch_page.cpp
+    src/ui/pages/batch/batch_page.h
+    src/ui/pages/batch/batch_card.cpp
+    src/ui/pages/batch/batch_card.h
+    src/ui/pages/batch/batch_lang_panel.cpp
+    src/ui/pages/batch/batch_lang_panel.h
     src/ui/shared/widget_utils.cpp
     src/ui/shared/widget_utils.h
     src/ui/popup/popup_window.cpp

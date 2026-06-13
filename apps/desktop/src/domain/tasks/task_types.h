@@ -31,6 +31,7 @@ enum class TaskKind {
 enum class TaskPriority {
     Interactive = 0,
     Normal = 1,
+    Background = 2,
 };
 
 enum class TaskState {
@@ -39,6 +40,7 @@ enum class TaskState {
     Completed,
     Failed,
     Cancelled,
+    Preempted,  // batch segment preempted by interactive work or pause
 };
 
 struct DownloadModelPayload {

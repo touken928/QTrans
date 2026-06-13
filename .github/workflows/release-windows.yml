@@ -16,6 +16,7 @@ jobs:
       VCPKG_TARGET_TRIPLET: x64-mingw-static-release
       VCPKG_INSTALL_ROOT: ${{ github.workspace }}/build/x64-mingw-release/vcpkg_installed
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}\\.vcpkg-cache,readwrite
       BUILD_DIR: ${{ github.workspace }}/build/x64-mingw-release
       LLVM_MINGW: C:\llvm-mingw
 
@@ -126,6 +127,19 @@ jobs:
             Write-Host "vcpkg_installed missing - dependencies will compile from source"
           }
 
+          $blobCount = (Get-ChildItem $env:VCPKG_DEFAULT_BINARY_CACHE -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
+          Write-Host "binary cache files: $blobCount"
+
+      - name: Install vcpkg dependencies
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_ROOT\vcpkg.exe" install `
+            --triplet "$env:VCPKG_TARGET_TRIPLET" `
+            --host-triplet "$env:VCPKG_HOST_TRIPLET" `
+            --x-manifest-root="$env:GITHUB_WORKSPACE" `
+            --x-install-root="$env:VCPKG_INSTALL_ROOT" `
+            --clean-after-build
+
       - name: Configure application
         shell: pwsh
         run: |
@@ -137,7 +151,7 @@ jobs:
             "-DCMAKE_CXX_COMPILER=$llvmMingw/bin/x86_64-w64-mingw32-g++.exe" `
             "-DCMAKE_MAKE_PROGRAM=C:/ninja/ninja.exe" `
             "-DVCPKG_HOST_TRIPLET=$env:VCPKG_HOST_TRIPLET" `
-            "-DVCPKG_INSTALL_ROOT=$env:VCPKG_INSTALL_ROOT" `
+            "-DVCPKG_INSTALLED_DIR=$env:VCPKG_INSTALL_ROOT" `
             "-DVCPKG_APPLOCAL_DEPS=OFF"
 
       - name: Build application

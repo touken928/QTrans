@@ -20,12 +20,15 @@
 - Local inference should keep `n_gpu_layers = -1` in resolved `TranslatorOptions`; `BackendOptions` is only for backend selection and plugin dir.
 - `Translator` should decide chunking/context behavior from `RuntimeTraits`, not by guessing whether a runtime is local or remote.
 - Word-selection translation must fail with a clear context-limit error instead of auto-chunking past the local context window.
+- Batch translation should submit work through `BatchController` -> `TaskService::submitBatchTranslate()` -> `TaskOrchestrator` with `TaskPriority::Background`; paused or interactive-preempted work should surface as `TaskState::Preempted`, not `Cancelled`.
 
 ## Desktop Boundaries
 - Model downloads stay in `apps/desktop/src/domain/download/`; do not move download UI/task behavior into `core/`.
-- Desktop layout worth keeping: `domain/` for non-UI logic (`download/`, `inference/`, `logging/`, `model-adapters/`, `model-catalog/`, `platform/`, `settings/`, `storage/`, `tasks/`), `ui/` for `shared/`, `sidebar/`, `shell/`, `pages/`, and `popup/`, `shared/` for cross-cutting desktop helpers, and `app/` for entry/glue such as `main.cpp` and `task_service.*`.
+- Desktop layout worth keeping: `domain/` for non-UI logic (`batch/`, `download/`, `inference/`, `logging/`, `model-adapters/`, `model-catalog/`, `platform/`, `settings/`, `storage/`, `tasks/`), `ui/` for `shared/`, `sidebar/`, `shell/`, `pages/`, and `popup/`, `shared/` for cross-cutting desktop helpers, and `app/` for entry/glue such as `main.cpp`, `task_service.*`, and `batch_controller.*`.
 - Qt string conversion belongs in `apps/desktop/src/shared/string_bridge.*`; do not introduce `QString` into core or other app-independent code.
 - `TaskService` runs on a worker `QThread`; widget updates must cross via Qt signals/slots, not direct worker-to-UI calls.
+- Batch file translation lives in three layers: `apps/desktop/src/domain/batch/` for Qt-free file types, handlers, and durable queue storage; `apps/desktop/src/app/batch_controller.*` for worker-thread orchestration; and `apps/desktop/src/ui/pages/batch/` for the card queue page, file actions, and language picker UI.
+- Batch queue persistence and outputs belong under `AppPaths::batch_dir`; keep queue state in `queue.bq`, write translated files under `batch/output/`, and keep batch-specific settings in `AppSettings::batch_*`.
 
 ## Storage And Logs
 - Use `AppPaths` (`apps/desktop/src/domain/storage/app_paths.h`) for all app data: portable mode uses `<app>/data/`, system mode uses `~/.qtrans/`.

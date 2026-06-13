@@ -238,8 +238,13 @@ void TaskOrchestrator::apply_interactive_preemption(const Task &incoming_task) {
     }
 
     std::lock_guard<std::mutex> lock(mutex_);
-    if (processing_ && running_task_id_.is_valid() && running_priority_ == TaskPriority::Normal && running_cancel_token_ != nullptr) {
-        running_cancel_token_->cancel();
+    if (processing_ && running_task_id_.is_valid() && running_cancel_token_ != nullptr) {
+        if (running_priority_ == TaskPriority::Normal) {
+            running_cancel_token_->cancel();
+        } else if (running_priority_ == TaskPriority::Background) {
+            running_cancel_token_->cancel();
+            running_preempted_ = true;
+        }
     }
 }
 
@@ -280,6 +285,18 @@ bool TaskOrchestrator::cancel_running() {
     std::lock_guard<std::mutex> lock(mutex_);
     if (processing_ && running_cancel_token_ != nullptr) {
         running_cancel_token_->cancel();
+        return true;
+    }
+    return false;
+}
+
+bool TaskOrchestrator::preempt_running_background() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (processing_ && running_task_id_.is_valid() &&
+        running_priority_ == TaskPriority::Background &&
+        running_cancel_token_ != nullptr) {
+        running_cancel_token_->cancel();
+        running_preempted_ = true;
         return true;
     }
     return false;
@@ -341,6 +358,11 @@ void TaskOrchestrator::execute_task(Task task) {
         running_task_id_ = task_id;
         running_priority_ = task.priority;
         running_cancel_token_ = cancel_token;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        running_preempted_ = false;
     }
 
     if (callbacks_.on_task_state_changed) {
@@ -485,10 +507,22 @@ void TaskOrchestrator::execute_task(Task task) {
                     cancel_token.get());
 
                 if (result.outcome == InferenceOutcome::Cancelled) {
-                    qtrans::log::get(qtrans::log::Component::Task)
-                        ->debug("TranslatePipeline cancelled task:{}", task_id.value);
-                    emit_status("Cancelled", false);
-                    finalize_task(task_id, task.kind, TaskState::Cancelled);
+                    TaskState final_state;
+                    {
+                        std::lock_guard<std::mutex> lock(mutex_);
+                        final_state = running_preempted_ ? TaskState::Preempted : TaskState::Cancelled;
+                        running_preempted_ = false;
+                    }
+                    if (final_state == TaskState::Preempted) {
+                        qtrans::log::get(qtrans::log::Component::Task)
+                            ->debug("TranslatePipeline preempted task:{}", task_id.value);
+                        emit_status("Preempted", false);
+                    } else {
+                        qtrans::log::get(qtrans::log::Component::Task)
+                            ->debug("TranslatePipeline cancelled task:{}", task_id.value);
+                        emit_status("Cancelled", false);
+                    }
+                    finalize_task(task_id, task.kind, final_state);
                 } else if (result.outcome == InferenceOutcome::Failed) {
                     qtrans::log::get(qtrans::log::Component::Task)
                         ->error(
@@ -496,6 +530,9 @@ void TaskOrchestrator::execute_task(Task task) {
                             task_id.value,
                             result.error_message);
                     emit_status(std::string("Error: ") + result.error_message, false);
+                    if (callbacks_.on_task_failed) {
+                        callbacks_.on_task_failed(task_id.value, result.error_message);
+                    }
                     finalize_task(task_id, task.kind, TaskState::Failed);
                 } else {
                     qtrans::log::get(qtrans::log::Component::Task)
@@ -539,6 +576,9 @@ void TaskOrchestrator::execute_task(Task task) {
         } else {
             emit_status(std::string("Error: ") + ex.what(), false);
             if (task.kind == TaskKind::TranslatePipeline) {
+                if (callbacks_.on_task_failed) {
+                    callbacks_.on_task_failed(task_id.value, ex.what());
+                }
                 finalize_task(task_id, task.kind, TaskState::Failed);
             }
         }

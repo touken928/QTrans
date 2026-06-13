@@ -30,6 +30,7 @@ struct TaskOrchestratorCallbacks {
     std::function<void(std::uint64_t task_id)> on_back_translate_reset;
     std::function<void(std::uint64_t task_id, const std::string &piece)> on_back_translate_appended;
     std::function<void(std::uint64_t task_id, TaskState state)> on_translation_finished;
+    std::function<void(std::uint64_t task_id, const std::string &message)> on_task_failed;
 };
 
 class TaskOrchestrator {
@@ -55,6 +56,7 @@ public:
     // Thread-safe: may be called while process_next() is blocked in inference.
     bool cancel(TaskId id);
     bool cancel_running();
+    bool preempt_running_background();
     TaskState task_state(TaskId id) const;
     bool is_model_loaded() const;
 
@@ -84,4 +86,5 @@ private:
     std::shared_ptr<CancelToken> running_cancel_token_;
     bool processing_ = false;
     bool model_loaded_ = false;
+    bool running_preempted_ = false;
 };
