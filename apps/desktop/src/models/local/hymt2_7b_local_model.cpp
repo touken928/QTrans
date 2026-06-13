@@ -121,7 +121,9 @@ qtrans::core::TranslationProfile make_hymt2_7b_local_profile(
         });
 
     qtrans::core::TranslationProfile profile;
-    profile.model = qtrans::core::LocalModelConfig{qtrans::core::read_binary_file(path)};
+    qtrans::core::LocalModelConfig local_cfg;
+    local_cfg.path = path;
+    profile.model = std::move(local_cfg);
     profile.prompt_strategy = std::move(prompt);
     profile.options = make_translator_options(n_gpu_layers);
     return profile;

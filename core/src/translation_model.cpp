@@ -82,8 +82,8 @@ std::optional<std::string> TranslationProfile::validate() const noexcept {
         return "max output tokens must be positive";
     }
     if (const auto *local = std::get_if<LocalModelConfig>(&model)) {
-        if (local->weights.empty()) {
-            return "local model weights are empty";
+        if (local->path.empty() && local->weights.empty()) {
+            return "local model source is empty";
         }
     } else if (const auto *remote = std::get_if<RemoteModelConfig>(&model)) {
         if (remote->endpoint_url.empty()) {
