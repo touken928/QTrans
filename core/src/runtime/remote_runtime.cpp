@@ -1,8 +1,8 @@
 #include "remote_runtime.h"
 
-#include <curl/curl.h>
+#include "diagnostics.h"
 
-#include <spdlog/spdlog.h>
+#include <curl/curl.h>
 
 #include <algorithm>
 #include <map>
@@ -88,8 +88,8 @@ std::string extract_json_string(const std::string &json, const std::string &key)
 std::string parse_openai_response(const std::string &body) {
     auto content = extract_json_string(body, "content");
     if (content.empty()) {
-        auto logger = spdlog::get("inference");
-        if (logger) logger->error("openai response parse failed: {}", body);
+        diagnostics::emit(DiagnosticLevel::Error, "remote_runtime",
+                          "openai response parse failed");
         throw std::runtime_error("failed to parse OpenAI response");
     }
     return content;
@@ -98,8 +98,8 @@ std::string parse_openai_response(const std::string &body) {
 std::string parse_anthropic_response(const std::string &body) {
     auto text = extract_json_string(body, "text");
     if (text.empty()) {
-        auto logger = spdlog::get("inference");
-        if (logger) logger->error("anthropic response parse failed: {}", body);
+        diagnostics::emit(DiagnosticLevel::Error, "remote_runtime",
+                          "anthropic response parse failed");
         throw std::runtime_error("failed to parse Anthropic response");
     }
     return text;
@@ -182,14 +182,14 @@ std::string curl_post(const std::string &url,
     curl_easy_cleanup(curl);
 
     if (res != CURLE_OK) {
-        auto logger = spdlog::get("inference");
-        if (logger) logger->error("curl error: {}", curl_easy_strerror(res));
+        diagnostics::emit(DiagnosticLevel::Error, "remote_runtime",
+                          std::string("curl error: ") + curl_easy_strerror(res));
         throw std::runtime_error(std::string("curl request failed: ") + curl_easy_strerror(res));
     }
 
     if (http_code < 200 || http_code >= 300) {
-        auto logger = spdlog::get("inference");
-        if (logger) logger->error("HTTP {}: {}", http_code, response_body);
+        diagnostics::emit(DiagnosticLevel::Error, "remote_runtime",
+                          "remote API returned HTTP " + std::to_string(http_code));
         throw std::runtime_error("remote API returned HTTP " + std::to_string(http_code));
     }
 
@@ -264,8 +264,8 @@ std::string RemoteRuntime::translate(
         req_body = build_openai_body(remote.model_name, prompt, impl_->config);
     }
 
-    auto logger = spdlog::get("inference");
-    if (logger) logger->trace("remote request: url={}", api_url);
+    diagnostics::emit(DiagnosticLevel::Trace, "remote_runtime",
+                      "remote request url=" + api_url);
 
     const std::string resp_body = curl_post(api_url, headers, req_body);
 

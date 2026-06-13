@@ -2,9 +2,9 @@
 
 #include "models/local/local_model_factory.h"
 
+#include "log/ai_trace.h"
 #include "log/component.h"
 #include "log/logger.h"
-#include "inference/inference_backend.h"
 #include "inference/inference_resolver.h"
 #include "catalog/model_catalog.h"
 #include "qtrans/core/backend_environment.h"
@@ -19,6 +19,49 @@ LoadModelPayload make_load_payload(std::filesystem::path model_path) {
     LoadModelPayload payload;
     payload.model_path = std::move(model_path);
     return payload;
+}
+
+std::string backend_kind_label(qtrans::core::BackendKind backend) {
+    switch (backend) {
+        case qtrans::core::BackendKind::Vulkan:
+            return "Vulkan";
+        case qtrans::core::BackendKind::Metal:
+            return "Metal";
+        case qtrans::core::BackendKind::Cpu:
+        default:
+            return "CPU";
+    }
+}
+
+std::string load_failure_details(const qtrans::core::ResolvedBackendEnvironment &environment,
+                                 qtrans::core::BackendKind requested_backend) {
+    std::ostringstream details;
+    bool first = true;
+    for (const auto &diagnostic : environment.capabilities.diagnostics) {
+        if (diagnostic.backend != requested_backend) {
+            continue;
+        }
+        if (!first) {
+            details << "; ";
+        }
+        first = false;
+        details << diagnostic.message;
+    }
+    return details.str();
+}
+
+std::string enrich_load_error(const std::string &message,
+                              const qtrans::core::ResolvedBackendEnvironment &environment,
+                              qtrans::core::BackendKind requested_backend) {
+    std::ostringstream enriched;
+    enriched << message;
+    enriched << "\nBackend: requested " << backend_kind_label(requested_backend)
+             << ", resolved " << environment.label;
+    const std::string details = load_failure_details(environment, requested_backend);
+    if (!details.empty()) {
+        enriched << "\nDetails: " << details;
+    }
+    return enriched.str();
 }
 
 }  // namespace
@@ -38,28 +81,44 @@ void TaskOrchestrator::set_model_id(const std::string &id) {
     model_id_ = id;
 }
 
-void TaskOrchestrator::set_backend_plugin_dir(const std::filesystem::path &plugin_dir) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    backend_plugin_dir_ = plugin_dir;
-}
-
 void TaskOrchestrator::initialize_backend() {
-    std::filesystem::path plugin_dir;
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        plugin_dir = backend_plugin_dir_;
-    }
-    qtrans::core::BackendOptions opts;
-    opts.plugin_dir = plugin_dir;
-    qtrans::core::BackendEnvironment::initialize(opts);
+    qtrans::core::BackendInitializationOptions init_options;
+    init_options.diagnostic_sink = [](qtrans::core::DiagnosticLevel level,
+                                      std::string_view component,
+                                      std::string_view message) {
+        auto logger = qtrans::log::get(
+            component == "llama" ? qtrans::log::Component::Hymt : qtrans::log::Component::Inference);
+        if (!logger) {
+            return;
+        }
+        switch (level) {
+            case qtrans::core::DiagnosticLevel::Error:
+                logger->error("{}", message);
+                break;
+            case qtrans::core::DiagnosticLevel::Warn:
+                logger->warn("{}", message);
+                break;
+            case qtrans::core::DiagnosticLevel::Info:
+                logger->info("{}", message);
+                break;
+            case qtrans::core::DiagnosticLevel::Debug:
+                logger->debug("{}", message);
+                break;
+            case qtrans::core::DiagnosticLevel::Trace:
+                logger->trace("{}", message);
+                break;
+        }
+    };
+    init_options.ai_trace_sink = [](std::string_view prompt, std::string_view response) {
+        qtrans::log::write_ai_trace(std::string(prompt), std::string(response));
+    };
 
-    RuntimeCapabilities::instance().set_plugin_dir(plugin_dir);
-    RuntimeCapabilities::instance().refresh();
+    const auto &environment = qtrans::core::BackendEnvironment::initialize_and_resolve(init_options);
+    RuntimeCapabilities::instance().refresh(environment);
 }
 
 std::string TaskOrchestrator::active_backend_label() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return inference_backend_label(active_backend_);
+    return engine_.active_backend_label();
 }
 
 void TaskOrchestrator::set_remote_spec(const std::string &spec) {
@@ -319,11 +378,9 @@ void TaskOrchestrator::execute_task(Task task) {
                 emit_status("Loading model into memory", true);
                 const auto &payload = std::get<LoadModelPayload>(task.payload);
 
-                std::filesystem::path plugin_dir;
                 std::string model_id;
                 {
                     std::lock_guard<std::mutex> lock(mutex_);
-                    plugin_dir = backend_plugin_dir_;
                     model_id = model_id_;
                 }
 
@@ -339,25 +396,20 @@ void TaskOrchestrator::execute_task(Task task) {
                 }
 
                 qtrans::core::BackendOptions backend_opts;
-                backend_opts.plugin_dir = plugin_dir;
-                if (resolved->backend == InferenceBackend::GpuMetal) {
+                if (resolved->backend == qtrans::core::BackendKind::Metal) {
                     backend_opts.backend_type = qtrans::core::BackendType::Metal;
-                } else if (resolved->backend == InferenceBackend::GpuVulkan) {
+                } else if (resolved->backend == qtrans::core::BackendKind::Vulkan) {
                     backend_opts.backend_type = qtrans::core::BackendType::Vulkan;
                 }
-                engine_.set_backend_options(backend_opts);
-
-                {
-                    std::lock_guard<std::mutex> lock(mutex_);
-                    active_backend_ = resolved->backend;
-                }
+                engine_.set_backend_context(caps.environment(), backend_opts);
 
                 auto profile = create_local_model(*entry, payload.model_path, resolved->n_gpu_layers);
-                {
-                    std::lock_guard<std::mutex> lock(mutex_);
-                    translator_options_ = profile.options;
+                try {
+                    engine_.load(std::move(profile));
+                } catch (const std::exception &ex) {
+                    throw std::runtime_error(
+                        enrich_load_error(ex.what(), caps.environment(), resolved->backend));
                 }
-                engine_.load(std::move(profile));
 
                 {
                     std::lock_guard<std::mutex> lock(mutex_);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "qtrans/core/backend_environment.h"
 #include "qtrans/core/runtime.h"
 
 #include <filesystem>
@@ -13,6 +14,7 @@ namespace qtrans::core {
 class LocalRuntime : public ITranslationRuntime {
 public:
     LocalRuntime();
+    LocalRuntime(ResolvedBackendEnvironment environment, BackendOptions options);
     ~LocalRuntime() override;
 
     LocalRuntime(const LocalRuntime &) = delete;
@@ -20,7 +22,6 @@ public:
     LocalRuntime(LocalRuntime &&) noexcept;
     LocalRuntime &operator=(LocalRuntime &&) noexcept;
 
-    void initialize_backend(const BackendOptions &opts);
     void load(const ModelLoadSpec &model, const TranslatorOptions &config) override;
     void unload() override;
     bool is_loaded() const override;

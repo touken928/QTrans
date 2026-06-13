@@ -12,7 +12,7 @@ const ModelCatalogEntry k_models[] = {
         "tencent/Hy-MT2-1.8B-GGUF/Hy-MT2-1.8B-Q4_K_M.gguf",
         "Tencent-Hunyuan/Hy-MT2-1.8B-GGUF/Hy-MT2-1.8B-Q4_K_M.gguf",
         2,
-        {InferenceBackend::GpuVulkan, InferenceBackend::GpuMetal},
+        {qtrans::core::BackendKind::Vulkan, qtrans::core::BackendKind::Metal},
     },
     {
         "hymt2-7b-q4",
@@ -21,7 +21,7 @@ const ModelCatalogEntry k_models[] = {
         "tencent/Hy-MT2-7B-GGUF/Hy-MT2-7B-Q4_K_M.gguf",
         "Tencent-Hunyuan/Hy-MT2-7B-GGUF/Hy-MT2-7B-Q4_K_M.gguf",
         2,
-        {InferenceBackend::GpuVulkan, InferenceBackend::GpuMetal},
+        {qtrans::core::BackendKind::Vulkan, qtrans::core::BackendKind::Metal},
     },
 };
 

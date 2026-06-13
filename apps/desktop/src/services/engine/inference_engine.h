@@ -1,5 +1,6 @@
 #pragma once
 
+#include "qtrans/core/backend_environment.h"
 #include "qtrans/core/cancellation.h"
 #include "qtrans/core/options.h"
 #include "qtrans/core/translation_model.h"
@@ -22,10 +23,12 @@ public:
     InferenceEngine(InferenceEngine &&) noexcept;
     InferenceEngine &operator=(InferenceEngine &&) noexcept;
 
-    void set_backend_options(const qtrans::core::BackendOptions &opts);
+    void set_backend_context(const qtrans::core::ResolvedBackendEnvironment &environment,
+                             const qtrans::core::BackendOptions &opts);
     void set_translator_options(const qtrans::core::TranslatorOptions &opts);
 
     bool is_loaded() const;
+    std::string active_backend_label() const;
 
     void load(qtrans::core::TranslationProfile profile);
     void unload();
@@ -45,6 +48,7 @@ public:
 
 private:
     qtrans::core::TranslatorOptions options_{};
+    qtrans::core::ResolvedBackendEnvironment backend_environment_{};
     qtrans::core::BackendOptions backend_options_{};
     std::unique_ptr<qtrans::core::Translator> translator_;
 };

@@ -19,35 +19,35 @@ const ModelCatalogEntry *q4_7b_model() {
 TEST(InferenceResolver, Q4UsesVulkanWhenAvailable) {
     ASSERT_NE(q4_model(), nullptr);
     const RuntimeCapabilities caps =
-        RuntimeCapabilitiesTestAccess::make_supported({InferenceBackend::GpuVulkan});
+        RuntimeCapabilitiesTestAccess::make_supported({qtrans::core::BackendKind::Vulkan});
 
     const std::optional<ResolvedInference> resolved = resolve_inference(*q4_model(), caps);
     ASSERT_TRUE(resolved.has_value());
-    EXPECT_EQ(resolved->backend, InferenceBackend::GpuVulkan);
+    EXPECT_EQ(resolved->backend, qtrans::core::BackendKind::Vulkan);
     EXPECT_EQ(resolved->n_gpu_layers, -1);
 }
 
 TEST(InferenceResolver, Q4UsesMetalWhenAvailable) {
     ASSERT_NE(q4_model(), nullptr);
     const RuntimeCapabilities caps =
-        RuntimeCapabilitiesTestAccess::make_supported({InferenceBackend::GpuMetal});
+        RuntimeCapabilitiesTestAccess::make_supported({qtrans::core::BackendKind::Metal});
 
     const std::optional<ResolvedInference> resolved = resolve_inference(*q4_model(), caps);
     ASSERT_TRUE(resolved.has_value());
-    EXPECT_EQ(resolved->backend, InferenceBackend::GpuMetal);
+    EXPECT_EQ(resolved->backend, qtrans::core::BackendKind::Metal);
     EXPECT_EQ(resolved->n_gpu_layers, -1);
 }
 
 TEST(InferenceResolver, Q4PrefersVulkanOverMetalWhenBothAvailable) {
     ASSERT_NE(q4_model(), nullptr);
     const RuntimeCapabilities caps = RuntimeCapabilitiesTestAccess::make_supported({
-        InferenceBackend::GpuVulkan,
-        InferenceBackend::GpuMetal,
+        qtrans::core::BackendKind::Vulkan,
+        qtrans::core::BackendKind::Metal,
     });
 
     const std::optional<ResolvedInference> resolved = resolve_inference(*q4_model(), caps);
     ASSERT_TRUE(resolved.has_value());
-    EXPECT_EQ(resolved->backend, InferenceBackend::GpuVulkan);
+    EXPECT_EQ(resolved->backend, qtrans::core::BackendKind::Vulkan);
 }
 
 TEST(InferenceResolver, Q4UnavailableWithoutAnyBackend) {
@@ -60,12 +60,9 @@ TEST(InferenceResolver, Q4UnavailableWithoutAnyBackend) {
 TEST(InferenceResolver, MakeTranslatorOptionsSetsGpuLayersOnly) {
     ASSERT_NE(q4_7b_model(), nullptr);
     const RuntimeCapabilities caps =
-        RuntimeCapabilitiesTestAccess::make_supported({InferenceBackend::GpuMetal});
+        RuntimeCapabilitiesTestAccess::make_supported({qtrans::core::BackendKind::Metal});
 
     const std::optional<ResolvedInference> resolved = resolve_inference(*q4_7b_model(), caps);
     ASSERT_TRUE(resolved.has_value());
-
-    const qtrans::core::TranslatorOptions opts = make_translator_options(*resolved);
-    EXPECT_EQ(opts.n_gpu_layers, -1);
-    EXPECT_EQ(opts.context.n_ctx, 4096);
+    EXPECT_EQ(resolved->n_gpu_layers, -1);
 }

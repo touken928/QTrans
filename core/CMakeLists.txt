@@ -1,4 +1,5 @@
 add_library(qtrans_core STATIC
+    src/diagnostics.cpp
     src/backend_environment.cpp
     src/translation_model.cpp
     src/translator.cpp

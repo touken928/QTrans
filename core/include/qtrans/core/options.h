@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <filesystem>
 #include <string>
 
 namespace qtrans::core {
@@ -14,7 +13,6 @@ enum class BackendType {
 
 struct BackendOptions {
     BackendType backend_type = BackendType::Auto;
-    std::filesystem::path plugin_dir;
 };
 
 struct ContextOptions {

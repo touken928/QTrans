@@ -35,7 +35,10 @@ InferenceEngine::~InferenceEngine() = default;
 InferenceEngine::InferenceEngine(InferenceEngine &&) noexcept = default;
 InferenceEngine &InferenceEngine::operator=(InferenceEngine &&) noexcept = default;
 
-void InferenceEngine::set_backend_options(const qtrans::core::BackendOptions &opts) {
+void InferenceEngine::set_backend_context(
+    const qtrans::core::ResolvedBackendEnvironment &environment,
+    const qtrans::core::BackendOptions &opts) {
+    backend_environment_ = environment;
     backend_options_ = opts;
 }
 
@@ -47,6 +50,13 @@ bool InferenceEngine::is_loaded() const {
     return translator_ != nullptr && translator_->is_loaded();
 }
 
+std::string InferenceEngine::active_backend_label() const {
+    if (translator_ != nullptr) {
+        return translator_->backend_label();
+    }
+    return backend_environment_.label;
+}
+
 void InferenceEngine::load(qtrans::core::TranslationProfile profile) {
     if (profile.prompt_strategy == nullptr) {
         throw std::invalid_argument("translation prompt strategy is required");
@@ -54,8 +64,7 @@ void InferenceEngine::load(qtrans::core::TranslationProfile profile) {
 
     options_ = profile.options;
 
-    auto t = std::make_unique<qtrans::core::Translator>(options_);
-    t->initialize_backend(backend_options_);
+    auto t = std::make_unique<qtrans::core::Translator>(backend_environment_, backend_options_, options_);
     t->load(std::move(profile));
 
     translator_ = std::move(t);
@@ -114,41 +123,34 @@ TranslateStepResult InferenceEngine::run_translate_pipeline(
         should_cancel = cancel_token->checker();
     }
 
-    if (on_reset) on_reset(false);
+    qtrans::core::TranslationRequest request;
+    request.source = payload.source;
+    request.target_language = payload.target_language;
+    request.source_language = payload.source_language;
+    request.back_translate = payload.back_translate;
+    request.wordselect = payload.wordselect;
 
-    const auto forward = translate(
-        payload.source,
-        payload.target_language,
-        payload.wordselect,
-        [&](const std::string &piece) {
-            if (on_token) on_token(false, piece);
-        },
-        cancel_token);
+    qtrans::core::TranslationCallbacks callbacks;
+    bool is_back_channel = false;
+    callbacks.on_reset = [&](bool reset_back_channel) {
+        is_back_channel = reset_back_channel;
+        if (on_reset) {
+            on_reset(reset_back_channel);
+        }
+    };
+    callbacks.on_token = [&](const std::string &piece) {
+        if (on_token) {
+            on_token(is_back_channel, piece);
+        }
+    };
 
-    if (forward.outcome != InferenceOutcome::Completed) {
-        return forward;
+    const auto result = translator_->translate(request, callbacks, should_cancel);
+    switch (result.outcome) {
+        case qtrans::core::TranslationOutcome::Completed:
+            return make_completed(result.text);
+        case qtrans::core::TranslationOutcome::Cancelled:
+            return make_cancelled();
+        default:
+            return make_failure(result.error_message);
     }
-
-    if (!payload.back_translate) {
-        return forward;
-    }
-
-    if (forward.text.empty() || payload.source_language.empty()) {
-        return make_failure("back-translate requires a non-empty forward result");
-    }
-
-    if (should_cancel && should_cancel()) {
-        return make_cancelled();
-    }
-
-    if (on_reset) on_reset(true);
-
-    return translate(
-        forward.text,
-        payload.source_language,
-        false,
-        [&](const std::string &piece) {
-            if (on_token) on_token(true, piece);
-        },
-        cancel_token);
 }

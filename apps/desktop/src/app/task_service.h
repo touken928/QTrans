@@ -14,7 +14,6 @@ public:
 
     void setModelPath(const QString &path);
     void setModelId(const QString &id);
-    void setBackendPluginDir(const QString &path);
     void setRemoteSpec(const QString &spec);
     void setModelscopeRemoteSpec(const QString &spec);
     void setDownloadHub(int hub);
