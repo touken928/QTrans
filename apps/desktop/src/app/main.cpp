@@ -1,10 +1,10 @@
-#include "app/single_instance.h"
-#include "app/string_bridge.h"
+#include "domain/platform/single_instance/single_instance.h"
+#include "shared/string_bridge.h"
 #include "app/task_service.h"
-#include "ui/mainwindow.h"
-#include "log/config.h"
-#include "log/init.h"
-#include "storage/app_paths.h"
+#include "ui/shell/mainwindow.h"
+#include "domain/logging/config.h"
+#include "domain/logging/init.h"
+#include "domain/storage/app_paths.h"
 
 #include <QApplication>
 #include <QCoreApplication>

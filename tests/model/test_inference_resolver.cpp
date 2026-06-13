@@ -1,6 +1,6 @@
-#include "inference/inference_resolver.h"
-#include "catalog/model_catalog.h"
-#include "inference/runtime_capabilities.h"
+#include "domain/inference/inference_resolver.h"
+#include "domain/model-catalog/model_catalog.h"
+#include "domain/inference/runtime_capabilities.h"
 
 #include <gtest/gtest.h>
 

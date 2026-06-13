@@ -1,7 +1,7 @@
 #pragma once
 
-#include "services/task/task_orchestrator.h"
-#include "services/task/task_types.h"
+#include "domain/tasks/task_orchestrator.h"
+#include "domain/tasks/task_types.h"
 
 #include <QObject>
 #include <QString>

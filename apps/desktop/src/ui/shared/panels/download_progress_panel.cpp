@@ -1,0 +1,115 @@
+#include "ui/shared/panels/download_progress_panel.h"
+#include "ui/shared/theme/theme.h"
+
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QProgressBar>
+#include <QPushButton>
+#include <QVBoxLayout>
+
+namespace {
+
+QString formatBytes(double bytes) {
+    if (bytes < 1024.0) {
+        return QStringLiteral("%1 B/s").arg(static_cast<int>(bytes));
+    }
+    if (bytes < 1024.0 * 1024.0) {
+        return QStringLiteral("%1 KB/s").arg(bytes / 1024.0, 0, 'f', 1);
+    }
+    return QStringLiteral("%1 MB/s").arg(bytes / (1024.0 * 1024.0), 0, 'f', 2);
+}
+
+QString formatSize(qint64 bytes) {
+    if (bytes < 1024) {
+        return QStringLiteral("%1 B").arg(bytes);
+    }
+    if (bytes < 1024 * 1024) {
+        return QStringLiteral("%1 KB").arg(bytes / 1024.0, 0, 'f', 1);
+    }
+    if (bytes < 1024LL * 1024 * 1024) {
+        return QStringLiteral("%1 MB").arg(bytes / (1024.0 * 1024.0), 0, 'f', 2);
+    }
+    return QStringLiteral("%1 GB").arg(bytes / (1024.0 * 1024.0 * 1024.0), 0, 'f', 2);
+}
+
+QString formatEta(double seconds) {
+    if (seconds < 0.0) {
+        return QStringLiteral("--:--");
+    }
+    const int total = static_cast<int>(seconds);
+    return QStringLiteral("%1:%2")
+        .arg(total / 60, 2, 10, QChar('0'))
+        .arg(total % 60, 2, 10, QChar('0'));
+}
+
+}  // namespace
+
+DownloadProgressPanel::DownloadProgressPanel(QWidget *parent)
+    : QWidget(parent) {
+    auto *layout = new QVBoxLayout(this);
+    layout->setSpacing(Theme::Space::md);
+
+    auto *title = new QLabel(QStringLiteral("Downloading Model"), this);
+    title->setObjectName(QStringLiteral("titleLabel"));
+    layout->addWidget(title);
+
+    status_label_ = new QLabel(QStringLiteral("Preparing download..."), this);
+    status_label_->setWordWrap(true);
+    layout->addWidget(status_label_);
+
+    progress_bar_ = new QProgressBar(this);
+    progress_bar_->setRange(0, 100);
+    progress_bar_->setValue(0);
+    layout->addWidget(progress_bar_);
+
+    auto *info_row = new QHBoxLayout();
+    info_row->setContentsMargins(0, 0, 0, 0);
+    info_row->setSpacing(Theme::Space::md);
+
+    speed_label_ = new QLabel(QStringLiteral("Speed: --"), this);
+    speed_label_->setObjectName(QStringLiteral("mutedLabel"));
+    info_row->addWidget(speed_label_);
+
+    eta_label_ = new QLabel(QStringLiteral("Time left: --:--"), this);
+    eta_label_->setObjectName(QStringLiteral("mutedLabel"));
+    info_row->addWidget(eta_label_);
+
+    info_row->addStretch(1);
+
+    cancel_button_ = new QPushButton(QStringLiteral("Cancel"), this);
+    info_row->addWidget(cancel_button_);
+
+    layout->addLayout(info_row);
+
+    connect(cancel_button_, &QPushButton::clicked, this, &DownloadProgressPanel::cancelRequested);
+}
+
+void DownloadProgressPanel::setProgress(
+    qint64 downloaded, qint64 total, double speed_bps, double eta_seconds) {
+    if (total > 0) {
+        const int percent = static_cast<int>(downloaded * 100 / total);
+        progress_bar_->setRange(0, 100);
+        progress_bar_->setValue(percent);
+        status_label_->setText(
+            QStringLiteral("%1 / %2")
+                .arg(formatSize(downloaded))
+                .arg(formatSize(total)));
+    } else {
+        progress_bar_->setRange(0, 0);
+        status_label_->setText(QStringLiteral("Downloaded %1").arg(formatSize(downloaded)));
+    }
+
+    speed_label_->setText(QStringLiteral("Speed: %1").arg(formatBytes(speed_bps)));
+    eta_label_->setText(QStringLiteral("Time left: %1").arg(formatEta(eta_seconds)));
+}
+
+void DownloadProgressPanel::setFailure() {
+    status_label_->setText(QStringLiteral("Download failed. Check your network and try again."));
+    progress_bar_->setRange(0, 100);
+}
+
+void DownloadProgressPanel::setLoading() {
+    status_label_->setText(QStringLiteral("Download complete. Loading model..."));
+    progress_bar_->setRange(0, 100);
+    progress_bar_->setValue(100);
+}

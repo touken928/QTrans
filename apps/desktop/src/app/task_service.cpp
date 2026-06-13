@@ -1,8 +1,8 @@
 #include "app/task_service.h"
 
-#include "app/string_bridge.h"
-#include "log/component.h"
-#include "log/logger.h"
+#include "shared/string_bridge.h"
+#include "domain/logging/component.h"
+#include "domain/logging/logger.h"
 #include <QMetaObject>
 #include <QThread>
 
