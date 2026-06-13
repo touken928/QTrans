@@ -22,13 +22,13 @@
 - Word-selection translation must fail with a clear context-limit error instead of auto-chunking past the local context window.
 
 ## Desktop Boundaries
-- Model downloads stay in `apps/desktop/src/services/download/`; do not move download UI/task behavior into `core/`.
-- Desktop layout worth keeping: `catalog/` (metadata), `models/local/` (per-model adapters), `inference/` (backend resolution), `services/` (download/engine/task), `app/` (entry + `string_bridge` + `task_service`), `ui/`, `wordselect/`, `storage/`, `log/`.
-- Qt string conversion belongs in `apps/desktop/src/app/string_bridge.*`; do not introduce `QString` into core or other app-independent code.
+- Model downloads stay in `apps/desktop/src/domain/download/`; do not move download UI/task behavior into `core/`.
+- Desktop layout worth keeping: `domain/` for non-UI logic (`download/`, `inference/`, `logging/`, `model-adapters/`, `model-catalog/`, `platform/`, `settings/`, `storage/`, `tasks/`), `ui/` for `shared/`, `sidebar/`, `shell/`, `pages/`, and `popup/`, `shared/` for cross-cutting desktop helpers, and `app/` for entry/glue such as `main.cpp` and `task_service.*`.
+- Qt string conversion belongs in `apps/desktop/src/shared/string_bridge.*`; do not introduce `QString` into core or other app-independent code.
 - `TaskService` runs on a worker `QThread`; widget updates must cross via Qt signals/slots, not direct worker-to-UI calls.
 
 ## Storage And Logs
-- Use `AppPaths` (`apps/desktop/src/storage/app_paths.h`) for all app data: portable mode uses `<app>/data/`, system mode uses `~/.qtrans/`.
+- Use `AppPaths` (`apps/desktop/src/domain/storage/app_paths.h`) for all app data: portable mode uses `<app>/data/`, system mode uses `~/.qtrans/`.
 - Do not write logs or data to process cwd.
 - Debug AI traces write prompt/response under the app logs dir; Release builds should not create AI trace files.
 

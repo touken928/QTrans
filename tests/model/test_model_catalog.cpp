@@ -1,4 +1,4 @@
-#include "catalog/model_catalog.h"
+#include "domain/model-catalog/model_catalog.h"
 
 #include <gtest/gtest.h>
 

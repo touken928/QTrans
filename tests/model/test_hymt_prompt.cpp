@@ -1,7 +1,7 @@
-#include "models/local/hymt2_18b_local_model.h"
-#include "models/local/hymt2_7b_local_model.h"
-#include "models/local/local_model_factory.h"
-#include "catalog/model_catalog.h"
+#include "domain/model-adapters/hymt2_18b_local_model.h"
+#include "domain/model-adapters/hymt2_7b_local_model.h"
+#include "domain/model-adapters/local_model_factory.h"
+#include "domain/model-catalog/model_catalog.h"
 
 #include <gtest/gtest.h>
 
