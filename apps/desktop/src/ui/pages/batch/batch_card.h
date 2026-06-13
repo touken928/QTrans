@@ -16,10 +16,14 @@ public:
                        const QString &source_lang, const QString &target_lang,
                        QWidget *parent = nullptr);
 
-    QString entryId() const { return entry_id_; }
+    QString entryId() const {
+        return entry_id_;
+    }
 
     void setSelected(bool selected);
-    bool isSelected() const { return selected_; }
+    bool isSelected() const {
+        return selected_;
+    }
 
     void setState(int state);
     void setProgress(int completed, int total);

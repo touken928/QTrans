@@ -13,22 +13,32 @@ namespace {
 
 QString stateLabel(int state) {
     switch (static_cast<BatchEntryState>(state)) {
-        case BatchEntryState::Queued:      return QStringLiteral("Queued");
-        case BatchEntryState::Processing:  return QStringLiteral("Processing");
-        case BatchEntryState::Completed:   return QStringLiteral("Completed");
-        case BatchEntryState::Failed:      return QStringLiteral("Failed");
-        case BatchEntryState::Cancelled:   return QStringLiteral("Cancelled");
+        case BatchEntryState::Queued:
+            return QStringLiteral("Queued");
+        case BatchEntryState::Processing:
+            return QStringLiteral("Processing");
+        case BatchEntryState::Completed:
+            return QStringLiteral("Completed");
+        case BatchEntryState::Failed:
+            return QStringLiteral("Failed");
+        case BatchEntryState::Cancelled:
+            return QStringLiteral("Cancelled");
     }
     return QStringLiteral("Unknown");
 }
 
 QColor stateColor(int state) {
     switch (static_cast<BatchEntryState>(state)) {
-        case BatchEntryState::Queued:      return QColor(Theme::Color::textMuted);
-        case BatchEntryState::Processing:  return QColor(Theme::Color::primary);
-        case BatchEntryState::Completed:   return QColor(QStringLiteral("#34c759"));
-        case BatchEntryState::Failed:      return QColor(Theme::Color::danger);
-        case BatchEntryState::Cancelled:   return QColor(Theme::Color::textMuted);
+        case BatchEntryState::Queued:
+            return QColor(Theme::Color::textMuted);
+        case BatchEntryState::Processing:
+            return QColor(Theme::Color::primary);
+        case BatchEntryState::Completed:
+            return QColor(QStringLiteral("#34c759"));
+        case BatchEntryState::Failed:
+            return QColor(Theme::Color::danger);
+        case BatchEntryState::Cancelled:
+            return QColor(Theme::Color::textMuted);
     }
     return QColor(Theme::Color::textMuted);
 }
@@ -61,13 +71,12 @@ BatchCard::BatchCard(const QString &entry_id, const QString &file_name,
     root->addWidget(file_label_);
 
     // Source → Target inline
-    const QString lang_text = (source_lang.isEmpty() ? QStringLiteral("—") : source_lang)
-        + QStringLiteral(" → ")
-        + (target_lang.isEmpty() ? QStringLiteral("—") : target_lang);
+    const QString lang_text = (source_lang.isEmpty() ? QStringLiteral("—") : source_lang) + QStringLiteral(" → ") + (target_lang.isEmpty() ? QStringLiteral("—") : target_lang);
     lang_label_ = new QLabel(lang_text, this);
     lang_label_->setObjectName(QStringLiteral("cardLangs"));
     lang_label_->setStyleSheet(QStringLiteral("color: %1; font-size: %2px;")
-                                   .arg(Theme::Color::textMuted).arg(Theme::Font::xs));
+                                   .arg(Theme::Color::textMuted)
+                                   .arg(Theme::Font::xs));
     root->addWidget(lang_label_);
 
     root->addStretch(1);
@@ -76,7 +85,8 @@ BatchCard::BatchCard(const QString &entry_id, const QString &file_name,
     progress_label_ = new QLabel(QStringLiteral("0 / 0"), this);
     progress_label_->setObjectName(QStringLiteral("cardProgress"));
     progress_label_->setStyleSheet(QStringLiteral("color: %1; font-size: %2px;")
-                                       .arg(Theme::Color::textMuted).arg(Theme::Font::xs));
+                                       .arg(Theme::Color::textMuted)
+                                       .arg(Theme::Font::xs));
     root->addWidget(progress_label_);
 
     // Status circle (painted in paintEvent; QLabel kept for geometry reference)
@@ -89,14 +99,16 @@ BatchCard::BatchCard(const QString &entry_id, const QString &file_name,
     status_text_ = new QLabel(stateLabel(0), this);
     status_text_->setObjectName(QStringLiteral("cardStatus"));
     status_text_->setStyleSheet(QStringLiteral("color: %1; font-size: %2px;")
-                                    .arg(Theme::Color::textMuted).arg(Theme::Font::xs));
+                                    .arg(Theme::Color::textMuted)
+                                    .arg(Theme::Font::xs));
     root->addWidget(status_text_);
 
     // Save indicator
     save_label_ = new QLabel(this);
     save_label_->setObjectName(QStringLiteral("cardSaved"));
     save_label_->setStyleSheet(QStringLiteral(
-        "color: #34c759; font-weight: bold; font-size: %1px;").arg(Theme::Font::lg));
+                                   "color: #34c759; font-weight: bold; font-size: %1px;")
+                                   .arg(Theme::Font::lg));
     save_label_->setVisible(false);
     root->addWidget(save_label_);
 
@@ -119,7 +131,9 @@ void BatchCard::setState(int state) {
     state_ = state;
     status_text_->setText(stateLabel(state));
     status_text_->setStyleSheet(QStringLiteral(
-        "color: %1; font-size: %2px;").arg(stateColor(state).name()).arg(Theme::Font::xs));
+                                    "color: %1; font-size: %2px;")
+                                    .arg(stateColor(state).name())
+                                    .arg(Theme::Font::xs));
 
     // Manage pulse timer for Processing state.
     if (static_cast<BatchEntryState>(state) == BatchEntryState::Processing) {
@@ -160,10 +174,14 @@ int BatchCard::pulseAlpha() const {
         return 255;
     // 4-step pulse: 255, 160, 80, 160
     switch (pulse_step_) {
-        case 0: return 255;
-        case 1: return 160;
-        case 2: return 80;
-        case 3: return 160;
+        case 0:
+            return 255;
+        case 1:
+            return 160;
+        case 2:
+            return 80;
+        case 3:
+            return 160;
     }
     return 255;
 }
@@ -184,7 +202,8 @@ void BatchCard::paintEvent(QPaintEvent *event) {
     const QRect cb(cx, cy, kCheckboxSize, kCheckboxSize);
 
     p.setPen(QPen(selected_ ? QColor(Theme::Color::primary)
-                            : QColor(Theme::Color::border), 1.5));
+                            : QColor(Theme::Color::border),
+                  1.5));
     p.setBrush(selected_ ? QColor(Theme::Color::primary) : QColor(Qt::transparent));
     p.drawRoundedRect(cb, 3, 3);
 

@@ -36,7 +36,9 @@ public:
     void setStatusText(const QString &text);
 
     QStringList selectedEntryIds() const;
-    int cardCount() const { return cards_.size(); }
+    int cardCount() const {
+        return cards_.size();
+    }
 
 signals:
     void addFilesRequested();

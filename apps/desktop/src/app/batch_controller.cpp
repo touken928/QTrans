@@ -194,7 +194,7 @@ void BatchController::saveEntry(const QString &entry_id) {
 }
 
 void BatchController::saveEntriesToDirectory(const QStringList &entry_ids,
-                                              const QString &dest_dir) {
+                                             const QString &dest_dir) {
     const std::filesystem::path dir = qtrans::app::to_utf8(dest_dir);
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);

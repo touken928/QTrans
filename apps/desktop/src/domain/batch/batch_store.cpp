@@ -117,7 +117,8 @@ constexpr const char *kFieldSegText = "st";
 // ── BatchStore implementation ───────────────────────────────────────────────
 
 BatchStore::BatchStore(std::filesystem::path queue_file)
-    : queue_file_(std::move(queue_file)) {}
+    : queue_file_(std::move(queue_file)) {
+}
 
 std::vector<BatchEntry> BatchStore::load() const {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -368,9 +369,15 @@ std::vector<BatchEntry> BatchStore::deserialize(const std::string &content) {
             int field_idx = 0;
             while (std::getline(seg_in, token, ':')) {
                 switch (field_idx++) {
-                    case 0: seg.index = std::stoi(token); break;
-                    case 1: seg.start_line = std::stoi(token); break;
-                    case 2: seg.end_line = std::stoi(token); break;
+                    case 0:
+                        seg.index = std::stoi(token);
+                        break;
+                    case 1:
+                        seg.start_line = std::stoi(token);
+                        break;
+                    case 2:
+                        seg.end_line = std::stoi(token);
+                        break;
                     case 3:
                         seg.state =
                             static_cast<BatchSegmentState>(std::stoi(token));

@@ -87,8 +87,14 @@ BatchPage::~BatchPage() = default;
 
 // ── State updates ───────────────────────────────────────────────────────────
 
-void BatchPage::setRunning(bool running) { running_ = running; updateActionButtons(); }
-void BatchPage::setPaused(bool paused)   { paused_ = paused;   updateActionButtons(); }
+void BatchPage::setRunning(bool running) {
+    running_ = running;
+    updateActionButtons();
+}
+void BatchPage::setPaused(bool paused) {
+    paused_ = paused;
+    updateActionButtons();
+}
 
 void BatchPage::addCard(const QString &entry_id, const QString &file_name,
                         const QString &source_lang, const QString &target_lang) {
@@ -213,6 +219,6 @@ void BatchPage::updateActionButtons() {
     start_pause_button_->setEnabled(cards_.size() > 0);
 
     status_label_->setText(sel_count > 0
-        ? QStringLiteral("%1 of %2 selected").arg(sel_count).arg(cards_.size())
-        : QStringLiteral("%1 file(s) in queue").arg(cards_.size()));
+                               ? QStringLiteral("%1 of %2 selected").arg(sel_count).arg(cards_.size())
+                               : QStringLiteral("%1 file(s) in queue").arg(cards_.size()));
 }

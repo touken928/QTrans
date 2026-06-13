@@ -46,8 +46,7 @@ MainWindow::MainWindow(
     QThread *worker_thread,
     const AppPaths &paths,
     QWidget *parent)
-    : QMainWindow(parent), task_service_(task_service), batch_controller_(batch_controller),
-      worker_thread_(worker_thread), paths_(paths) {
+    : QMainWindow(parent), task_service_(task_service), batch_controller_(batch_controller), worker_thread_(worker_thread), paths_(paths) {
     setWindowTitle(QStringLiteral("QTrans"));
     resize(960, 600);
     setMinimumSize(720, 480);
@@ -74,10 +73,10 @@ MainWindow::MainWindow(
     batch_page_ = new BatchPage(central_root_);
 
     content_stack_ = new QStackedWidget(central_root_);
-    content_stack_->addWidget(translate_page_);    // index 0
-    content_stack_->addWidget(wordselect_page_);   // index 1
-    content_stack_->addWidget(batch_page_);         // index 2
-    content_stack_->addWidget(model_page_);          // index 3
+    content_stack_->addWidget(translate_page_);   // index 0
+    content_stack_->addWidget(wordselect_page_);  // index 1
+    content_stack_->addWidget(batch_page_);       // index 2
+    content_stack_->addWidget(model_page_);       // index 3
     shell->addWidget(content_stack_, 1);
 
     setCentralWidget(central_root_);
@@ -732,6 +731,5 @@ void MainWindow::onBatchSaveEntry(const QStringList &entry_ids) {
 
 void MainWindow::onBatchError(const QString &message) {
     batch_page_->setStatusText(QStringLiteral("Error: ") + message);
-    qtrans::log::get(qtrans::log::Component::App)->error("batch error: {}",
-                                                         qtrans::app::to_utf8(message));
+    qtrans::log::get(qtrans::log::Component::App)->error("batch error: {}", qtrans::app::to_utf8(message));
 }

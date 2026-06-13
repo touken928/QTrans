@@ -36,8 +36,12 @@ public:
     Q_INVOKABLE void start();
     Q_INVOKABLE void pause();
     Q_INVOKABLE void resume();
-    Q_INVOKABLE bool isRunning() const { return running_; }
-    Q_INVOKABLE bool isPaused() const  { return paused_; }
+    Q_INVOKABLE bool isRunning() const {
+        return running_;
+    }
+    Q_INVOKABLE bool isPaused() const {
+        return paused_;
+    }
 
     // ── Save / export ────────────────────────────────────────────────────
     // Write the output file for one completed entry to the default output dir.
