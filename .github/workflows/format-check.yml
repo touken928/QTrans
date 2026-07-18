@@ -30,7 +30,7 @@ jobs:
           while IFS= read -r -d '' file; do
             found=1
             clang-format-18 --dry-run --Werror "$file"
-          done < <(find core/include core/src apps/desktop/src -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.mm' \) -print0 | sort -z)
+          done < <(find src/core src/desktop -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.mm' \) -print0 | sort -z)
           if [ "$found" -eq 0 ]; then
-            echo "No source files under apps/desktop/src to check."
+            echo "No source files under src/core or src/desktop to check."
           fi

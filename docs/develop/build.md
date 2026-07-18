@@ -3,7 +3,7 @@
 ## 前置依赖
 
 - [vcpkg](https://vcpkg.io/)，并设置环境变量 `VCPKG_ROOT`
-- CMake 3.21+
+- CMake 3.31+
 - Ninja
 
 主要 vcpkg 依赖（见根目录 `vcpkg.json`）：`llama-cpp`、`qtbase`、`curl`、`icu`、`simdutf`、`spdlog`、`gtest`。
@@ -32,12 +32,12 @@
 # macOS ARM64 Release
 cmake --preset arm64-osx-release
 cmake --build --preset arm64-osx-release
-# 产物：build/arm64-osx-release/QTrans
+# 产物：build/arm64-osx-release/src/desktop/QTrans
 
 # Windows MinGW x64 Release
 cmake --preset x64-mingw-static-release
 cmake --build --preset x64-mingw-static-release
-# 产物：build/x64-mingw-static-release/QTrans.exe
+# 产物：build/x64-mingw-static-release/src/desktop/QTrans.exe
 # Release 包：QTrans.exe（Vulkan 后端静态链入）+ libomp.dll（OpenMP 运行时）
 
 ```
