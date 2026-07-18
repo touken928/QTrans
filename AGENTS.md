@@ -8,11 +8,9 @@
 - Backend bootstrap lives in `core::BackendEnvironment`; runtime selection lives in `ITranslationRuntimeFactory`; local/remote behavior differences should flow through `RuntimeTraits` and `TranslationProfile`, not ad-hoc type checks.
 
 ## Build And Test
-- Public release presets: `cmake --preset arm64-osx-release && cmake --build --preset arm64-osx-release`; Windows: `cmake --preset x64-mingw-release && cmake --build --preset x64-mingw-release`.
-- `default` + `debug` is the local debug path and generates `build/default/compile_commands.json` for clangd.
+- Public release presets require `VCPKG_ROOT` from the environment; MinGW also requires the toolchain executables on `PATH`. macOS: `cmake --preset arm64-osx-release && cmake --build --preset arm64-osx-release`; Windows: `cmake --preset x64-mingw-static-release && cmake --build --preset x64-mingw-static-release`.
 - Tests are opt-in: `cmake --preset arm64-osx-release -DQTRANS_BUILD_TESTS=ON`, then build, then `ctest --test-dir build/arm64-osx-release --output-on-failure`.
 - Focus tests by label, e.g. `ctest --test-dir build/arm64-osx-release -L dir:core --output-on-failure` or `-L dir:model`.
-- `CMakeUserPresets.json` contains machine-local `*-user` presets with absolute `/Users/touken/...` paths; do not copy those commands into docs or CI.
 
 ## Runtime Notes
 - `core/src/runtime/local_runtime.*` wraps local llama-cpp inference; macOS uses Metal and Windows x64 uses Vulkan through the vcpkg `llama-cpp` package.

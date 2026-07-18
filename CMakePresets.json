@@ -1,9 +1,10 @@
 {
-  "version": 6,
+  "$comment": "Shared public presets require VCPKG_ROOT from the environment; do not add machine-specific paths.",
+  "version": 10,
   "cmakeMinimumRequired": {
     "major": 3,
     
-    "minor": 21,
+    "minor": 31,
     "patch": 0
   },
   "configurePresets": [
@@ -13,23 +14,7 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-      }
-    },
-    {
-      "name": "default",
-      "hidden": true,
-      "inherits": "base",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
-      }
-    },
-    {
-      "name": "release",
-      "hidden": true,
-      "inherits": "base",
-      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "CMAKE_BUILD_TYPE": "Release"
       }
     },
@@ -37,18 +22,22 @@
       "name": "arm64-osx-release",
       "displayName": "macOS arm64 (Release)",
       "description": "Release build for macOS arm64.",
-      "inherits": "release",
+      "$comment": "Requires VCPKG_ROOT in the environment and an arm64 macOS toolchain.",
+      "inherits": "base",
       "cacheVariables": {
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/macos-arm64.cmake",
         "VCPKG_TARGET_TRIPLET": "arm64-osx-release",
         "VCPKG_HOST_TRIPLET": "arm64-osx-release"
       }
     },
     {
-      "name": "x64-mingw-release",
+      "name": "x64-mingw-static-release",
       "displayName": "MinGW x64 (Release)",
       "description": "Release build for Windows x64 using MinGW.",
-      "inherits": "release",
+      "$comment": "Requires VCPKG_ROOT and MinGW toolchain executables on PATH.",
+      "inherits": "base",
       "cacheVariables": {
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/mingw-x64.cmake",
         "VCPKG_TARGET_TRIPLET": "x64-mingw-static-release"
       }
     }
@@ -60,14 +49,9 @@
       "configurePreset": "arm64-osx-release"
     },
     {
-      "name": "x64-mingw-release",
+      "name": "x64-mingw-static-release",
       "displayName": "MinGW x64 (Release)",
-      "configurePreset": "x64-mingw-release"
-    },
-    {
-      "name": "debug",
-      "displayName": "Local development (Debug)",
-      "configurePreset": "default"
+      "configurePreset": "x64-mingw-static-release"
     }
   ]
 }

@@ -9,15 +9,15 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 180
     env:
-      CMAKE_PRESET: x64-mingw-release
+      CMAKE_PRESET: x64-mingw-static-release
       VCPKG_HOST_TRIPLET: x64-mingw-static-release
       DIST_SUFFIX: windows-x64
       VCPKG_ROOT: C:\vcpkg
       VCPKG_TARGET_TRIPLET: x64-mingw-static-release
-      VCPKG_INSTALL_ROOT: ${{ github.workspace }}/build/x64-mingw-release/vcpkg_installed
+      VCPKG_INSTALL_ROOT: ${{ github.workspace }}/build/x64-mingw-static-release/vcpkg_installed
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
       VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}\\.vcpkg-cache,readwrite
-      BUILD_DIR: ${{ github.workspace }}/build/x64-mingw-release
+      BUILD_DIR: ${{ github.workspace }}/build/x64-mingw-static-release
       LLVM_MINGW: C:\llvm-mingw
 
     steps:

@@ -54,23 +54,12 @@ cmake --preset arm64-osx-release
 cmake --build --preset arm64-osx-release
 
 # Windows MinGW x64 (Release, Vulkan GPU)
-cmake --preset x64-mingw-release
-cmake --build --preset x64-mingw-release
+cmake --preset x64-mingw-static-release
+cmake --build --preset x64-mingw-static-release
 
-# Debug (any platform, using VCPKG_DEFAULT_TRIPLET)
-cmake --preset default
-cmake --build --preset debug
 ```
 
-The triplet is set per preset. Override with `VCPKG_DEFAULT_TRIPLET` env var if needed.
-
-### clangd
-
-Configure with the `default` preset to generate `compile_commands.json` for clangd:
-
-```bash
-cmake --preset default
-```
+The public presets provide macOS ARM64 and Windows MinGW x64 Release builds. The triplet is set per preset.
 
 ## Development
 
