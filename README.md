@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="apps/desktop/resources/logo.png" width="250" alt="QTrans">
+  <img src="src/desktop/resources/logo.png" width="250" alt="QTrans">
 </p>
 
 <p align="center">
@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://en.cppreference.com/w/cpp/17"><img src="https://img.shields.io/badge/c++-17-blue.svg?style=for-the-badge&logo=c%2B%2B" alt="C++17"></a>
-  <a href="https://cmake.org/"><img src="https://img.shields.io/badge/cmake-3.21+-064F8C.svg?style=for-the-badge&logo=cmake" alt="CMake 3.21+"></a>
+  <a href="https://cmake.org/"><img src="https://img.shields.io/badge/cmake-3.31+-064F8C.svg?style=for-the-badge&logo=cmake" alt="CMake 3.31+"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg?style=for-the-badge" alt="GPL-3.0"></a>
 </p>
 
@@ -42,7 +42,7 @@ Download the archive for your platform. On Windows, unzip and run `QTrans.exe`. 
 ### Prerequisites
 
 - [vcpkg](https://vcpkg.io/) (set `VCPKG_ROOT`)
-- CMake 3.21+, Ninja
+- CMake 3.31+, Ninja
 - macOS: `brew install ninja pkg-config autoconf autoconf-archive automake libtool`
 - Windows: MinGW toolchain (e.g. [llvm-mingw](https://github.com/mstorsjo/llvm-mingw)) in `PATH`
 
@@ -54,23 +54,12 @@ cmake --preset arm64-osx-release
 cmake --build --preset arm64-osx-release
 
 # Windows MinGW x64 (Release, Vulkan GPU)
-cmake --preset x64-mingw-release
-cmake --build --preset x64-mingw-release
+cmake --preset x64-mingw-static-release
+cmake --build --preset x64-mingw-static-release
 
-# Debug (any platform, using VCPKG_DEFAULT_TRIPLET)
-cmake --preset default
-cmake --build --preset debug
 ```
 
-The triplet is set per preset. Override with `VCPKG_DEFAULT_TRIPLET` env var if needed.
-
-### clangd
-
-Configure with the `default` preset to generate `compile_commands.json` for clangd:
-
-```bash
-cmake --preset default
-```
+The public presets provide macOS ARM64 and Windows MinGW x64 Release builds. The triplet is set per preset.
 
 ## Development
 
@@ -78,10 +67,11 @@ See [docs/develop/](docs/develop/) (Chinese) for workflow, CI, branch protection
 
 ## Project Layout
 
-- `core/` - reusable translation runtime, backends, and remote/local runtime integration
-- `apps/desktop/src/domain/` - desktop-side non-UI logic such as download, settings, storage, tasks, and batch translation
-- `apps/desktop/src/ui/` - Qt Widgets UI including translate, word selection, batch, model, and shell pages
-- `apps/desktop/src/app/` - desktop entry and worker-thread glue such as `main.cpp`, `task_service.*`, and `batch_controller.*`
+- `src/core/` - reusable translation runtime, backends, and remote/local runtime integration
+- `src/desktop/domain/` - desktop-side non-UI logic such as download, settings, storage, tasks, and batch translation
+- `src/desktop/ui/` - Qt Widgets UI including translate, word selection, batch, model, and shell pages
+- `src/desktop/app/` - desktop entry and worker-thread glue such as `main.cpp`, `task_service.*`, and `batch_controller.*`
+- `tests/core/` - core runtime unit tests
 
 ## License
 

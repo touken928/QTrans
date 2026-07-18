@@ -1,0 +1,1 @@
+set(CMAKE_OSX_ARCHITECTURES arm64 CACHE STRING "Target macOS architecture" FORCE)

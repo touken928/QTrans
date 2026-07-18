@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../resources/logo.png" width="250" alt="QTrans">
+  <img src="../src/desktop/resources/logo.png" width="250" alt="QTrans">
 </p>
 
 <p align="center">
@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://en.cppreference.com/w/cpp/17"><img src="https://img.shields.io/badge/c++-17-blue.svg?style=for-the-badge&logo=c%2B%2B" alt="C++17"></a>
-  <a href="https://cmake.org/"><img src="https://img.shields.io/badge/cmake-3.21+-064F8C.svg?style=for-the-badge&logo=cmake" alt="CMake 3.21+"></a>
+  <a href="https://cmake.org/"><img src="https://img.shields.io/badge/cmake-3.31+-064F8C.svg?style=for-the-badge&logo=cmake" alt="CMake 3.31+"></a>
   <a href="../LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg?style=for-the-badge" alt="GPL-3.0"></a>
 </p>
 
@@ -41,7 +41,7 @@
 ### 环境要求
 
 - [vcpkg](https://vcpkg.io/)（设置 `VCPKG_ROOT`）
-- CMake 3.21+、Ninja
+- CMake 3.31+、Ninja
 - macOS：`brew install ninja pkg-config autoconf autoconf-archive automake libtool`
 - Windows：MinGW 工具链（如 [llvm-mingw](https://github.com/mstorsjo/llvm-mingw)）需要加入 `PATH`
 
@@ -51,25 +51,16 @@
 # macOS ARM64（Release）
 cmake --preset arm64-osx-release
 cmake --build --preset arm64-osx-release
+# 产物：build/arm64-osx-release/src/desktop/QTrans
 
 # Windows MinGW x64（Release，Vulkan GPU）
-cmake --preset x64-mingw-release
-cmake --build --preset x64-mingw-release
+cmake --preset x64-mingw-static-release
+cmake --build --preset x64-mingw-static-release
+# 产物：build/x64-mingw-static-release/src/desktop/QTrans.exe
 
-# Debug（任意平台，使用 VCPKG_DEFAULT_TRIPLET）
-cmake --preset default
-cmake --build --preset debug
 ```
 
-每个 preset 已内置 triplet，如需覆盖可设置 `VCPKG_DEFAULT_TRIPLET` 环境变量。
-
-### clangd
-
-使用 `default` preset 配置后可生成 `compile_commands.json` 供 clangd 使用：
-
-```bash
-cmake --preset default
-```
+公开 preset 提供 macOS ARM64 和 Windows MinGW x64 Release 构建，每个 preset 已内置 triplet。
 
 ## 开发
 

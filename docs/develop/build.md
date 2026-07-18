@@ -3,7 +3,7 @@
 ## 前置依赖
 
 - [vcpkg](https://vcpkg.io/)，并设置环境变量 `VCPKG_ROOT`
-- CMake 3.21+
+- CMake 3.31+
 - Ninja
 
 主要 vcpkg 依赖（见根目录 `vcpkg.json`）：`llama-cpp`、`qtbase`、`curl`、`icu`、`simdutf`、`spdlog`、`gtest`。
@@ -21,9 +21,8 @@
 
 | Preset | 用途 |
 |--------|------|
-| `default` + `debug` | 本地 Debug，生成 `compile_commands.json`（clangd） |
 | `arm64-osx-release` | macOS ARM64 Release（Metal GPU） |
-| `x64-mingw-release` | Windows MinGW x64 Release（Vulkan GPU 静态编入） |
+| `x64-mingw-static-release` | Windows MinGW x64 Release（Vulkan GPU 静态编入） |
 
 构建目录：`build/<preset 名>/`。
 
@@ -33,28 +32,17 @@
 # macOS ARM64 Release
 cmake --preset arm64-osx-release
 cmake --build --preset arm64-osx-release
-# 产物：build/arm64-osx-release/QTrans
+# 产物：build/arm64-osx-release/src/desktop/QTrans
 
 # Windows MinGW x64 Release
-cmake --preset x64-mingw-release
-cmake --build --preset x64-mingw-release
-# 产物：build/x64-mingw-release/QTrans.exe
+cmake --preset x64-mingw-static-release
+cmake --build --preset x64-mingw-static-release
+# 产物：build/x64-mingw-static-release/src/desktop/QTrans.exe
 # Release 包：QTrans.exe（Vulkan 后端静态链入）+ libomp.dll（OpenMP 运行时）
 
-# 本地 Debug（任意已配置 triplet 的主机）
-cmake --preset default
-cmake --build --preset debug
 ```
 
 可通过环境变量 `VCPKG_DEFAULT_TRIPLET` 覆盖 triplet（与 preset 内设置冲突时以 preset 为准）。
-
-## clangd
-
-```bash
-cmake --preset default
-```
-
-会在 `build/default/` 下生成 `compile_commands.json`，供 clangd 使用。
 
 ## 与 CI 的关系
 

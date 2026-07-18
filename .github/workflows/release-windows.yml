@@ -9,15 +9,15 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 180
     env:
-      CMAKE_PRESET: x64-mingw-release
+      CMAKE_PRESET: x64-mingw-static-release
       VCPKG_HOST_TRIPLET: x64-mingw-static-release
       DIST_SUFFIX: windows-x64
       VCPKG_ROOT: C:\vcpkg
       VCPKG_TARGET_TRIPLET: x64-mingw-static-release
-      VCPKG_INSTALL_ROOT: ${{ github.workspace }}/build/x64-mingw-release/vcpkg_installed
+      VCPKG_INSTALL_ROOT: ${{ github.workspace }}/build/x64-mingw-static-release/vcpkg_installed
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
       VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}\\.vcpkg-cache,readwrite
-      BUILD_DIR: ${{ github.workspace }}/build/x64-mingw-release
+      BUILD_DIR: ${{ github.workspace }}/build/x64-mingw-static-release
       LLVM_MINGW: C:\llvm-mingw
 
     steps:
@@ -90,12 +90,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ${{ env.BUILD_DIR }}/core
-            ${{ env.BUILD_DIR }}/apps
+            ${{ env.BUILD_DIR }}/src/core
+            ${{ env.BUILD_DIR }}/src/desktop
             ${{ env.BUILD_DIR }}/build.ninja
             ${{ env.BUILD_DIR }}/.ninja_log
             ${{ env.BUILD_DIR }}/.ninja_deps
-          key: build-objects-windows-x64-${{ hashFiles('apps/desktop/src/**/*.cpp', 'apps/desktop/src/**/*.h', 'apps/desktop/src/**/*.mm', 'core/src/**/*.cpp', 'core/include/**/*.h', 'core/tests/**/*.cpp') }}
+          key: build-objects-windows-x64-${{ hashFiles('src/core/**', 'src/desktop/**', 'tests/core/**') }}
           restore-keys: |
             build-objects-windows-x64-
 
@@ -162,7 +162,7 @@ jobs:
         shell: pwsh
         run: |
           $version = $env:GITHUB_REF_NAME -replace '^v', ''
-          $binary = "build/$env:CMAKE_PRESET/apps/desktop/QTrans.exe"
+          $binary = "build/$env:CMAKE_PRESET/src/desktop/QTrans.exe"
           $objdump = "$env:LLVM_MINGW/bin/llvm-objdump.exe"
           $stage = "dist/QTrans-$version-$env:DIST_SUFFIX"
           $zip = "$stage.zip"
