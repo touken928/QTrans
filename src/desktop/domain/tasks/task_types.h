@@ -1,7 +1,5 @@
 #pragma once
 
-#include "domain/download/download.h"
-
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -45,10 +43,13 @@ enum class TaskState {
 
 struct DownloadModelPayload {
     std::string local_path;
-    DownloadSpec remote_spec;
+    std::string remote_spec;
+    std::string modelscope_remote_spec;
+    int download_hub = 2;
 };
 
 struct LoadModelPayload {
+    std::string model_id;
     std::filesystem::path model_path;
 };
 

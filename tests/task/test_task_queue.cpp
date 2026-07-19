@@ -3,6 +3,10 @@
 
 #include <gtest/gtest.h>
 
+#include <condition_variable>
+#include <mutex>
+#include <optional>
+#include <thread>
 namespace {
 
 Task make_translate(TaskPriority priority, std::string source = "hello") {
@@ -17,10 +21,11 @@ Task make_download() {
     Task task;
     task.kind = TaskKind::DownloadModel;
     task.priority = TaskPriority::Normal;
-    DownloadSpec spec;
-    spec.repo = "Tencent-Hunyuan/Hy-MT2-1.8B-GGUF";
-    spec.filename = "Hy-MT2-1.8B-Q4_K_M.gguf";
-    task.payload = DownloadModelPayload{"/tmp/model.gguf", spec};
+    task.payload = DownloadModelPayload{
+        "/tmp/model.gguf",
+        "Tencent-Hunyuan/Hy-MT2-1.8B-GGUF/Hy-MT2-1.8B-Q4_K_M.gguf",
+        "",
+        2};
     return task;
 }
 
@@ -91,7 +96,7 @@ TEST(TaskQueue, NormalPriorityIsFifo) {
 TEST(TaskQueue, CancelPendingBeforePopSucceeds) {
     TaskQueue queue;
     const TaskId id = queue.enqueue(make_translate(TaskPriority::Normal));
-    EXPECT_TRUE(queue.cancel(id));
+    EXPECT_EQ(queue.cancel(id), TaskQueue::CancelResult::PendingCancelled);
     EXPECT_EQ(queue.state_of(id), TaskState::Cancelled);
 
     auto task = queue.pop_next();
@@ -102,19 +107,130 @@ TEST(TaskQueue, CancelRunningAffectsRunning) {
     TaskQueue queue;
     const TaskId id = queue.enqueue(make_translate(TaskPriority::Normal));
     ASSERT_TRUE(queue.pop_next().has_value());
-    EXPECT_TRUE(queue.cancel(id));
+    EXPECT_EQ(queue.cancel(id), TaskQueue::CancelResult::AlreadyRunning);
     // Queue::cancel() reports the running task is affected but does not
     // transition the state itself; the orchestrator flips the state via
     // set_state() after the running task acknowledges cancellation.
     EXPECT_EQ(queue.state_of(id), TaskState::Running);
 }
 
+TEST(TaskQueue, RunningCancellationIsObservedByWorker) {
+    TaskQueue queue;
+    const TaskId id = queue.enqueue(make_translate(TaskPriority::Normal));
+    ASSERT_TRUE(queue.pop_next().has_value());
+
+    EXPECT_EQ(queue.cancel(id), TaskQueue::CancelResult::AlreadyRunning);
+    ASSERT_TRUE(queue.cancellation_reason(id).has_value());
+    EXPECT_EQ(*queue.cancellation_reason(id), CancellationReason::User);
+    EXPECT_EQ(queue.state_of(id), TaskState::Running);
+
+    queue.set_state(id, TaskState::Cancelled);
+    EXPECT_FALSE(queue.cancellation_reason(id).has_value());
+}
+
+TEST(TaskQueue, CancellationReasonPublishesWithRunningRequest) {
+    TaskQueue queue;
+    const TaskId id = queue.enqueue(make_translate(TaskPriority::Background));
+    ASSERT_TRUE(queue.pop_next().has_value());
+
+    std::mutex mutex;
+    std::condition_variable condition;
+    bool ready = false;
+    std::optional<CancellationReason> observed;
+    std::thread worker([&] {
+        std::unique_lock<std::mutex> lock(mutex);
+        condition.wait(lock, [&] { return ready; });
+        observed = queue.cancellation_reason(id);
+    });
+
+    EXPECT_EQ(queue.cancel(id, CancellationReason::Pause), TaskQueue::CancelResult::AlreadyRunning);
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        ready = true;
+    }
+    condition.notify_one();
+    worker.join();
+
+    ASSERT_TRUE(observed.has_value());
+    EXPECT_EQ(*observed, CancellationReason::Pause);
+}
+
+TEST(TaskQueue, ConcurrentUserCancellationCannotDowngradePreemption) {
+    TaskQueue queue;
+    const TaskId id = queue.enqueue(make_translate(TaskPriority::Background));
+    ASSERT_TRUE(queue.pop_next().has_value());
+
+    std::mutex mutex;
+    std::condition_variable condition;
+    int arrived = 0;
+    bool go = false;
+    auto cancel_when_released = [&](CancellationReason reason) {
+        std::unique_lock<std::mutex> lock(mutex);
+        ++arrived;
+        condition.notify_all();
+        condition.wait(lock, [&] { return go; });
+        lock.unlock();
+        queue.cancel(id, reason);
+    };
+    std::thread pause_thread(cancel_when_released, CancellationReason::Pause);
+    std::thread user_thread(cancel_when_released, CancellationReason::User);
+    {
+        std::unique_lock<std::mutex> lock(mutex);
+        condition.wait(lock, [&] { return arrived == 2; });
+        go = true;
+    }
+    condition.notify_all();
+    pause_thread.join();
+    user_thread.join();
+
+    ASSERT_TRUE(queue.cancellation_reason(id).has_value());
+    EXPECT_TRUE(is_preemption_reason(*queue.cancellation_reason(id)));
+}
+
+TEST(TaskQueue, SettlementRechecksReasonBeforeLinearizingTerminalState) {
+    TaskQueue queue;
+    const TaskId id = queue.enqueue(make_translate(TaskPriority::Background));
+    ASSERT_TRUE(queue.pop_next().has_value());
+    ASSERT_EQ(queue.cancel(id, CancellationReason::User), TaskQueue::CancelResult::AlreadyRunning);
+
+    const auto worker_snapshot = queue.cancellation_reason(id);
+    ASSERT_TRUE(worker_snapshot.has_value());
+    EXPECT_EQ(*worker_snapshot, CancellationReason::User);
+
+    std::mutex mutex;
+    std::condition_variable condition;
+    bool continue_worker = false;
+    TaskQueue::SettlementResult settlement;
+    std::thread worker([&] {
+        std::unique_lock<std::mutex> lock(mutex);
+        condition.wait(lock, [&] { return continue_worker; });
+        lock.unlock();
+        settlement = queue.settle_running(id, TaskState::Cancelled);
+    });
+
+    ASSERT_EQ(queue.cancel(id, CancellationReason::Pause), TaskQueue::CancelResult::AlreadyRunning);
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        continue_worker = true;
+    }
+    condition.notify_one();
+    worker.join();
+
+    ASSERT_TRUE(settlement.committed);
+    EXPECT_EQ(settlement.state, TaskState::Preempted);
+    EXPECT_EQ(queue.state_of(id), TaskState::Preempted);
+    EXPECT_FALSE(queue.cancellation_reason(id).has_value());
+    EXPECT_FALSE(queue.settle_running(id, TaskState::Completed).committed);
+    EXPECT_EQ(queue.cancel(id, CancellationReason::User), TaskQueue::CancelResult::AlreadyTerminal);
+    EXPECT_EQ(queue.state_of(id), TaskState::Preempted);
+}
+
 TEST(TaskQueue, CancelUnknownOrInvalidFails) {
     TaskQueue queue;
-    EXPECT_FALSE(queue.cancel(TaskId{0}));
-    EXPECT_FALSE(queue.cancel(TaskId{42}));
+    EXPECT_EQ(queue.cancel(TaskId{0}), TaskQueue::CancelResult::NotFound);
+    EXPECT_EQ(queue.cancel(TaskId{42}), TaskQueue::CancelResult::NotFound);
     queue.enqueue(make_translate(TaskPriority::Normal));
-    EXPECT_FALSE(queue.cancel(TaskId{9999}));
+    EXPECT_EQ(queue.cancel(TaskId{9999}), TaskQueue::CancelResult::NotFound);
 }
 
 TEST(TaskQueue, SetStateOverridesState) {

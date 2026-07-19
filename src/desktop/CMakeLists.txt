@@ -10,7 +10,9 @@ add_library(qtrans_desktop STATIC
     domain/inference/platform_profile.cpp
     domain/inference/runtime_capabilities.cpp
     domain/download/download.cpp
+    domain/download/model_downloader.cpp
     domain/inference/engine/inference_engine.cpp
+    domain/inference/production_translation_session.cpp
     domain/tasks/task_queue.cpp
     domain/tasks/task_orchestrator.cpp
     domain/logging/init.cpp

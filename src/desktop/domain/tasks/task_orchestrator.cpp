@@ -1,586 +1,299 @@
 #include "domain/tasks/task_orchestrator.h"
 
-#include "domain/model-adapters/local_model_factory.h"
+#include <exception>
+#include <filesystem>
+#include <utility>
 
-#include "domain/logging/ai_trace.h"
-#include "domain/logging/component.h"
-#include "domain/logging/logger.h"
-#include "domain/inference/inference_resolver.h"
-#include "domain/model-catalog/model_catalog.h"
-#include "qtrans/core/backend_environment.h"
-#include "domain/inference/runtime_capabilities.h"
-#include "domain/download/download.h"
-
-#include <stdexcept>
-
-namespace {
-
-LoadModelPayload make_load_payload(std::filesystem::path model_path) {
-    LoadModelPayload payload;
-    payload.model_path = std::move(model_path);
-    return payload;
+TaskOrchestrator::TaskOrchestrator(TaskExecutors executors)
+    : executors_(std::move(executors)) {
 }
-
-std::string backend_kind_label(qtrans::core::BackendKind backend) {
-    switch (backend) {
-        case qtrans::core::BackendKind::Vulkan:
-            return "Vulkan";
-        case qtrans::core::BackendKind::Metal:
-            return "Metal";
-        case qtrans::core::BackendKind::Cpu:
-        default:
-            return "CPU";
-    }
-}
-
-std::string load_failure_details(const qtrans::core::ResolvedBackendEnvironment &environment,
-                                 qtrans::core::BackendKind requested_backend) {
-    std::ostringstream details;
-    bool first = true;
-    for (const auto &diagnostic : environment.capabilities.diagnostics) {
-        if (diagnostic.backend != requested_backend) {
-            continue;
-        }
-        if (!first) {
-            details << "; ";
-        }
-        first = false;
-        details << diagnostic.message;
-    }
-    return details.str();
-}
-
-std::string enrich_load_error(const std::string &message,
-                              const qtrans::core::ResolvedBackendEnvironment &environment,
-                              qtrans::core::BackendKind requested_backend) {
-    std::ostringstream enriched;
-    enriched << message;
-    enriched << "\nBackend: requested " << backend_kind_label(requested_backend)
-             << ", resolved " << environment.label;
-    const std::string details = load_failure_details(environment, requested_backend);
-    if (!details.empty()) {
-        enriched << "\nDetails: " << details;
-    }
-    return enriched.str();
-}
-
-}  // namespace
 
 void TaskOrchestrator::set_callbacks(TaskOrchestratorCallbacks callbacks) {
     std::lock_guard<std::mutex> lock(mutex_);
     callbacks_ = std::move(callbacks);
 }
-
 void TaskOrchestrator::set_model_path(const std::string &path) {
     std::lock_guard<std::mutex> lock(mutex_);
     model_path_ = path;
 }
-
 void TaskOrchestrator::set_model_id(const std::string &id) {
     std::lock_guard<std::mutex> lock(mutex_);
     model_id_ = id;
 }
-
 void TaskOrchestrator::initialize_backend() {
-    qtrans::core::BackendInitializationOptions init_options;
-    init_options.diagnostic_sink = [](qtrans::core::DiagnosticLevel level,
-                                      std::string_view component,
-                                      std::string_view message) {
-        auto logger = qtrans::log::get(
-            component == "llama" ? qtrans::log::Component::Hymt : qtrans::log::Component::Inference);
-        if (!logger) {
-            return;
-        }
-        switch (level) {
-            case qtrans::core::DiagnosticLevel::Error:
-                logger->error("{}", message);
-                break;
-            case qtrans::core::DiagnosticLevel::Warn:
-                logger->warn("{}", message);
-                break;
-            case qtrans::core::DiagnosticLevel::Info:
-                logger->info("{}", message);
-                break;
-            case qtrans::core::DiagnosticLevel::Debug:
-                logger->debug("{}", message);
-                break;
-            case qtrans::core::DiagnosticLevel::Trace:
-                logger->trace("{}", message);
-                break;
-        }
-    };
-    init_options.ai_trace_sink = [](std::string_view prompt, std::string_view response) {
-        qtrans::log::write_ai_trace(std::string(prompt), std::string(response));
-    };
-
-    const auto &environment = qtrans::core::BackendEnvironment::initialize_and_resolve(init_options);
-    RuntimeCapabilities::instance().refresh(environment);
+    executors_.translation_session->initialize_backend();
 }
-
-std::string TaskOrchestrator::active_backend_label() const {
-    return engine_.active_backend_label();
-}
-
 void TaskOrchestrator::set_remote_spec(const std::string &spec) {
     std::lock_guard<std::mutex> lock(mutex_);
     remote_spec_ = spec;
 }
-
 void TaskOrchestrator::set_modelscope_remote_spec(const std::string &spec) {
     std::lock_guard<std::mutex> lock(mutex_);
     modelscope_remote_spec_ = spec;
 }
-
 void TaskOrchestrator::set_download_hub(int hub) {
     std::lock_guard<std::mutex> lock(mutex_);
     download_hub_ = hub;
 }
-
-DownloadSpec TaskOrchestrator::make_download_spec_unlocked() const {
-    DownloadSpec spec{};
-    switch (download_hub_) {
-        case 0:
-            spec.hub = ModelHub::HuggingFace;
-            break;
-        case 1:
-            spec.hub = ModelHub::ModelScope;
-            break;
-        default:
-            spec.hub = ModelHub::Auto;
-            break;
-    }
-
-    if (!download_parse_spec(remote_spec_, spec)) {
-        throw std::runtime_error("invalid remote spec: " + remote_spec_);
-    }
-
-    if (!modelscope_remote_spec_.empty()) {
-        DownloadSpec modelscope_spec{};
-        if (download_parse_spec(modelscope_remote_spec_, modelscope_spec)) {
-            spec.modelscope_repo = modelscope_spec.repo;
-        }
-    }
-
-    return spec;
-}
-
-void TaskOrchestrator::emit_status(const std::string &message, bool busy) const {
-    if (callbacks_.on_status) {
-        callbacks_.on_status(message, busy);
-    }
+std::string TaskOrchestrator::active_backend_label() const {
+    return executors_.translation_session->active_backend_label();
 }
 
 TaskId TaskOrchestrator::submit_download_model(TaskPriority priority) {
     DownloadModelPayload payload;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        payload.local_path = model_path_;
-        payload.remote_spec = make_download_spec_unlocked();
+        payload = {model_path_, remote_spec_, modelscope_remote_spec_, download_hub_};
     }
-
     Task task{};
     task.kind = TaskKind::DownloadModel;
     task.priority = priority;
     task.payload = std::move(payload);
-
     return queue_.enqueue(std::move(task));
 }
-
 TaskId TaskOrchestrator::submit_load_model(TaskPriority priority) {
-    std::filesystem::path model_path;
+    LoadModelPayload payload;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        model_path = std::filesystem::u8path(model_path_);
+        payload = {model_id_, std::filesystem::u8path(model_path_)};
     }
-
     Task task{};
     task.kind = TaskKind::LoadModel;
     task.priority = priority;
-    task.payload = make_load_payload(std::move(model_path));
-
+    task.payload = std::move(payload);
     return queue_.enqueue(std::move(task));
 }
-
 TaskId TaskOrchestrator::submit_unload_model(TaskPriority priority) {
     Task task{};
     task.kind = TaskKind::UnloadModel;
     task.priority = priority;
     task.payload = LoadModelPayload{};
-
     return queue_.enqueue(std::move(task));
 }
-
-TaskId TaskOrchestrator::submit_translate_pipeline(
-    const TranslatePipelinePayload &payload,
-    TaskPriority priority) {
+TaskId TaskOrchestrator::submit_translate_pipeline(const TranslatePipelinePayload &payload, TaskPriority priority) {
     Task task{};
     task.kind = TaskKind::TranslatePipeline;
     task.priority = priority;
     task.payload = payload;
-
     apply_interactive_preemption(task);
     return queue_.enqueue(std::move(task));
 }
 
-void TaskOrchestrator::apply_interactive_preemption(const Task &incoming_task) {
-    if (incoming_task.priority != TaskPriority::Interactive || incoming_task.kind != TaskKind::TranslatePipeline) {
-        return;
+void TaskOrchestrator::apply_interactive_preemption(const Task &incoming) {
+    if (incoming.kind != TaskKind::TranslatePipeline || incoming.priority != TaskPriority::Interactive) return;
+    for (const TaskId id : queue_.cancel_all_pending_normal_translate_tasks()) {
+        emit_finalized(id, TaskKind::TranslatePipeline, TaskState::Cancelled);
     }
-
-    const std::vector<TaskId> cancelled_pending = queue_.cancel_all_pending_normal_translate_tasks();
-    for (const TaskId pending_id : cancelled_pending) {
-        if (callbacks_.on_task_state_changed) {
-            callbacks_.on_task_state_changed(pending_id.value, TaskState::Cancelled);
+    TaskId running_id;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!processing_ || !running_task_id_.is_valid() ||
+            (running_priority_ != TaskPriority::Normal && running_priority_ != TaskPriority::Background)) {
+            return;
         }
-        if (callbacks_.on_translation_finished) {
-            callbacks_.on_translation_finished(pending_id.value, TaskState::Cancelled);
-        }
+        running_id = running_task_id_;
     }
-
+    if (queue_.cancel(running_id, CancellationReason::Interactive) != TaskQueue::CancelResult::AlreadyRunning) return;
     std::lock_guard<std::mutex> lock(mutex_);
-    if (processing_ && running_task_id_.is_valid() && running_cancel_token_ != nullptr) {
-        if (running_priority_ == TaskPriority::Normal) {
-            running_cancel_token_->cancel();
-        } else if (running_priority_ == TaskPriority::Background) {
-            running_cancel_token_->cancel();
-            running_preempted_ = true;
-        }
+    if (running_task_id_ == running_id && running_cancel_token_) {
+        running_cancel_token_->cancel();
     }
 }
 
 bool TaskOrchestrator::cancel(TaskId id) {
-    if (!id.is_valid()) {
-        return false;
+    if (!id.is_valid()) return false;
+    const TaskQueue::CancelResult result = queue_.cancel(id, CancellationReason::User);
+    if (result == TaskQueue::CancelResult::PendingCancelled) {
+        emit_finalized(id, queue_.kind_of(id), TaskState::Cancelled);
+        return true;
     }
-
-    const bool affects_running = queue_.cancel(id);
-
-    TaskId running_id;
+    if (result == TaskQueue::CancelResult::AlreadyRunning) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (running_task_id_ == id && running_cancel_token_) {
+            running_cancel_token_->cancel();
+        }
+        return true;
+    }
+    if (result == TaskQueue::CancelResult::NotCancellable) return false;
+    return queue_.state_of(id) == TaskState::Cancelled;
+}
+bool TaskOrchestrator::cancel_running() {
+    TaskId id;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (processing_ && running_task_id_ == id && running_cancel_token_ != nullptr) {
-            running_cancel_token_->cancel();
-            running_id = running_task_id_;
-        }
+        if (!processing_ || !running_task_id_.is_valid()) return false;
+        id = running_task_id_;
     }
-
-    if (affects_running || running_id.is_valid()) {
-        return true;
-    }
-
-    if (queue_.state_of(id) == TaskState::Cancelled) {
-        if (callbacks_.on_task_state_changed) {
-            callbacks_.on_task_state_changed(id.value, TaskState::Cancelled);
-        }
-        if (callbacks_.on_translation_finished) {
-            callbacks_.on_translation_finished(id.value, TaskState::Cancelled);
-        }
-        return true;
-    }
-
-    return false;
+    return cancel(id);
 }
-
-bool TaskOrchestrator::cancel_running() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (processing_ && running_cancel_token_ != nullptr) {
-        running_cancel_token_->cancel();
-        return true;
-    }
-    return false;
-}
-
 bool TaskOrchestrator::preempt_running_background() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (processing_ && running_task_id_.is_valid() &&
-        running_priority_ == TaskPriority::Background &&
-        running_cancel_token_ != nullptr) {
-        running_cancel_token_->cancel();
-        running_preempted_ = true;
-        return true;
+    TaskId id;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!processing_ || running_priority_ != TaskPriority::Background || !running_task_id_.is_valid()) return false;
+        id = running_task_id_;
     }
-    return false;
+    const TaskQueue::CancelResult result = queue_.cancel(id, CancellationReason::Pause);
+    if (result != TaskQueue::CancelResult::AlreadyRunning) return false;
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (running_task_id_ == id && running_cancel_token_) {
+        running_cancel_token_->cancel();
+    }
+    return true;
 }
-
 TaskState TaskOrchestrator::task_state(TaskId id) const {
     return queue_.state_of(id);
 }
-
 bool TaskOrchestrator::is_model_loaded() const {
     std::lock_guard<std::mutex> lock(mutex_);
-    return model_loaded_ && engine_.is_loaded();
+    return model_loaded_ && executors_.translation_session->is_loaded();
 }
 
-void TaskOrchestrator::finalize_task(TaskId id, TaskKind kind, TaskState state) {
-    queue_.set_state(id, state);
-    if (callbacks_.on_task_state_changed) {
-        callbacks_.on_task_state_changed(id.value, state);
-    }
-    if (kind == TaskKind::TranslatePipeline && callbacks_.on_translation_finished) {
-        callbacks_.on_translation_finished(id.value, state);
-    }
+void TaskOrchestrator::emit_finalized(TaskId id, TaskKind kind, TaskState state) {
+    if (callbacks_.on_task_state_changed) callbacks_.on_task_state_changed(id.value, state);
+    if (kind == TaskKind::TranslatePipeline && callbacks_.on_translation_finished) callbacks_.on_translation_finished(id.value, state);
+}
+TaskQueue::SettlementResult TaskOrchestrator::finalize_task(
+    TaskId id,
+    TaskKind kind,
+    TaskState requested_state) {
+    const TaskQueue::SettlementResult result = queue_.settle_running(id, requested_state);
+    if (result.committed) emit_finalized(id, kind, result.state);
+    return result;
+}
+void TaskOrchestrator::emit_status(const std::string &message, bool busy) const {
+    if (callbacks_.on_status) callbacks_.on_status(message, busy);
 }
 
 void TaskOrchestrator::process_next() {
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (processing_) {
-            return;
-        }
+        if (processing_) return;
         processing_ = true;
     }
-
-    while (true) {
-        std::optional<Task> task = queue_.pop_next();
-        if (!task.has_value()) {
-            break;
-        }
-
-        execute_task(std::move(*task));
-    }
-
+    while (const auto task = queue_.pop_next()) execute_task(*task);
     {
         std::lock_guard<std::mutex> lock(mutex_);
         processing_ = false;
-        running_task_id_ = TaskId{};
+        running_task_id_ = {};
         running_cancel_token_.reset();
     }
-
     emit_status("Ready", false);
 }
 
 void TaskOrchestrator::execute_task(Task task) {
-    const TaskId task_id = task.id;
-    auto cancel_token = std::make_shared<CancelToken>();
-
+    const TaskId id = task.id;
+    auto token = std::make_shared<CancelToken>();
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        running_task_id_ = task_id;
+        running_task_id_ = id;
         running_priority_ = task.priority;
-        running_cancel_token_ = cancel_token;
+        running_cancel_token_ = token;
     }
-
-    {
+    if (const auto reason = queue_.cancellation_reason(id)) {
+        token->cancel();
+    }
+    if (callbacks_.on_task_state_changed) callbacks_.on_task_state_changed(id.value, TaskState::Running);
+    TaskState final_state = TaskState::Failed;
+    ExecutionResult execution_result{};
+    const auto clear_model = [this]() {
+        try {
+            (void)executors_.translation_session->unload();
+        } catch (...) {
+        }
         std::lock_guard<std::mutex> lock(mutex_);
-        running_preempted_ = false;
-    }
-
-    if (callbacks_.on_task_state_changed) {
-        callbacks_.on_task_state_changed(task_id.value, TaskState::Running);
-    }
-
+        model_loaded_ = false;
+    };
     try {
-        switch (task.kind) {
-            case TaskKind::DownloadModel: {
-                emit_status("Downloading model", true);
-                const auto &payload = std::get<DownloadModelPayload>(task.payload);
-
-                download_set_quiet(true);
-                download_set_progress_callback([this](const DownloadProgress &progress) {
+        ExecutionResult result;
+        if (task.kind == TaskKind::DownloadModel) {
+            emit_status("Downloading model", true);
+            execution_result = executors_.downloader->download(
+                std::get<DownloadModelPayload>(task.payload),
+                token.get(),
+                [this](const DownloadProgressData &p) {
                     if (callbacks_.on_download_progress) {
                         callbacks_.on_download_progress(
-                            progress.downloaded_bytes,
-                            progress.total_bytes,
-                            progress.speed_bytes_per_sec,
-                            progress.eta_seconds);
+                            p.downloaded_bytes, p.total_bytes, p.speed_bps, p.eta_seconds);
                     }
                 });
-
-                download_to_file(payload.local_path, payload.remote_spec, true, cancel_token.get());
-                download_set_progress_callback(nullptr);
-
-                emit_status("Download complete", false);
-                if (callbacks_.on_download_finished) {
-                    callbacks_.on_download_finished(true);
-                }
-                finalize_task(task_id, task.kind, TaskState::Completed);
-                break;
-            }
-            case TaskKind::LoadModel: {
-                emit_status("Loading model into memory", true);
-                const auto &payload = std::get<LoadModelPayload>(task.payload);
-
-                std::string model_id;
-                {
-                    std::lock_guard<std::mutex> lock(mutex_);
-                    model_id = model_id_;
-                }
-
-                const ModelCatalogEntry *entry = find_model_by_id(model_id);
-                if (entry == nullptr) {
-                    throw std::runtime_error("unknown model id: " + model_id);
-                }
-
-                const RuntimeCapabilities &caps = RuntimeCapabilities::instance();
-                const std::optional<ResolvedInference> resolved = resolve_inference(*entry, caps);
-                if (!resolved.has_value()) {
-                    throw std::runtime_error(unavailable_reason(*entry, caps));
-                }
-
-                qtrans::core::BackendOptions backend_opts;
-                if (resolved->backend == qtrans::core::BackendKind::Metal) {
-                    backend_opts.backend_type = qtrans::core::BackendType::Metal;
-                } else if (resolved->backend == qtrans::core::BackendKind::Vulkan) {
-                    backend_opts.backend_type = qtrans::core::BackendType::Vulkan;
-                }
-                engine_.set_backend_context(caps.environment(), backend_opts);
-
-                auto profile = create_local_model(*entry, payload.model_path, resolved->n_gpu_layers);
-                try {
-                    engine_.load(std::move(profile));
-                } catch (const std::exception &ex) {
-                    throw std::runtime_error(
-                        enrich_load_error(ex.what(), caps.environment(), resolved->backend));
-                }
-
-                {
-                    std::lock_guard<std::mutex> lock(mutex_);
-                    model_loaded_ = true;
-                }
-
-                emit_status("Model loaded", false);
-                if (callbacks_.on_model_load_finished) {
-                    callbacks_.on_model_load_finished(true, "");
-                }
-                finalize_task(task_id, task.kind, TaskState::Completed);
-                break;
-            }
-            case TaskKind::UnloadModel: {
-                emit_status("Unloading model", true);
-                engine_.unload();
-
-                {
-                    std::lock_guard<std::mutex> lock(mutex_);
-                    model_loaded_ = false;
-                }
-
-                emit_status("Model unloaded", false);
-                if (callbacks_.on_model_unload_finished) {
-                    callbacks_.on_model_unload_finished();
-                }
-                finalize_task(task_id, task.kind, TaskState::Completed);
-                break;
-            }
-            case TaskKind::TranslatePipeline: {
-                const auto &payload = std::get<TranslatePipelinePayload>(task.payload);
-                qtrans::log::get(qtrans::log::Component::Task)
-                    ->debug(
-                        "TranslatePipeline task:{} target:'{}' back:{}",
-                        task_id.value,
-                        payload.target_language,
-                        payload.back_translate);
-                emit_status("Translating", true);
-
-                if (payload.source.empty()) {
-                    throw std::runtime_error("enter text to translate");
-                }
-
-                if (!engine_.is_loaded()) {
-                    throw std::runtime_error("model is not loaded");
-                }
-
-                const TranslateStepResult result = engine_.run_translate_pipeline(
-                    payload,
-                    [this, task_id](bool is_back_channel) {
-                        if (is_back_channel) {
-                            if (callbacks_.on_back_translate_reset) {
-                                callbacks_.on_back_translate_reset(task_id.value);
-                            }
-                        } else if (callbacks_.on_target_reset) {
-                            callbacks_.on_target_reset(task_id.value);
-                        }
-                    },
-                    [this, task_id](bool is_back_channel, const std::string &piece) {
-                        qtrans::log::get(qtrans::log::Component::Task)
-                            ->trace(
-                                "token:{} piece:'{}'",
-                                is_back_channel ? "back" : "fwd",
-                                piece);
-                        if (is_back_channel) {
-                            if (callbacks_.on_back_translate_appended) {
-                                callbacks_.on_back_translate_appended(task_id.value, piece);
-                            }
-                        } else if (callbacks_.on_target_appended) {
-                            callbacks_.on_target_appended(task_id.value, piece);
-                        }
-                    },
-                    cancel_token.get());
-
-                if (result.outcome == InferenceOutcome::Cancelled) {
-                    TaskState final_state;
-                    {
-                        std::lock_guard<std::mutex> lock(mutex_);
-                        final_state = running_preempted_ ? TaskState::Preempted : TaskState::Cancelled;
-                        running_preempted_ = false;
-                    }
-                    if (final_state == TaskState::Preempted) {
-                        qtrans::log::get(qtrans::log::Component::Task)
-                            ->debug("TranslatePipeline preempted task:{}", task_id.value);
-                        emit_status("Preempted", false);
-                    } else {
-                        qtrans::log::get(qtrans::log::Component::Task)
-                            ->debug("TranslatePipeline cancelled task:{}", task_id.value);
-                        emit_status("Cancelled", false);
-                    }
-                    finalize_task(task_id, task.kind, final_state);
-                } else if (result.outcome == InferenceOutcome::Failed) {
-                    qtrans::log::get(qtrans::log::Component::Task)
-                        ->error(
-                            "TranslatePipeline failed task:{} err:{}",
-                            task_id.value,
-                            result.error_message);
-                    emit_status(std::string("Error: ") + result.error_message, false);
-                    if (callbacks_.on_task_failed) {
-                        callbacks_.on_task_failed(task_id.value, result.error_message);
-                    }
-                    finalize_task(task_id, task.kind, TaskState::Failed);
-                } else {
-                    qtrans::log::get(qtrans::log::Component::Task)
-                        ->debug(
-                            "TranslatePipeline completed task:{} result_len:{}",
-                            task_id.value,
-                            result.text.size());
-                    emit_status("Done", false);
-                    finalize_task(task_id, task.kind, TaskState::Completed);
-                }
-                break;
-            }
-        }
-    } catch (const DownloadCancelled &) {
-        if (task.kind == TaskKind::DownloadModel) {
-            download_set_progress_callback(nullptr);
-            emit_status("Download cancelled", false);
-            if (callbacks_.on_download_finished) {
-                callbacks_.on_download_finished(false);
-            }
-        }
-    } catch (const std::exception &ex) {
-        if (task.kind == TaskKind::DownloadModel) {
-            download_set_progress_callback(nullptr);
-            emit_status(std::string("Error: ") + ex.what(), false);
-            if (callbacks_.on_download_finished) {
-                callbacks_.on_download_finished(false);
-            }
-            finalize_task(task_id, task.kind, TaskState::Failed);
         } else if (task.kind == TaskKind::LoadModel) {
-            engine_.unload();
-            {
+            emit_status("Loading model into memory", true);
+            execution_result = executors_.translation_session->load(std::get<LoadModelPayload>(task.payload));
+            if (execution_result.outcome == ExecutionOutcome::Completed) {
+                std::lock_guard<std::mutex> lock(mutex_);
+                model_loaded_ = true;
+            } else {
+                clear_model();
+            }
+        } else if (task.kind == TaskKind::UnloadModel) {
+            emit_status("Unloading model", true);
+            execution_result = executors_.translation_session->unload();
+            if (execution_result.outcome == ExecutionOutcome::Completed) {
                 std::lock_guard<std::mutex> lock(mutex_);
                 model_loaded_ = false;
             }
-            emit_status(std::string("Error: ") + ex.what(), false);
-            if (callbacks_.on_model_load_finished) {
-                callbacks_.on_model_load_finished(false, ex.what());
-            }
-            finalize_task(task_id, task.kind, TaskState::Failed);
         } else {
-            emit_status(std::string("Error: ") + ex.what(), false);
-            if (task.kind == TaskKind::TranslatePipeline) {
-                if (callbacks_.on_task_failed) {
-                    callbacks_.on_task_failed(task_id.value, ex.what());
-                }
-                finalize_task(task_id, task.kind, TaskState::Failed);
-            }
+            emit_status("Translating", true);
+            execution_result = executors_.translation_session->translate(
+                std::get<TranslatePipelinePayload>(task.payload),
+                [this, id](bool back) {
+                    if (back ? callbacks_.on_back_translate_reset : callbacks_.on_target_reset) {
+                        (back ? callbacks_.on_back_translate_reset : callbacks_.on_target_reset)(id.value);
+                    }
+                },
+                [this, id](bool back, const std::string &piece) {
+                    if (back ? callbacks_.on_back_translate_appended : callbacks_.on_target_appended) {
+                        (back ? callbacks_.on_back_translate_appended : callbacks_.on_target_appended)(id.value, piece);
+                    }
+                },
+                token.get());
+        }
+        if (execution_result.outcome == ExecutionOutcome::Completed)
+            final_state = TaskState::Completed;
+        else if (execution_result.outcome == ExecutionOutcome::Cancelled) {
+            final_state = TaskState::Cancelled;
+        }
+    } catch (const std::exception &ex) {
+        if (task.kind == TaskKind::LoadModel) {
+            clear_model();
+        }
+        execution_result = {ExecutionOutcome::Failed, ex.what()};
+    } catch (...) {
+        if (task.kind == TaskKind::LoadModel) {
+            clear_model();
+        }
+        execution_result = {ExecutionOutcome::Failed, "task execution failed"};
+    }
+    const TaskQueue::SettlementResult settlement = finalize_task(id, task.kind, final_state);
+    if (!settlement.committed) return;
+
+    if (task.kind == TaskKind::DownloadModel) {
+        if (callbacks_.on_download_finished) {
+            callbacks_.on_download_finished(
+                execution_result.outcome == ExecutionOutcome::Completed && settlement.state == TaskState::Completed);
+        }
+        if (settlement.state == TaskState::Failed) {
+            emit_status(std::string("Error: ") + execution_result.error_message, false);
+        }
+    } else if (task.kind == TaskKind::LoadModel) {
+        if (callbacks_.on_model_load_finished) {
+            callbacks_.on_model_load_finished(
+                execution_result.outcome == ExecutionOutcome::Completed && settlement.state == TaskState::Completed,
+                execution_result.error_message);
+        }
+        if (settlement.state == TaskState::Failed) {
+            emit_status(std::string("Error: ") + execution_result.error_message, false);
+        }
+    } else if (task.kind == TaskKind::UnloadModel) {
+        if (execution_result.outcome == ExecutionOutcome::Completed && settlement.state == TaskState::Completed &&
+            callbacks_.on_model_unload_finished) {
+            callbacks_.on_model_unload_finished();
+        }
+    } else if (settlement.state == TaskState::Failed) {
+        emit_status(std::string("Error: ") + execution_result.error_message, false);
+        if (execution_result.outcome == ExecutionOutcome::Failed && callbacks_.on_task_failed) {
+            callbacks_.on_task_failed(id.value, execution_result.error_message);
         }
     }
 }

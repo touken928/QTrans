@@ -1,5 +1,7 @@
 #include "app/task_service.h"
 
+#include "domain/download/model_downloader.h"
+#include "domain/inference/production_translation_session.h"
 #include "shared/string_bridge.h"
 #include "domain/logging/component.h"
 #include "domain/logging/logger.h"
@@ -7,7 +9,10 @@
 #include <QThread>
 
 TaskService::TaskService(QObject *parent)
-    : QObject(parent) {
+    : QObject(parent),
+      orchestrator_(TaskExecutors{
+          std::make_unique<ProductionModelDownloader>(),
+          std::make_unique<ProductionTranslationSession>()}) {
     wireCallbacks();
 }
 
