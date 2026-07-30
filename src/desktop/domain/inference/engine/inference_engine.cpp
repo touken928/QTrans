@@ -31,46 +31,65 @@ TranslateStepResult make_completed(std::string text) {
 }  // namespace
 
 InferenceEngine::InferenceEngine() = default;
+InferenceEngine::InferenceEngine(TranslationDriver driver)
+    : driver_(std::move(driver)),
+      driver_loaded_(true) {
+}
 InferenceEngine::~InferenceEngine() = default;
 InferenceEngine::InferenceEngine(InferenceEngine &&) noexcept = default;
 InferenceEngine &InferenceEngine::operator=(InferenceEngine &&) noexcept = default;
 
-void InferenceEngine::set_backend_context(
-    const qtrans::core::ResolvedBackendEnvironment &environment,
-    const qtrans::core::BackendOptions &opts) {
-    backend_environment_ = environment;
-    backend_options_ = opts;
-}
-
-void InferenceEngine::set_translator_options(const qtrans::core::TranslatorOptions &opts) {
-    options_ = opts;
+void InferenceEngine::set_backend(qtrans::core::Backend backend) {
+    backend_ = backend;
 }
 
 bool InferenceEngine::is_loaded() const {
-    return translator_ != nullptr && translator_->is_loaded();
+    return driver_ ? driver_loaded_ : translator_ != nullptr && translator_->loaded();
 }
 
 std::string InferenceEngine::active_backend_label() const {
     if (translator_ != nullptr) {
-        return translator_->backend_label();
+        switch (translator_->backend()) {
+            case qtrans::core::Backend::Vulkan:
+                return "Vulkan";
+            case qtrans::core::Backend::Metal:
+                return "Metal";
+            case qtrans::core::Backend::Cpu:
+                return "CPU";
+            case qtrans::core::Backend::Automatic:
+            default:
+                return "Automatic";
+        }
     }
-    return backend_environment_.label;
+    switch (backend_) {
+        case qtrans::core::Backend::Vulkan:
+            return "Vulkan";
+        case qtrans::core::Backend::Metal:
+            return "Metal";
+        case qtrans::core::Backend::Cpu:
+            return "CPU";
+        case qtrans::core::Backend::Automatic:
+        default:
+            return "Automatic";
+    }
 }
 
-void InferenceEngine::load(qtrans::core::TranslationProfile profile) {
-    if (profile.prompt_strategy == nullptr) {
-        throw std::invalid_argument("translation prompt strategy is required");
+void InferenceEngine::load(qtrans::core::Model model) {
+    if (driver_) {
+        driver_loaded_ = true;
+        return;
     }
-
-    options_ = profile.options;
-
-    auto t = std::make_unique<qtrans::core::Translator>(backend_environment_, backend_options_, options_);
-    t->load(std::move(profile));
+    auto t = std::make_unique<qtrans::core::Translator>(backend_);
+    t->load(std::move(model));
 
     translator_ = std::move(t);
 }
 
 void InferenceEngine::unload() {
+    if (driver_) {
+        driver_loaded_ = false;
+        return;
+    }
     translator_.reset();
 }
 
@@ -85,27 +104,24 @@ TranslateStepResult InferenceEngine::translate(
     }
 
     qtrans::core::TranslationRequest req;
-    req.source = text;
+    req.text = text;
     req.target_language = target_language;
-    req.wordselect = wordselect;
-    req.back_translate = false;
-
-    qtrans::core::TranslationCallbacks cb;
-    cb.on_token = on_token;
-
-    std::function<bool()> should_cancel;
-    if (cancel_token != nullptr) {
-        should_cancel = cancel_token->checker();
-    }
-
-    const auto result = translator_->translate(req, cb, should_cancel);
+    req.overflow = wordselect ? qtrans::core::OverflowPolicy::Reject
+                              : qtrans::core::OverflowPolicy::Split;
+    qtrans::core::TokenSink token_sink = [&](std::string_view piece) {
+        if (on_token) on_token(std::string(piece));
+    };
+    qtrans::core::StopPredicate should_cancel;
+    if (cancel_token != nullptr) should_cancel = cancel_token->checker();
+    const auto result = driver_ ? driver_(req, token_sink, should_cancel)
+                                : translator_->translate(req, token_sink, should_cancel);
     switch (result.outcome) {
         case qtrans::core::TranslationOutcome::Completed:
             return make_completed(result.text);
         case qtrans::core::TranslationOutcome::Cancelled:
             return make_cancelled();
         default:
-            return make_failure(result.error_message);
+            return make_failure(result.message);
     }
 }
 
@@ -118,39 +134,41 @@ TranslateStepResult InferenceEngine::run_translate_pipeline(
         return make_failure("model is not loaded");
     }
 
-    std::function<bool()> should_cancel;
-    if (cancel_token != nullptr) {
-        should_cancel = cancel_token->checker();
-    }
+    qtrans::core::StopPredicate should_cancel;
+    if (cancel_token != nullptr) should_cancel = cancel_token->checker();
 
     qtrans::core::TranslationRequest request;
-    request.source = payload.source;
+    request.text = payload.source;
     request.target_language = payload.target_language;
-    request.source_language = payload.source_language;
-    request.back_translate = payload.back_translate;
-    request.wordselect = payload.wordselect;
-
-    qtrans::core::TranslationCallbacks callbacks;
     bool is_back_channel = false;
-    callbacks.on_reset = [&](bool reset_back_channel) {
-        is_back_channel = reset_back_channel;
-        if (on_reset) {
-            on_reset(reset_back_channel);
-        }
+    if (cancel_token != nullptr && cancel_token->is_cancelled()) return make_cancelled();
+    if (on_reset) on_reset(false);
+    qtrans::core::TokenSink token_sink = [&](std::string_view piece) {
+        if (on_token) on_token(is_back_channel, std::string(piece));
     };
-    callbacks.on_token = [&](const std::string &piece) {
-        if (on_token) {
-            on_token(is_back_channel, piece);
+    request.overflow = payload.wordselect ? qtrans::core::OverflowPolicy::Reject
+                                          : qtrans::core::OverflowPolicy::Split;
+    auto result = driver_ ? driver_(request, token_sink, should_cancel)
+                          : translator_->translate(request, token_sink, should_cancel);
+    if (result.outcome == qtrans::core::TranslationOutcome::Completed && payload.back_translate) {
+        if (result.text.empty() || payload.source_language.empty()) {
+            return make_failure("back-translate requires a non-empty forward result");
         }
-    };
-
-    const auto result = translator_->translate(request, callbacks, should_cancel);
+        if (cancel_token != nullptr && cancel_token->is_cancelled()) return make_cancelled();
+        is_back_channel = true;
+        if (on_reset) on_reset(true);
+        request.text = result.text;
+        request.target_language = payload.source_language;
+        request.overflow = qtrans::core::OverflowPolicy::Split;
+        result = driver_ ? driver_(request, token_sink, should_cancel)
+                         : translator_->translate(request, token_sink, should_cancel);
+    }
     switch (result.outcome) {
         case qtrans::core::TranslationOutcome::Completed:
             return make_completed(result.text);
         case qtrans::core::TranslationOutcome::Cancelled:
             return make_cancelled();
         default:
-            return make_failure(result.error_message);
+            return make_failure(result.message);
     }
 }

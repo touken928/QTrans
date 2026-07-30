@@ -7,17 +7,17 @@
 #include "domain/logging/ai_trace.h"
 #include "domain/logging/component.h"
 #include "domain/logging/logger.h"
-#include "qtrans/core/backend_environment.h"
+#include "qtrans/core.h"
 
 #include <sstream>
 #include <stdexcept>
 
 namespace {
-std::string backend_kind_label(qtrans::core::BackendKind backend) {
+std::string backend_kind_label(qtrans::core::Backend backend) {
     switch (backend) {
-        case qtrans::core::BackendKind::Vulkan:
+        case qtrans::core::Backend::Vulkan:
             return "Vulkan";
-        case qtrans::core::BackendKind::Metal:
+        case qtrans::core::Backend::Metal:
             return "Metal";
         default:
             return "CPU";
@@ -25,8 +25,8 @@ std::string backend_kind_label(qtrans::core::BackendKind backend) {
 }
 
 std::string enrich_error(const std::string &message,
-                         const qtrans::core::ResolvedBackendEnvironment &environment,
-                         qtrans::core::BackendKind requested) {
+                         const qtrans::core::BackendState &environment,
+                         qtrans::core::Backend requested) {
     std::ostringstream result;
     result << message << "\nBackend: requested " << backend_kind_label(requested)
            << ", resolved " << environment.label;
@@ -67,10 +67,11 @@ void ProductionTranslationSession::initialize_backend() {
                 break;
         }
     };
-    options.ai_trace_sink = [](std::string_view prompt, std::string_view response) {
+    options.trace_sink = [](std::string_view prompt, std::string_view response) {
         qtrans::log::write_ai_trace(std::string(prompt), std::string(response));
     };
-    RuntimeCapabilities::instance().refresh(qtrans::core::BackendEnvironment::initialize_and_resolve(options));
+    qtrans::core::configure_backend(options);
+    RuntimeCapabilities::instance().refresh(qtrans::core::initialize_backend());
 }
 
 std::string ProductionTranslationSession::active_backend_label() const {
@@ -87,12 +88,9 @@ ExecutionResult ProductionTranslationSession::load(const LoadModelPayload &paylo
         const RuntimeCapabilities &caps = RuntimeCapabilities::instance();
         const auto resolved = resolve_inference(*entry, caps);
         if (!resolved) throw std::runtime_error(unavailable_reason(*entry, caps));
-        qtrans::core::BackendOptions backend_options;
-        if (resolved->backend == qtrans::core::BackendKind::Metal) backend_options.backend_type = qtrans::core::BackendType::Metal;
-        if (resolved->backend == qtrans::core::BackendKind::Vulkan) backend_options.backend_type = qtrans::core::BackendType::Vulkan;
-        engine_.set_backend_context(caps.environment(), backend_options);
+        engine_.set_backend(resolved->backend);
         try {
-            engine_.load(create_local_model(*entry, payload.model_path, resolved->n_gpu_layers));
+            engine_.load(create_local_model(*entry, payload.model_path));
         } catch (const std::exception &ex) {
             throw std::runtime_error(enrich_error(ex.what(), caps.environment(), resolved->backend));
         }

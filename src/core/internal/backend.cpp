@@ -1,4 +1,4 @@
-#include "qtrans/core/backend_environment.h"
+#include "qtrans/core.h"
 
 #include "diagnostics.h"
 
@@ -8,6 +8,7 @@
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <stdexcept>
 #include <utility>
 
 namespace qtrans::core {
@@ -15,7 +16,9 @@ namespace qtrans::core {
 namespace {
 
 struct BackendEnvironmentState {
-    ResolvedBackendEnvironment resolved;
+    BackendState resolved;
+    bool initialized = false;
+    bool locked = false;
 };
 
 BackendEnvironmentState &state() {
@@ -23,13 +26,18 @@ BackendEnvironmentState &state() {
     return backend_state;
 }
 
-std::string backend_kind_label(BackendKind backend) {
+std::mutex &environment_mutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+std::string backend_kind_label(Backend backend) {
     switch (backend) {
-        case BackendKind::Metal:
+        case Backend::Metal:
             return "Metal";
-        case BackendKind::Vulkan:
+        case Backend::Vulkan:
             return "Vulkan";
-        case BackendKind::Cpu:
+        case Backend::Cpu:
         default:
             return "CPU";
     }
@@ -40,7 +48,7 @@ void emit_diagnostic(DiagnosticLevel level, std::string_view component, std::str
 }
 
 void add_backend_diagnostic(BackendCapabilities &caps,
-                            BackendKind backend,
+                            Backend backend,
                             std::string code,
                             std::string message,
                             bool user_actionable,
@@ -53,14 +61,14 @@ bool probe_vulkan_gpu(BackendCapabilities &caps) {
 #ifdef QTRANS_MULTI_BACKEND
     const ggml_backend_reg_t reg = ggml_backend_reg_by_name("Vulkan");
     if (reg == nullptr) {
-        add_backend_diagnostic(caps, BackendKind::Vulkan, "backend_not_registered",
+        add_backend_diagnostic(caps, Backend::Vulkan, "backend_not_registered",
                                "Vulkan backend did not register with ggml", true,
                                DiagnosticLevel::Warn);
         return false;
     }
     const size_t device_count = ggml_backend_reg_dev_count(reg);
     if (device_count == 0) {
-        add_backend_diagnostic(caps, BackendKind::Vulkan, "no_devices",
+        add_backend_diagnostic(caps, Backend::Vulkan, "no_devices",
                                "Vulkan backend registered but reported no GPU devices", true,
                                DiagnosticLevel::Warn);
     }
@@ -70,13 +78,13 @@ bool probe_vulkan_gpu(BackendCapabilities &caps) {
     }
     const ggml_backend_dev_t gpu = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU);
     if (gpu == nullptr) {
-        add_backend_diagnostic(caps, BackendKind::Vulkan, "gpu_lookup_failed",
+        add_backend_diagnostic(caps, Backend::Vulkan, "gpu_lookup_failed",
                                "No Vulkan GPU device was selected from ggml backend registry",
                                true, DiagnosticLevel::Warn);
     }
     return gpu != nullptr;
 #else
-    add_backend_diagnostic(caps, BackendKind::Vulkan, "backend_not_compiled",
+    add_backend_diagnostic(caps, Backend::Vulkan, "backend_not_compiled",
                            "Vulkan backend support is not compiled into this build", false,
                            DiagnosticLevel::Info);
     return false;
@@ -87,14 +95,14 @@ bool probe_metal_gpu(BackendCapabilities &caps) {
 #ifdef QTRANS_GPU_METAL
     const ggml_backend_reg_t reg = ggml_backend_reg_by_name("MTL");
     if (reg == nullptr) {
-        add_backend_diagnostic(caps, BackendKind::Metal, "backend_not_registered",
+        add_backend_diagnostic(caps, Backend::Metal, "backend_not_registered",
                                "Metal backend did not register with ggml", true,
                                DiagnosticLevel::Warn);
         return false;
     }
     const size_t device_count = ggml_backend_reg_dev_count(reg);
     if (device_count == 0) {
-        add_backend_diagnostic(caps, BackendKind::Metal, "no_devices",
+        add_backend_diagnostic(caps, Backend::Metal, "no_devices",
                                "Metal backend registered but reported no GPU devices", true,
                                DiagnosticLevel::Warn);
     }
@@ -104,41 +112,42 @@ bool probe_metal_gpu(BackendCapabilities &caps) {
     }
     const ggml_backend_dev_t gpu = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU);
     if (gpu == nullptr) {
-        add_backend_diagnostic(caps, BackendKind::Metal, "gpu_lookup_failed",
+        add_backend_diagnostic(caps, Backend::Metal, "gpu_lookup_failed",
                                "No Metal GPU device was selected from ggml backend registry",
                                true, DiagnosticLevel::Warn);
     }
     return gpu != nullptr;
 #else
-    add_backend_diagnostic(caps, BackendKind::Metal, "backend_not_compiled",
+    add_backend_diagnostic(caps, Backend::Metal, "backend_not_compiled",
                            "Metal backend support is not compiled into this build", false,
                            DiagnosticLevel::Info);
     return false;
 #endif
 }
 
-BackendKind resolve_selected_backend(const BackendOptions &options,
-                                     BackendCapabilities &caps) {
+Backend resolve_selected_backend(Backend requested, BackendCapabilities &caps) {
     const bool vulkan_available = caps.vulkan_available;
     const bool metal_available = caps.metal_available;
-    switch (options.backend_type) {
-        case BackendType::Vulkan:
-            if (vulkan_available) return BackendKind::Vulkan;
-            add_backend_diagnostic(caps, BackendKind::Vulkan, "requested_backend_unavailable",
+    switch (requested) {
+        case Backend::Cpu:
+            return Backend::Cpu;
+        case Backend::Vulkan:
+            if (vulkan_available) return Backend::Vulkan;
+            add_backend_diagnostic(caps, Backend::Vulkan, "requested_backend_unavailable",
                                    "Vulkan backend was explicitly requested but is unavailable",
                                    true, DiagnosticLevel::Error);
-            return BackendKind::Cpu;
-        case BackendType::Metal:
-            if (metal_available) return BackendKind::Metal;
-            add_backend_diagnostic(caps, BackendKind::Metal, "requested_backend_unavailable",
+            return Backend::Cpu;
+        case Backend::Metal:
+            if (metal_available) return Backend::Metal;
+            add_backend_diagnostic(caps, Backend::Metal, "requested_backend_unavailable",
                                    "Metal backend was explicitly requested but is unavailable",
                                    true, DiagnosticLevel::Error);
-            return BackendKind::Cpu;
-        case BackendType::Auto:
+            return Backend::Cpu;
+        case Backend::Automatic:
         default:
-            if (vulkan_available) return BackendKind::Vulkan;
-            if (metal_available) return BackendKind::Metal;
-            return BackendKind::Cpu;
+            if (vulkan_available) return Backend::Vulkan;
+            if (metal_available) return Backend::Metal;
+            return Backend::Cpu;
     }
 }
 
@@ -177,28 +186,53 @@ void set_llama_log_callback() {
 
 }  // namespace
 
-const ResolvedBackendEnvironment &BackendEnvironment::initialize_and_resolve(
-    const BackendInitializationOptions &options) {
-    static std::once_flag once;
-    std::call_once(once, [&options]() {
-        diagnostics::configure({options.diagnostic_sink, options.ai_trace_sink});
-        set_llama_log_callback();
+void configure_backend(const BackendInitializationOptions &options) {
+    diagnostics::configure({options.diagnostic_sink, options.trace_sink});
+    set_llama_log_callback();
+}
+
+BackendState initialize_backend(Backend requested) {
+    std::lock_guard<std::mutex> lock(environment_mutex());
+    auto &backend_state = state();
+    if (!backend_state.initialized) {
         llama_backend_init();
 #ifdef QTRANS_MULTI_BACKEND
         ggml_backend_load_all();
 #endif
-        auto &resolved = state().resolved;
+        auto &resolved = backend_state.resolved;
         resolved.initialized = true;
         resolved.capabilities = BackendCapabilities{};
         resolved.capabilities.vulkan_available = probe_vulkan_gpu(resolved.capabilities);
         resolved.capabilities.metal_available = probe_metal_gpu(resolved.capabilities);
-        resolved.selected = resolve_selected_backend(options.backend, resolved.capabilities);
-        resolved.label = backend_kind_label(resolved.selected);
-    });
-    return state().resolved;
+        backend_state.initialized = true;
+    }
+
+    const bool explicit_request = requested != Backend::Automatic;
+    if (explicit_request) {
+        const bool available = requested == Backend::Cpu ||
+                               (requested == Backend::Metal &&
+                                backend_state.resolved.capabilities.metal_available) ||
+                               (requested == Backend::Vulkan &&
+                                backend_state.resolved.capabilities.vulkan_available);
+        if (!available) throw std::runtime_error("requested backend is unavailable");
+    }
+
+    if (backend_state.locked && !explicit_request) return backend_state.resolved;
+    const Backend selected = resolve_selected_backend(requested,
+                                                      backend_state.resolved.capabilities);
+    if (backend_state.locked && selected != backend_state.resolved.selected) {
+        throw std::runtime_error("requested backend conflicts with the initialized backend");
+    }
+    if (!backend_state.locked) {
+        backend_state.resolved.selected = selected;
+        backend_state.resolved.label = backend_kind_label(selected);
+        backend_state.locked = true;
+    }
+    return backend_state.resolved;
 }
 
-const ResolvedBackendEnvironment &BackendEnvironment::current() {
+BackendState backend_state() {
+    std::lock_guard<std::mutex> lock(environment_mutex());
     return state().resolved;
 }
 

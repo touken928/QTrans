@@ -1,8 +1,8 @@
 #include "local_runtime.h"
 
 #include "diagnostics.h"
-#include "qtrans/core/backend_environment.h"
 
+#include "translation_control.h"
 #include "text/utf8_stream_buffer.h"
 
 #include "ggml-backend.h"
@@ -23,19 +23,19 @@ namespace qtrans::core {
 
 namespace {
 
-const char *backend_registry_name(BackendKind backend) {
+const char *backend_registry_name(Backend backend) {
     switch (backend) {
-        case BackendKind::Metal:
+        case Backend::Metal:
             return "MTL";
-        case BackendKind::Vulkan:
+        case Backend::Vulkan:
             return "Vulkan";
-        case BackendKind::Cpu:
+        case Backend::Cpu:
         default:
             return nullptr;
     }
 }
 
-std::vector<ggml_backend_dev_t> selected_backend_devices(const ResolvedBackendEnvironment &environment) {
+std::vector<ggml_backend_dev_t> selected_backend_devices(const BackendState &environment) {
     std::vector<ggml_backend_dev_t> devices;
     const char *reg_name = backend_registry_name(environment.selected);
     if (reg_name == nullptr) {
@@ -113,6 +113,9 @@ struct LlamaModelHolder {
 
     LlamaModelHolder() = default;
     ~LlamaModelHolder() {
+        reset();
+    }
+    void reset() noexcept {
         if (model != nullptr) {
             llama_model_free(model);
             model = nullptr;
@@ -121,6 +124,7 @@ struct LlamaModelHolder {
             std::fclose(file);
             file = nullptr;
         }
+        buffer.clear();
     }
     LlamaModelHolder(const LlamaModelHolder &) = delete;
     LlamaModelHolder &operator=(const LlamaModelHolder &) = delete;
@@ -197,12 +201,12 @@ LlamaModelHolder load_llama_model(const std::vector<std::uint8_t> &data,
 // Sampler creation
 // ---------------------------------------------------------------------------
 
-llama_sampler *create_sampler(const TranslatorOptions &config) {
+llama_sampler *create_sampler(const GenerationOptions &config) {
     llama_sampler *chain = llama_sampler_chain_init(llama_sampler_chain_default_params());
-    llama_sampler_chain_add(chain, llama_sampler_init_penalties(-1, config.generation.repeat_penalty, 0.0f, 0.0f));
-    llama_sampler_chain_add(chain, llama_sampler_init_top_k(config.generation.top_k));
-    llama_sampler_chain_add(chain, llama_sampler_init_top_p(config.generation.top_p, 1));
-    llama_sampler_chain_add(chain, llama_sampler_init_temp(config.generation.temperature));
+    llama_sampler_chain_add(chain, llama_sampler_init_penalties(-1, config.repeat_penalty, 0.0f, 0.0f));
+    llama_sampler_chain_add(chain, llama_sampler_init_top_k(config.top_k));
+    llama_sampler_chain_add(chain, llama_sampler_init_top_p(config.top_p, 1));
+    llama_sampler_chain_add(chain, llama_sampler_init_temp(config.temperature));
     llama_sampler_chain_add(chain, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
     return chain;
 }
@@ -211,10 +215,10 @@ llama_sampler *create_sampler(const TranslatorOptions &config) {
 // Token helpers
 // ---------------------------------------------------------------------------
 
-bool abort_callback(void *data) {
+bool abort_callback(void *data) noexcept {
     if (data == nullptr) return false;
-    const auto *should_cancel = static_cast<const std::function<bool()> *>(data);
-    return (*should_cancel)();
+    auto *state = static_cast<runtime_detail::CallbackState *>(data);
+    return state->requested();
 }
 
 std::string token_to_text(const llama_vocab *vocab, llama_token token) {
@@ -241,13 +245,12 @@ struct LocalRuntime::Impl {
     LlamaModelHolder model_holder_;
     llama_context *ctx_ = nullptr;
     llama_sampler *sampler_ = nullptr;
-    TranslatorOptions config_;
-    ResolvedBackendEnvironment environment_{};
-    BackendOptions backend_options_{};
+    GenerationOptions config_;
+    BackendState environment_{};
     std::string backend_label_ = "CPU";
     bool loaded_ = false;
 
-    ~Impl() {
+    void unload_resources() noexcept {
         if (sampler_ != nullptr) {
             llama_sampler_free(sampler_);
             sampler_ = nullptr;
@@ -256,6 +259,13 @@ struct LocalRuntime::Impl {
             llama_free(ctx_);
             ctx_ = nullptr;
         }
+        model_holder_.reset();
+        config_ = {};
+        loaded_ = false;
+    }
+
+    ~Impl() {
+        unload_resources();
     }
 };
 
@@ -263,14 +273,9 @@ struct LocalRuntime::Impl {
 // LocalRuntime implementation
 // ---------------------------------------------------------------------------
 
-LocalRuntime::LocalRuntime()
-    : impl_(std::make_unique<Impl>()) {
-}
-
-LocalRuntime::LocalRuntime(ResolvedBackendEnvironment environment, BackendOptions options)
+LocalRuntime::LocalRuntime(BackendState environment)
     : impl_(std::make_unique<Impl>()) {
     impl_->environment_ = std::move(environment);
-    impl_->backend_options_ = std::move(options);
     impl_->backend_label_ = impl_->environment_.label;
 }
 
@@ -284,97 +289,73 @@ LocalRuntime &LocalRuntime::operator=(LocalRuntime &&other) noexcept {
     return *this;
 }
 
-void LocalRuntime::load(const ModelLoadSpec &model, const TranslatorOptions &config) {
-    const auto *local = std::get_if<LocalModelConfig>(&model);
-    if (local == nullptr) {
-        throw std::runtime_error("local runtime requires local model data");
-    }
+void LocalRuntime::load(const Model &model) {
+    if (model.path.empty()) throw std::invalid_argument("model path is empty");
+    const GenerationOptions &config = model.generation;
 
-    if (local->path.empty() && local->weights.empty()) {
-        throw std::invalid_argument("local model requires a file path or in-memory weights");
-    }
-
-    impl_->config_ = config;
-    impl_->loaded_ = false;
+    auto candidate = std::make_unique<Impl>();
+    candidate->environment_ = impl_->environment_;
+    candidate->backend_label_ = impl_->backend_label_;
+    candidate->config_ = config;
 
     // Clean up previous state.
-    if (impl_->sampler_ != nullptr) {
-        llama_sampler_free(impl_->sampler_);
-        impl_->sampler_ = nullptr;
-    }
-    if (impl_->ctx_ != nullptr) {
-        llama_free(impl_->ctx_);
-        impl_->ctx_ = nullptr;
-    }
-    impl_->model_holder_ = LlamaModelHolder();
-
     llama_model_params model_params = llama_model_default_params();
-    model_params.n_gpu_layers = config.n_gpu_layers;
+    model_params.n_gpu_layers = candidate->environment_.selected == Backend::Cpu ? 0 : -1;
     std::vector<ggml_backend_dev_t> selected_devices;
-    if (impl_->environment_.selected != BackendKind::Cpu) {
-        selected_devices = selected_backend_devices(impl_->environment_);
+    if (candidate->environment_.selected != Backend::Cpu) {
+        selected_devices = selected_backend_devices(candidate->environment_);
         model_params.devices = selected_devices.data();
         model_params.main_gpu = 0;
         emit_hymt_message(DiagnosticLevel::Info,
-                          "resolved backend=" + impl_->environment_.label +
+                          "resolved backend=" + candidate->environment_.label +
                               ", selected devices=" + describe_device_list(selected_devices));
     } else {
         emit_hymt_message(DiagnosticLevel::Info,
                           "resolved backend=CPU, loading model without GPU device selection");
-        if (config.n_gpu_layers != 0) {
-            emit_hymt_message(DiagnosticLevel::Warn,
-                              "CPU backend selected while n_gpu_layers=" +
-                                  std::to_string(config.n_gpu_layers));
-        }
     }
 
-    if (!local->path.empty()) {
-        impl_->model_holder_ = load_llama_model(local->path, model_params);
-    } else {
-        impl_->model_holder_ = load_llama_model(local->weights, model_params);
-    }
+    candidate->model_holder_ = load_llama_model(model.path, model_params);
 
-    const int train_ctx = llama_model_n_ctx_train(impl_->model_holder_.model);
-    if (train_ctx > 0 && impl_->config_.context.n_ctx > train_ctx) {
-        impl_->config_.context.n_ctx = train_ctx;
-        if (impl_->config_.context.max_tokens > train_ctx) {
-            impl_->config_.context.max_tokens = train_ctx;
+    const int train_ctx = llama_model_n_ctx_train(candidate->model_holder_.model);
+    if (train_ctx > 0 && candidate->config_.context_tokens > train_ctx) {
+        candidate->config_.context_tokens = train_ctx;
+        if (candidate->config_.max_output_tokens > train_ctx) {
+            candidate->config_.max_output_tokens = train_ctx;
         }
     }
 
     llama_context_params ctx_params = llama_context_default_params();
-    ctx_params.n_ctx = static_cast<uint32_t>(impl_->config_.context.n_ctx);
-    ctx_params.n_batch = static_cast<uint32_t>(impl_->config_.context.n_ctx);
+    ctx_params.n_ctx = static_cast<uint32_t>(candidate->config_.context_tokens);
+    ctx_params.n_batch = static_cast<uint32_t>(candidate->config_.context_tokens);
 
-    impl_->ctx_ = llama_init_from_model(impl_->model_holder_.model, ctx_params);
-    if (impl_->ctx_ == nullptr) {
-        impl_->model_holder_ = LlamaModelHolder();
+    candidate->ctx_ = llama_init_from_model(candidate->model_holder_.model, ctx_params);
+    if (candidate->ctx_ == nullptr) {
         throw std::runtime_error("failed to create llama context");
     }
 
     emit_hymt_message(DiagnosticLevel::Info,
                       "llama context created for backend=" + impl_->backend_label_ +
-                          ", n_gpu_layers=" + std::to_string(config.n_gpu_layers));
+                          ", gpu_layers=" + std::to_string(model_params.n_gpu_layers));
 
-    impl_->sampler_ = create_sampler(config);
-    impl_->loaded_ = true;
+    candidate->sampler_ = create_sampler(config);
+    candidate->loaded_ = true;
+    impl_.swap(candidate);
 }
 
-void LocalRuntime::unload() {
-    impl_->~Impl();
-    new (impl_.get()) Impl();
+void LocalRuntime::unload() noexcept {
+    impl_->unload_resources();
 }
 
-bool LocalRuntime::is_loaded() const {
+bool LocalRuntime::loaded() const noexcept {
     return impl_->loaded_;
 }
 
-RuntimeKind LocalRuntime::kind() const {
-    return RuntimeKind::Local;
+Backend LocalRuntime::backend() const noexcept {
+    return impl_->environment_.selected;
 }
 
 int LocalRuntime::count_prompt_tokens(const std::string &prompt) const {
-    if (!is_loaded()) return 0;
+    if (!loaded()) return 0;
     const llama_vocab *vocab = llama_model_get_vocab(impl_->model_holder_.model);
     const int n_prompt = -llama_tokenize(
         vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()),
@@ -384,23 +365,22 @@ int LocalRuntime::count_prompt_tokens(const std::string &prompt) const {
 
 std::string LocalRuntime::translate(
     const std::string &prompt,
-    const std::function<void(const std::string &)> &on_token,
-    const std::function<bool()> &should_cancel) {
-    if (!is_loaded()) throw std::runtime_error("model is not loaded");
-    if (should_cancel && should_cancel()) throw std::runtime_error("translation cancelled");
+    const TokenSink &on_token,
+    const StopPredicate &should_cancel) {
+    if (!loaded()) throw std::runtime_error("model is not loaded");
+    runtime_detail::CallbackState callback_state;
+    callback_state.checker = should_cancel;
+    runtime_detail::check_stop(callback_state);
     return generate(prompt, on_token, should_cancel);
-}
-
-std::string LocalRuntime::backend_label() const {
-    return impl_->backend_label_;
 }
 
 std::string LocalRuntime::generate(
     const std::string &prompt,
-    const std::function<void(const std::string &)> &on_token,
-    const std::function<bool()> &should_cancel) {
-    std::function<bool()> cancel_fn = should_cancel ? should_cancel : []() { return false; };
-    llama_set_abort_callback(impl_->ctx_, abort_callback, &cancel_fn);
+    const TokenSink &on_token,
+    const StopPredicate &should_cancel) {
+    runtime_detail::CallbackState callback_state;
+    callback_state.checker = should_cancel;
+    llama_set_abort_callback(impl_->ctx_, abort_callback, &callback_state);
 
     struct AbortGuard {
         llama_context *ctx;
@@ -421,6 +401,7 @@ std::string LocalRuntime::generate(
     const int n_prompt = -llama_tokenize(
         vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()),
         nullptr, 0, false, true);
+    runtime_detail::check_stop(callback_state);
     emit_hymt_message(DiagnosticLevel::Trace, "prompt token count=" + std::to_string(n_prompt));
     if (n_prompt <= 0) throw std::runtime_error("failed to measure prompt tokens");
 
@@ -429,19 +410,20 @@ std::string LocalRuntime::generate(
                        prompt_tokens.data(), static_cast<int32_t>(prompt_tokens.size()),
                        false, true) < 0)
         throw std::runtime_error("failed to tokenize prompt");
+    runtime_detail::check_stop(callback_state);
 
     llama_batch batch = llama_batch_get_one(
         prompt_tokens.data(), static_cast<int32_t>(prompt_tokens.size()));
     std::string response;
 
-    const int ctx_room = impl_->config_.context.n_ctx - n_prompt;
+    const int ctx_room = impl_->config_.context_tokens - n_prompt;
     if (ctx_room <= 0) throw std::runtime_error("prompt exceeds model context");
-    const int max_gen = std::min(impl_->config_.context.max_tokens, ctx_room);
+    const int max_gen = std::min(impl_->config_.max_output_tokens, ctx_room);
 
     emit_hymt_message(DiagnosticLevel::Debug,
                       "starting decode loop, max_gen=" + std::to_string(max_gen) +
                           " prompt_tokens=" + std::to_string(n_prompt) +
-                          " n_ctx=" + std::to_string(impl_->config_.context.n_ctx));
+                          " n_ctx=" + std::to_string(impl_->config_.context_tokens));
 
     core::Utf8StreamBuffer utf8_stream;
     for (int i = 0; i < max_gen; ++i) {
@@ -450,17 +432,14 @@ std::string LocalRuntime::generate(
                               "token progress=" + std::to_string(i) + "/" + std::to_string(max_gen));
         }
 
-        if (cancel_fn()) {
-            emit_hymt_message(DiagnosticLevel::Debug,
-                              "cancelled at token " + std::to_string(i));
-            throw std::runtime_error("translation cancelled");
-        }
+        runtime_detail::check_stop(callback_state);
 
         const int decode_status = llama_decode(impl_->ctx_, batch);
         if (decode_status != 0) {
-            if (cancel_fn()) throw std::runtime_error("translation cancelled");
+            runtime_detail::check_stop(callback_state);
             throw std::runtime_error("llama_decode failed");
         }
+        runtime_detail::check_stop(callback_state);
 
         const llama_token token = llama_sampler_sample(impl_->sampler_, impl_->ctx_, -1);
         if (llama_vocab_is_eog(vocab, token)) {
@@ -474,20 +453,38 @@ std::string LocalRuntime::generate(
 
         if (on_token) {
             const std::string emit = utf8_stream.push(piece);
-            if (!emit.empty()) on_token(emit);
+            if (!emit.empty()) {
+                try {
+                    on_token(emit);
+                } catch (const runtime_detail::TranslationCallbackFailed &) {
+                    throw;
+                } catch (const std::exception &ex) {
+                    throw runtime_detail::TranslationCallbackFailed(
+                        std::string("token callback failed: ") + ex.what());
+                } catch (...) {
+                    throw runtime_detail::TranslationCallbackFailed("token callback failed");
+                }
+            }
         }
 
-        if (cancel_fn()) {
-            emit_hymt_message(DiagnosticLevel::Debug,
-                              "cancelled at token " + std::to_string(i));
-            throw std::runtime_error("translation cancelled");
-        }
+        runtime_detail::check_stop(callback_state);
         batch = llama_batch_get_one(const_cast<llama_token *>(&token), 1);
     }
 
     if (on_token) {
         const std::string tail = utf8_stream.flush();
-        if (!tail.empty()) on_token(tail);
+        if (!tail.empty()) {
+            try {
+                on_token(tail);
+            } catch (const runtime_detail::TranslationCallbackFailed &) {
+                throw;
+            } catch (const std::exception &ex) {
+                throw runtime_detail::TranslationCallbackFailed(
+                    std::string("token callback failed: ") + ex.what());
+            } catch (...) {
+                throw runtime_detail::TranslationCallbackFailed("token callback failed");
+            }
+        }
     }
 
     emit_hymt_message(DiagnosticLevel::Trace,
@@ -495,17 +492,6 @@ std::string LocalRuntime::generate(
 
     diagnostics::emit_ai_trace(prompt, response);
     return response;
-}
-
-RuntimeTraits LocalRuntime::traits() const {
-    RuntimeTraits t;
-    t.kind = RuntimeKind::Local;
-    t.context_handling = ContextHandling::LocalEnforced;
-    t.streaming = StreamingSupport::TokenByToken;
-    t.has_precise_token_counting = true;
-    t.max_input_tokens = impl_->config_.context.n_ctx;
-    t.max_output_tokens = impl_->config_.context.max_tokens;
-    return t;
 }
 
 }  // namespace qtrans::core

@@ -2,10 +2,10 @@
 
 ## Core Boundaries
 - This repo is C++17/CMake/Ninja with vcpkg; root `CMakeLists.txt` still owns all targets.
-- `src/core/` is the reusable translation runtime. Keep `src/core/include/qtrans/core/` free of llama-cpp, curl, ICU, simdutf, spdlog, Qt, and platform API types.
+- `src/core/` is the reusable translation runtime. `src/core/include/qtrans/core.h` is the only public core header; llama-cpp, curl, ICU, simdutf, spdlog, Qt, and platform API types belong only in `src/core/internal/` implementation headers.
 - `src/desktop/` is the Qt Widgets app layer: UI, settings, download, task queue, word selection, hotkeys, logs, and glue.
 - `qtrans_desktop` is the desktop support library and links `qtrans_core`; it is not a reusable core library.
-- Backend bootstrap lives in `core::BackendEnvironment`; runtime selection lives in `ITranslationRuntimeFactory`; local/remote behavior differences should flow through `RuntimeTraits` and `TranslationProfile`, not ad-hoc type checks.
+- Backend bootstrap and selection are exposed only through `qtrans/core.h`; local llama-cpp runtime, backend probing, chunking, and callback control are `src/core/internal/` implementation details.
 
 ## Build And Test
 - Public release presets require `VCPKG_ROOT` from the environment; MinGW also requires the toolchain executables on `PATH`. macOS: `cmake --preset arm64-osx-release && cmake --build --preset arm64-osx-release`; Windows: `cmake --preset x64-mingw-static-release && cmake --build --preset x64-mingw-static-release`.
@@ -14,9 +14,8 @@
 
 ## Runtime Notes
 - `src/core/runtime/local_runtime.*` wraps local llama-cpp inference; macOS uses Metal and Windows x64 uses Vulkan through the vcpkg `llama-cpp` package.
-- `src/core/runtime/remote_runtime.*` calls OpenAI/Anthropic-compatible single-turn APIs using curl privately inside `qtrans_core`.
-- Local inference should keep `n_gpu_layers = -1` in resolved `TranslatorOptions`; `BackendOptions` is only for backend selection and plugin dir.
-- `Translator` should decide chunking/context behavior from `RuntimeTraits`, not by guessing whether a runtime is local or remote.
+- Local inference chooses CPU/GPU layer behavior inside the internal LocalRuntime from the resolved backend.
+- The public Translator owns chunking/context behavior through the facade; runtime traits and factories are internal implementation details.
 - Word-selection translation must fail with a clear context-limit error instead of auto-chunking past the local context window.
 - Batch translation should submit work through `BatchController` -> `TaskService::submitBatchTranslate()` -> `TaskOrchestrator` with `TaskPriority::Background`; paused or interactive-preempted work should surface as `TaskState::Preempted`, not `Cancelled`.
 

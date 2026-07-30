@@ -1,6 +1,6 @@
 #pragma once
 
-#include "qtrans/core/backend_environment.h"
+#include "qtrans/core.h"
 
 #include <string>
 #include <vector>
@@ -12,7 +12,7 @@ struct ModelCatalogEntry {
     std::string remote_spec;
     std::string modelscope_remote_spec;
     int download_hub = 2;
-    std::vector<qtrans::core::BackendKind> backend_priority;
+    std::vector<qtrans::core::Backend> backend_priority;
 };
 
 const std::vector<ModelCatalogEntry> &model_catalog();

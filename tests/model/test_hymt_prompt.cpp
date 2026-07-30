@@ -9,7 +9,6 @@
 #include <cstdlib>
 #include <filesystem>
 #include <stdexcept>
-#include <variant>
 #include <vector>
 
 namespace {
@@ -31,44 +30,34 @@ std::filesystem::path write_temp_bytes(const std::vector<std::uint8_t> &data) {
 
 TEST(HyMt2_18BLocalModel, SetsContextAndChatTemplate) {
     const std::filesystem::path path = write_temp_bytes({0x47, 0x47, 0x55, 0x46});
-    const qtrans::core::TranslationProfile profile = make_hymt2_18b_local_profile(path, -1);
-    const auto *local = std::get_if<qtrans::core::LocalModelConfig>(&profile.model);
-    ASSERT_NE(profile.prompt_strategy, nullptr);
-    ASSERT_NE(local, nullptr);
-    EXPECT_EQ(local->path, path);
-    EXPECT_TRUE(local->weights.empty());
-    EXPECT_EQ(profile.options.context.n_ctx, 4096);
-    EXPECT_EQ(profile.options.context.max_tokens, 4096);
-    EXPECT_EQ(profile.options.n_gpu_layers, -1);
+    const qtrans::core::Model model = make_hymt2_18b_local_model(path);
+    ASSERT_TRUE(model.prompt_formatter);
+    EXPECT_EQ(model.path, path);
+    EXPECT_EQ(model.generation.context_tokens, 4096);
+    EXPECT_EQ(model.generation.max_output_tokens, 4096);
 
-    const std::string user = profile.prompt_strategy->build_user_prompt("Hello", "Chinese");
-    const std::string chat = profile.prompt_strategy->format_translation_prompt("Hello", "Chinese");
+    const std::string chat = model.prompt_formatter("Hello", "Chinese");
     EXPECT_NE(chat.find(u8"<\xEF\xBD\x9Chy_User\xEF\xBD\x9C>"), std::string::npos);
-    EXPECT_EQ(chat, profile.prompt_strategy->format_chat_prompt(user));
     std::filesystem::remove(path);
 }
 
 TEST(HyMt2_7BLocalModel, SetsContextAndChatTemplate) {
     const std::filesystem::path path = write_temp_bytes({0x47, 0x47, 0x55, 0x46});
-    const qtrans::core::TranslationProfile profile = make_hymt2_7b_local_profile(path, -1);
-    const auto *local = std::get_if<qtrans::core::LocalModelConfig>(&profile.model);
-    ASSERT_NE(profile.prompt_strategy, nullptr);
-    ASSERT_NE(local, nullptr);
-    EXPECT_EQ(local->path, path);
-    EXPECT_TRUE(local->weights.empty());
-    EXPECT_EQ(profile.options.context.n_ctx, 8192);
-    EXPECT_EQ(profile.options.context.max_tokens, 8192);
+    const qtrans::core::Model model = make_hymt2_7b_local_model(path);
+    ASSERT_TRUE(model.prompt_formatter);
+    EXPECT_EQ(model.path, path);
+    EXPECT_EQ(model.generation.context_tokens, 8192);
+    EXPECT_EQ(model.generation.max_output_tokens, 8192);
 
-    const std::string user = profile.prompt_strategy->build_user_prompt("Hello", "Chinese");
-    const std::string chat = profile.prompt_strategy->format_translation_prompt("Hello", "Chinese");
-    EXPECT_EQ(chat, "<|startoftext|>" + user + "<|extra_0|>");
+    const std::string chat = model.prompt_formatter("Hello", "Chinese");
+    EXPECT_NE(chat.find("<|startoftext|>"), std::string::npos);
     std::filesystem::remove(path);
 }
 
 TEST(LocalModelFactory, UnknownIdThrows) {
     ModelCatalogEntry entry{};
     entry.id = "unsupported-model";
-    EXPECT_THROW(create_local_model(entry, "/tmp/unused.gguf", -1), std::runtime_error);
+    EXPECT_THROW(create_local_model(entry, "/tmp/unused.gguf"), std::runtime_error);
 }
 
 TEST(LocalModelFactory, ResolvesCatalogModelsIndependently) {

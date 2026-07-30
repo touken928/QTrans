@@ -4,20 +4,20 @@
 
 namespace {
 
-std::string backend_kind_label(qtrans::core::BackendKind backend) {
+std::string backend_kind_label(qtrans::core::Backend backend) {
     switch (backend) {
-        case qtrans::core::BackendKind::Vulkan:
+        case qtrans::core::Backend::Vulkan:
             return "Vulkan";
-        case qtrans::core::BackendKind::Metal:
+        case qtrans::core::Backend::Metal:
             return "Metal";
-        case qtrans::core::BackendKind::Cpu:
+        case qtrans::core::Backend::Cpu:
         default:
             return "CPU";
     }
 }
 
-bool contains_backend(const std::vector<qtrans::core::BackendKind> &backends,
-                      qtrans::core::BackendKind backend) {
+bool contains_backend(const std::vector<qtrans::core::Backend> &backends,
+                      qtrans::core::Backend backend) {
     return std::find(backends.begin(), backends.end(), backend) != backends.end();
 }
 
@@ -39,30 +39,18 @@ std::string diagnostic_summary(const ModelCatalogEntry &entry,
     return details.str();
 }
 
-int n_gpu_layers_for(qtrans::core::BackendKind backend) {
-    switch (backend) {
-        case qtrans::core::BackendKind::Vulkan:
-        case qtrans::core::BackendKind::Metal:
-            return -1;
-        case qtrans::core::BackendKind::Cpu:
-            return 0;
-    }
-    return 0;
-}
-
 }  // namespace
 
 std::optional<ResolvedInference> resolve_inference(
     const ModelCatalogEntry &entry,
     const RuntimeCapabilities &caps) {
-    for (qtrans::core::BackendKind backend : entry.backend_priority) {
+    for (qtrans::core::Backend backend : entry.backend_priority) {
         if (!caps.supports(backend)) {
             continue;
         }
 
         ResolvedInference resolved{};
         resolved.backend = backend;
-        resolved.n_gpu_layers = n_gpu_layers_for(backend);
         return resolved;
     }
 
@@ -75,7 +63,7 @@ std::string unavailable_reason(
     std::ostringstream message;
     message << "No supported inference backend for model \"" << entry.display_name << "\". Required: ";
     bool first = true;
-    for (qtrans::core::BackendKind backend : entry.backend_priority) {
+    for (qtrans::core::Backend backend : entry.backend_priority) {
         if (!first) {
             message << ", ";
         }

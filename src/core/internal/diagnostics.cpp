@@ -31,18 +31,24 @@ void emit(DiagnosticLevel level, std::string_view component, std::string_view me
         sink = callbacks_storage().diagnostic_sink;
     }
     if (sink) {
-        sink(level, component, message);
+        try {
+            sink(level, component, message);
+        } catch (...) {
+        }
     }
 }
 
 void emit_ai_trace(std::string_view prompt, std::string_view response) {
-    AiTraceSink sink;
+    TraceSink sink;
     {
         std::lock_guard<std::mutex> lock(callbacks_mutex());
-        sink = callbacks_storage().ai_trace_sink;
+        sink = callbacks_storage().trace_sink;
     }
     if (sink) {
-        sink(prompt, response);
+        try {
+            sink(prompt, response);
+        } catch (...) {
+        }
     }
 }
 
