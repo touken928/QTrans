@@ -2,11 +2,10 @@
 
 #include "domain/model-catalog/model_catalog.h"
 
-#include "qtrans/core/translation_model.h"
+#include "qtrans/core.h"
 
 #include <filesystem>
 
-qtrans::core::TranslationProfile create_local_model(
+qtrans::core::Model create_local_model(
     const ModelCatalogEntry &entry,
-    const std::filesystem::path &path,
-    int n_gpu_layers);
+    const std::filesystem::path &path);

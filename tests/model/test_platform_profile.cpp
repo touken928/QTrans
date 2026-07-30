@@ -12,8 +12,8 @@ TEST(PlatformProfile, PreferredDefaultModelIdIsQ4OnAllProfiles) {
 
 TEST(PlatformProfile, DefaultAvailableModelPrefersQ4) {
     const RuntimeCapabilities caps = RuntimeCapabilitiesTestAccess::make_supported({
-        qtrans::core::BackendKind::Vulkan,
-        qtrans::core::BackendKind::Metal,
+        qtrans::core::Backend::Vulkan,
+        qtrans::core::Backend::Metal,
     });
 
     const ModelCatalogEntry *entry =
@@ -24,7 +24,7 @@ TEST(PlatformProfile, DefaultAvailableModelPrefersQ4) {
 
 TEST(PlatformProfile, DefaultAvailableModelUsesMetalOnArm64) {
     const RuntimeCapabilities caps =
-        RuntimeCapabilitiesTestAccess::make_supported({qtrans::core::BackendKind::Metal});
+        RuntimeCapabilitiesTestAccess::make_supported({qtrans::core::Backend::Metal});
 
     const ModelCatalogEntry *entry = default_available_model(caps, PlatformProfile::Arm64);
     ASSERT_NE(entry, nullptr);
@@ -33,7 +33,7 @@ TEST(PlatformProfile, DefaultAvailableModelUsesMetalOnArm64) {
 
 TEST(PlatformProfile, DefaultAvailableModelUsesVulkanOnWin64) {
     const RuntimeCapabilities caps =
-        RuntimeCapabilitiesTestAccess::make_supported({qtrans::core::BackendKind::Vulkan});
+        RuntimeCapabilitiesTestAccess::make_supported({qtrans::core::Backend::Vulkan});
 
     const ModelCatalogEntry *entry =
         default_available_model(caps, PlatformProfile::WindowsX64);

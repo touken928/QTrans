@@ -1,14 +1,12 @@
 #pragma once
 
-#include "qtrans/core/backend_environment.h"
-
-#include <string_view>
+#include "qtrans/core.h"
 
 namespace qtrans::core::diagnostics {
 
 struct Callbacks {
     DiagnosticSink diagnostic_sink;
-    AiTraceSink ai_trace_sink;
+    TraceSink trace_sink;
 };
 
 void configure(Callbacks callbacks);

@@ -28,7 +28,10 @@ add_library(qtrans_desktop STATIC
 target_include_directories(qtrans_desktop PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(qtrans_desktop PUBLIC qtrans_core)
 
-target_link_libraries(qtrans_desktop PUBLIC spdlog::spdlog)
+target_link_libraries(qtrans_desktop PUBLIC
+    CURL::libcurl
+    spdlog::spdlog
+)
 
 target_compile_definitions(qtrans_desktop PUBLIC
     $<$<CONFIG:Release>:SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_WARN>

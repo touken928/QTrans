@@ -1,10 +1,6 @@
 #pragma once
 
-#include "qtrans/core/backend_environment.h"
-#include "qtrans/core/cancellation.h"
-#include "qtrans/core/options.h"
-#include "qtrans/core/translation_model.h"
-#include "qtrans/core/translator.h"
+#include "qtrans/core.h"
 
 #include "domain/tasks/cancel_token.h"
 #include "domain/tasks/task_types.h"
@@ -12,6 +8,8 @@
 #include <functional>
 #include <memory>
 #include <string>
+
+struct InferenceEngineTestAccess;
 
 class InferenceEngine {
 public:
@@ -23,14 +21,12 @@ public:
     InferenceEngine(InferenceEngine &&) noexcept;
     InferenceEngine &operator=(InferenceEngine &&) noexcept;
 
-    void set_backend_context(const qtrans::core::ResolvedBackendEnvironment &environment,
-                             const qtrans::core::BackendOptions &opts);
-    void set_translator_options(const qtrans::core::TranslatorOptions &opts);
+    void set_backend(qtrans::core::Backend backend);
 
     bool is_loaded() const;
     std::string active_backend_label() const;
 
-    void load(qtrans::core::TranslationProfile profile);
+    void load(qtrans::core::Model model);
     void unload();
 
     TranslateStepResult translate(
@@ -47,8 +43,16 @@ public:
         const CancelToken *cancel_token);
 
 private:
-    qtrans::core::TranslatorOptions options_{};
-    qtrans::core::ResolvedBackendEnvironment backend_environment_{};
-    qtrans::core::BackendOptions backend_options_{};
+    using TranslationDriver = std::function<qtrans::core::TranslationResult(
+        const qtrans::core::TranslationRequest &,
+        qtrans::core::TokenSink,
+        qtrans::core::StopPredicate)>;
+
+    explicit InferenceEngine(TranslationDriver driver);
+    friend struct InferenceEngineTestAccess;
+
+    qtrans::core::Backend backend_ = qtrans::core::Backend::Automatic;
     std::unique_ptr<qtrans::core::Translator> translator_;
+    TranslationDriver driver_;
+    bool driver_loaded_ = false;
 };

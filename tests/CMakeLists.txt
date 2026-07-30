@@ -17,6 +17,31 @@ gtest_discover_tests(qtrans_tests_core
         LABELS "dir:core"
 )
 
+add_executable(qtrans_tests_core_internal
+    core/test_local_runtime_lifecycle.cpp
+)
+target_link_libraries(qtrans_tests_core_internal
+    PRIVATE
+        qtrans_core
+        GTest::gtest
+        GTest::gtest_main
+)
+target_compile_options(qtrans_tests_core_internal PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(qtrans_tests_core_internal PRIVATE ${PROJECT_SOURCE_DIR}/src/core/internal)
+gtest_discover_tests(qtrans_tests_core_internal
+    PROPERTIES
+        LABELS "dir:core"
+)
+
+add_test(
+    NAME CoreInstallSmoke
+    COMMAND ${CMAKE_COMMAND}
+        -DQTRANS_BUILD_DIR=${CMAKE_BINARY_DIR}
+        -DQTRANS_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -DQTRANS_DEPENDENCY_PREFIX=${CMAKE_PREFIX_PATH}
+        -P ${CMAKE_SOURCE_DIR}/cmake/QTransCoreInstallSmoke.cmake
+)
+
 set(QTRANS_TEST_DIRS
     task
     storage

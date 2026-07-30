@@ -6,11 +6,10 @@
 #include <optional>
 #include <string>
 
-#include "qtrans/core/options.h"
+#include "qtrans/core.h"
 
 struct ResolvedInference {
-    qtrans::core::BackendKind backend = qtrans::core::BackendKind::Vulkan;
-    int n_gpu_layers = 0;
+    qtrans::core::Backend backend = qtrans::core::Backend::Vulkan;
 };
 
 std::optional<ResolvedInference> resolve_inference(
