@@ -44,6 +44,7 @@ add_test(
 )
 
 set(QTRANS_TEST_DIRS
+    batch
     services
     storage
     network

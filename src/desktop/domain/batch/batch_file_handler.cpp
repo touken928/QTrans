@@ -187,7 +187,7 @@ const auto &registry() {
 // ── Free functions ──────────────────────────────────────────────────────────
 
 BatchFileType detect_file_type(const std::filesystem::path &path) {
-    const std::string ext = path.extension().string();
+    const std::string ext = path.extension().u8string();
     if (ext == ".txt") return BatchFileType::Txt;
     if (ext == ".md" || ext == ".markdown") return BatchFileType::Md;
     if (ext == ".srt") return BatchFileType::Srt;
@@ -212,16 +212,19 @@ ParseResult parse_batch_file(const std::filesystem::path &path, BatchFileType ty
     if (!in) {
         ParseResult r;
         r.success = false;
-        r.error_message = "cannot open file: " + path.string();
+        r.error_message = "cannot open file: " + path.u8string();
         return r;
     }
 
     return handler->parse(in);
 }
 
-std::string output_path_for(const std::filesystem::path &input_path,
-                            const std::filesystem::path &output_dir) {
-    const std::string stem = input_path.stem().string();
-    const std::string ext = input_path.extension().string();
-    return (output_dir / (stem + "_translated" + ext)).string();
+std::filesystem::path output_path_for(const std::filesystem::path &input_path,
+                                      const std::filesystem::path &output_dir) {
+    // Build the output name from the UTF-8 representation so non-ASCII stems
+    // survive on Windows/MinGW, where the narrow .string() conversion is
+    // codepage-bound.
+    return output_dir / std::filesystem::u8path(input_path.stem().u8string() +
+                                                "_translated" +
+                                                input_path.extension().u8string());
 }
