@@ -6,7 +6,6 @@ enum class Component {
     App,
     Hymt,
     Inference,
-    Task,
     Download,
     WordSelect,
     Clipboard,

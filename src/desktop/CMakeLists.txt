@@ -3,18 +3,11 @@ add_library(qtrans_desktop STATIC
     domain/settings/settings.cpp
     domain/inference/inference_resolver.cpp
     domain/model-catalog/model_catalog.cpp
-    domain/model-adapters/hymt2_18b_local_model.cpp
-    domain/model-adapters/hymt2_7b_local_model.cpp
-    domain/model-adapters/local_model_factory.cpp
     domain/model-catalog/language_list.cpp
     domain/inference/platform_profile.cpp
     domain/inference/runtime_capabilities.cpp
     domain/download/download.cpp
     domain/download/model_downloader.cpp
-    domain/inference/engine/inference_engine.cpp
-    domain/inference/production_translation_session.cpp
-    domain/tasks/task_queue.cpp
-    domain/tasks/task_orchestrator.cpp
     domain/logging/init.cpp
     domain/logging/logger.cpp
     domain/logging/registry.cpp
@@ -23,10 +16,17 @@ add_library(qtrans_desktop STATIC
     domain/logging/console_progress.cpp
     domain/batch/batch_store.cpp
     domain/batch/batch_file_handler.cpp
+    app/inference_service.cpp
+    app/inference_service.h
+    app/download_service.cpp
+    app/download_service.h
+    app/batch_controller.cpp
+    app/batch_controller.h
+    shared/string_bridge.cpp
 )
 
 target_include_directories(qtrans_desktop PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(qtrans_desktop PUBLIC qtrans_core)
+target_link_libraries(qtrans_desktop PUBLIC qtrans_core Qt6::Core)
 
 target_link_libraries(qtrans_desktop PUBLIC
     CURL::libcurl
@@ -49,16 +49,11 @@ endif()
 
 set(_QT_SOURCES_COMMON
     ui/shared/theme/theme.h
-    shared/string_bridge.cpp
     app/main.cpp
     domain/platform/single_instance/single_instance.cpp
     domain/platform/single_instance/single_instance.h
     ui/shell/mainwindow.cpp
     ui/shell/mainwindow.h
-    app/task_service.cpp
-    app/task_service.h
-    app/batch_controller.cpp
-    app/batch_controller.h
     ui/shared/modal_overlay.cpp
     ui/shared/modal_overlay.h
     ui/shared/panels/alert_panel.cpp

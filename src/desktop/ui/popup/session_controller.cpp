@@ -1,7 +1,7 @@
 #include "ui/popup/session_controller.h"
 
 #include "shared/string_bridge.h"
-#include "app/task_service.h"
+#include "app/inference_service.h"
 #include "domain/logging/component.h"
 #include "domain/logging/logger.h"
 #include "domain/platform/clipboard/clipboard_capture.h"
@@ -26,23 +26,19 @@ auto wordselect_logger() {
 
 SessionController::SessionController(
     HotkeyManager *hotkeyMgr,
-    TaskService *taskService,
+    InferenceService *inferenceService,
     PopupWindow *popup,
     QObject *parent)
-    : QObject(parent), m_hotkeyManager(hotkeyMgr), m_taskService(taskService), m_popup(popup) {
+    : QObject(parent), m_hotkeyManager(hotkeyMgr), m_inferenceService(inferenceService), m_popup(popup) {
     connect(m_hotkeyManager, &HotkeyManager::hotkeyTriggered,
             this, &SessionController::onHotkeyTriggered);
 
-    connect(m_taskService, &TaskService::translateTaskStarted,
-            this, &SessionController::onTranslateTaskStarted);
-    connect(m_taskService, &TaskService::targetReset,
-            this, &SessionController::onTargetReset);
-    connect(m_taskService, &TaskService::targetAppended,
-            this, &SessionController::onTargetAppended);
-    connect(m_taskService, &TaskService::translationFinished,
+    connect(m_inferenceService, &InferenceService::translationStarted,
+            this, &SessionController::onTranslationStarted);
+    connect(m_inferenceService, &InferenceService::translationDelta,
+            this, &SessionController::onTranslationDelta);
+    connect(m_inferenceService, &InferenceService::translationFinished,
             this, &SessionController::onTranslationFinished);
-    connect(m_taskService, &TaskService::statusChanged,
-            this, &SessionController::onStatusChanged);
 
     connect(m_popup, &PopupWindow::dismissed,
             this, &SessionController::onPopupDismissed);
@@ -116,15 +112,13 @@ void SessionController::onHotkeyTriggered(int hotkeyId) {
 
     if (m_state == PopupState::Translating) {
         wordselect_logger()->debug("cancelling current translation");
-        if (m_activeTaskId != 0) {
-            TaskId id{};
-            id.value = m_activeTaskId;
-            m_taskService->cancel(id);
+        if (m_activeJobId.is_valid()) {
+            m_inferenceService->cancel(m_activeJobId);
         }
         resetSession();
     }
 
-    if (!m_taskService->isModelLoaded()) {
+    if (!m_inferenceService->isModelLoaded()) {
         wordselect_logger()->warn("model not loaded");
         m_popup->showError(QStringLiteral("Model not loaded. Open main window and load a model first."));
 #ifdef Q_OS_MACOS
@@ -181,59 +175,58 @@ void SessionController::doTranslate() {
         static_cast<int>(text.size()));
 
     m_state = PopupState::Translating;
-    m_activeTaskId = 0;
-    m_lastErrorMessage.clear();
+    m_activeJobId = TranslationJobId{};
 
-    QMetaObject::invokeMethod(
-        m_taskService,
-        "translateInteractive",
-        Qt::QueuedConnection,
-        Q_ARG(QString, text),
-        Q_ARG(QString, m_targetLanguage),
-        Q_ARG(QString, m_sourceLanguage),
-        Q_ARG(bool, false),
-        Q_ARG(bool, true));
+    NativeTranslationRequest request;
+    request.source = qtrans::app::to_utf8(text);
+    request.target_language = qtrans::app::to_utf8(m_targetLanguage);
+    request.source_language = qtrans::app::to_utf8(m_sourceLanguage);
+    request.back_translate = false;
+    request.wordselect = true;
+    m_activeJobId = m_inferenceService->translateNative(request);
 }
 
-void SessionController::onTranslateTaskStarted(quint64 taskId) {
+void SessionController::onTranslationStarted(TranslationJobId jobId) {
     if (m_state != PopupState::Translating) {
         return;
     }
-
-    m_activeTaskId = taskId;
+    // The active job id is the synchronously returned value from
+    // translateNative(); ignore started events from unrelated jobs.
+    if (jobId != m_activeJobId) {
+        return;
+    }
     m_popup->showLoading(QString());
 #ifdef Q_OS_MACOS
     macRestoreFrontApp();
 #endif
 }
 
-void SessionController::onTargetReset(quint64 taskId) {
-    if (taskId != m_activeTaskId || m_state != PopupState::Translating) {
+void SessionController::onTranslationDelta(TranslationJobId jobId,
+                                           TranslationChannel channel,
+                                           const QString &piece) {
+    if (jobId != m_activeJobId || m_state != PopupState::Translating) {
         return;
     }
-}
-
-void SessionController::onTargetAppended(quint64 taskId, const QString &piece) {
-    if (taskId != m_activeTaskId || m_state != PopupState::Translating) {
+    if (channel != TranslationChannel::Target) {
         return;
     }
 
     m_popup->appendChunk(piece);
 }
 
-void SessionController::onTranslationFinished(quint64 taskId, int state) {
-    if (taskId != m_activeTaskId) {
+void SessionController::onTranslationFinished(const TranslationJobResult &result) {
+    if (result.id != m_activeJobId) {
         return;
     }
 
-    if (state == static_cast<int>(TaskState::Completed)) {
+    if (result.state == TranslationState::Completed) {
         m_popup->finishStreaming();
         m_state = PopupState::Showing;
-    } else if (state == static_cast<int>(TaskState::Cancelled)) {
+    } else if (result.state == TranslationState::Cancelled) {
         m_popup->hide();
         resetSession();
     } else {
-        QString message = m_lastErrorMessage.trimmed();
+        QString message = QString::fromStdString(result.error_message).trimmed();
         if (message.startsWith(QStringLiteral("Error:"))) {
             message = message.mid(6).trimmed();
         }
@@ -242,15 +235,6 @@ void SessionController::onTranslationFinished(quint64 taskId, int state) {
         }
         m_popup->showError(message);
         m_state = PopupState::Showing;
-    }
-}
-
-void SessionController::onStatusChanged(const QString &message, bool busy) {
-    if (m_state != PopupState::Translating || busy) {
-        return;
-    }
-    if (message.startsWith(QStringLiteral("Error:"))) {
-        m_lastErrorMessage = message;
     }
 }
 
@@ -269,6 +253,5 @@ bool SessionController::checkDebounce() {
 
 void SessionController::resetSession() {
     m_state = PopupState::Idle;
-    m_activeTaskId = 0;
-    m_lastErrorMessage.clear();
+    m_activeJobId = TranslationJobId{};
 }

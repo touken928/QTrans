@@ -1,5 +1,7 @@
 #pragma once
 
+#include "domain/inference/inference_types.h"
+
 #include <QObject>
 #include <QString>
 #include <chrono>
@@ -12,14 +14,14 @@ enum class PopupState {
 };
 
 class PopupWindow;
-class TaskService;
+class InferenceService;
 class HotkeyManager;
 
 class SessionController : public QObject {
     Q_OBJECT
 
 public:
-    SessionController(HotkeyManager *hotkeyMgr, TaskService *taskService,
+    SessionController(HotkeyManager *hotkeyMgr, InferenceService *inferenceService,
                       PopupWindow *popup, QObject *parent = nullptr);
 
     void initialize();
@@ -37,12 +39,11 @@ public:
 
 public slots:
     void onHotkeyTriggered(int hotkeyId);
-    void onTranslateTaskStarted(quint64 taskId);
-    void onTargetReset(quint64 taskId);
-    void onTargetAppended(quint64 taskId, const QString &piece);
-    void onTranslationFinished(quint64 taskId, int state);
+    void onTranslationStarted(TranslationJobId jobId);
+    void onTranslationDelta(TranslationJobId jobId, TranslationChannel channel,
+                            const QString &piece);
+    void onTranslationFinished(const TranslationJobResult &result);
     void onPopupDismissed();
-    void onStatusChanged(const QString &message, bool busy);
 
 private slots:
     void doTranslate();
@@ -58,12 +59,11 @@ private:
     std::chrono::steady_clock::time_point m_lastTrigger;
 
     HotkeyManager *m_hotkeyManager = nullptr;
-    TaskService *m_taskService = nullptr;
+    InferenceService *m_inferenceService = nullptr;
     PopupWindow *m_popup = nullptr;
 
-    quint64 m_activeTaskId = 0;
+    TranslationJobId m_activeJobId{};
     QString m_hotkeyStr;
     QString m_sourceLanguage;
     QString m_targetLanguage;
-    QString m_lastErrorMessage;
 };

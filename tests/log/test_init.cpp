@@ -40,9 +40,9 @@ TEST(LogInit, ReinitializesSafely) {
     EXPECT_NO_THROW(qtrans::log::init(config));
     EXPECT_NO_THROW(qtrans::log::init(config));
 
-    const auto task = qtrans::log::get(qtrans::log::Component::Task);
-    ASSERT_NE(task, nullptr);
-    EXPECT_STREQ(task->name().c_str(), "task");
+    const auto inference = qtrans::log::get(qtrans::log::Component::Inference);
+    ASSERT_NE(inference, nullptr);
+    EXPECT_STREQ(inference->name().c_str(), "inference");
 
     qtrans::log::shutdown();
     std::error_code ec;

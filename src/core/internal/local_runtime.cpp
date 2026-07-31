@@ -201,13 +201,13 @@ LlamaModelHolder load_llama_model(const std::vector<std::uint8_t> &data,
 // Sampler creation
 // ---------------------------------------------------------------------------
 
-llama_sampler *create_sampler(const GenerationOptions &config) {
+llama_sampler *create_sampler(const runtime_detail::GenerationOptions &config) {
     llama_sampler *chain = llama_sampler_chain_init(llama_sampler_chain_default_params());
     llama_sampler_chain_add(chain, llama_sampler_init_penalties(-1, config.repeat_penalty, 0.0f, 0.0f));
     llama_sampler_chain_add(chain, llama_sampler_init_top_k(config.top_k));
     llama_sampler_chain_add(chain, llama_sampler_init_top_p(config.top_p, 1));
     llama_sampler_chain_add(chain, llama_sampler_init_temp(config.temperature));
-    llama_sampler_chain_add(chain, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
+    llama_sampler_chain_add(chain, llama_sampler_init_dist(config.seed));
     return chain;
 }
 
@@ -245,7 +245,7 @@ struct LocalRuntime::Impl {
     LlamaModelHolder model_holder_;
     llama_context *ctx_ = nullptr;
     llama_sampler *sampler_ = nullptr;
-    GenerationOptions config_;
+    runtime_detail::GenerationOptions config_;
     BackendState environment_{};
     std::string backend_label_ = "CPU";
     bool loaded_ = false;
@@ -289,9 +289,9 @@ LocalRuntime &LocalRuntime::operator=(LocalRuntime &&other) noexcept {
     return *this;
 }
 
-void LocalRuntime::load(const Model &model) {
+void LocalRuntime::load(const runtime_detail::ModelLoad &model) {
     if (model.path.empty()) throw std::invalid_argument("model path is empty");
-    const GenerationOptions &config = model.generation;
+    const runtime_detail::GenerationOptions &config = model.generation;
 
     auto candidate = std::make_unique<Impl>();
     candidate->environment_ = impl_->environment_;
@@ -337,7 +337,6 @@ void LocalRuntime::load(const Model &model) {
                       "llama context created for backend=" + impl_->backend_label_ +
                           ", gpu_layers=" + std::to_string(model_params.n_gpu_layers));
 
-    candidate->sampler_ = create_sampler(config);
     candidate->loaded_ = true;
     impl_.swap(candidate);
 }
@@ -354,6 +353,10 @@ Backend LocalRuntime::backend() const noexcept {
     return impl_->environment_.selected;
 }
 
+int LocalRuntime::context_tokens() const noexcept {
+    return impl_->config_.context_tokens;
+}
+
 int LocalRuntime::count_prompt_tokens(const std::string &prompt) const {
     if (!loaded()) return 0;
     const llama_vocab *vocab = llama_model_get_vocab(impl_->model_holder_.model);
@@ -363,21 +366,22 @@ int LocalRuntime::count_prompt_tokens(const std::string &prompt) const {
     return n_prompt > 0 ? n_prompt : 0;
 }
 
-std::string LocalRuntime::translate(
+std::string LocalRuntime::translate_with_stats(
     const std::string &prompt,
-    const TokenSink &on_token,
-    const StopPredicate &should_cancel) {
+    const runtime_detail::GenerationOptions &generation,
+    const runtime_detail::TokenSink &on_token,
+    const runtime_detail::StopPredicate &should_cancel,
+    GenerationStats &stats) {
     if (!loaded()) throw std::runtime_error("model is not loaded");
-    runtime_detail::CallbackState callback_state;
-    callback_state.checker = should_cancel;
-    runtime_detail::check_stop(callback_state);
-    return generate(prompt, on_token, should_cancel);
+    return generate(prompt, generation, on_token, should_cancel, &stats);
 }
 
 std::string LocalRuntime::generate(
     const std::string &prompt,
-    const TokenSink &on_token,
-    const StopPredicate &should_cancel) {
+    const runtime_detail::GenerationOptions &generation,
+    const runtime_detail::TokenSink &on_token,
+    const runtime_detail::StopPredicate &should_cancel,
+    GenerationStats *stats) {
     runtime_detail::CallbackState callback_state;
     callback_state.checker = should_cancel;
     llama_set_abort_callback(impl_->ctx_, abort_callback, &callback_state);
@@ -392,8 +396,14 @@ std::string LocalRuntime::generate(
     emit_hymt_message(DiagnosticLevel::Trace, "generate start, clearing memory");
     emit_hymt_message(DiagnosticLevel::Trace, "prompt length=" + std::to_string(prompt.size()));
     llama_memory_clear(llama_get_memory(impl_->ctx_), true);
-    emit_hymt_message(DiagnosticLevel::Trace, "memory cleared, resetting sampler");
-    llama_sampler_reset(impl_->sampler_);
+    emit_hymt_message(DiagnosticLevel::Trace, "memory cleared, creating invocation sampler");
+    llama_sampler *sampler = create_sampler(generation);
+    struct SamplerGuard {
+        llama_sampler *sampler;
+        ~SamplerGuard() {
+            llama_sampler_free(sampler);
+        }
+    } sampler_guard{sampler};
 
     const llama_vocab *vocab = llama_model_get_vocab(impl_->model_holder_.model);
     emit_hymt_message(DiagnosticLevel::Trace, "tokenizing prompt");
@@ -403,6 +413,7 @@ std::string LocalRuntime::generate(
         nullptr, 0, false, true);
     runtime_detail::check_stop(callback_state);
     emit_hymt_message(DiagnosticLevel::Trace, "prompt token count=" + std::to_string(n_prompt));
+    if (stats != nullptr) stats->prompt_tokens = n_prompt;
     if (n_prompt <= 0) throw std::runtime_error("failed to measure prompt tokens");
 
     std::vector<llama_token> prompt_tokens(static_cast<size_t>(n_prompt));
@@ -416,14 +427,14 @@ std::string LocalRuntime::generate(
         prompt_tokens.data(), static_cast<int32_t>(prompt_tokens.size()));
     std::string response;
 
-    const int ctx_room = impl_->config_.context_tokens - n_prompt;
+    const int ctx_room = generation.context_tokens - n_prompt;
     if (ctx_room <= 0) throw std::runtime_error("prompt exceeds model context");
-    const int max_gen = std::min(impl_->config_.max_output_tokens, ctx_room);
+    const int max_gen = std::min(generation.max_output_tokens, ctx_room);
 
     emit_hymt_message(DiagnosticLevel::Debug,
                       "starting decode loop, max_gen=" + std::to_string(max_gen) +
                           " prompt_tokens=" + std::to_string(n_prompt) +
-                          " n_ctx=" + std::to_string(impl_->config_.context_tokens));
+                          " n_ctx=" + std::to_string(generation.context_tokens));
 
     core::Utf8StreamBuffer utf8_stream;
     for (int i = 0; i < max_gen; ++i) {
@@ -441,7 +452,7 @@ std::string LocalRuntime::generate(
         }
         runtime_detail::check_stop(callback_state);
 
-        const llama_token token = llama_sampler_sample(impl_->sampler_, impl_->ctx_, -1);
+        const llama_token token = llama_sampler_sample(sampler, impl_->ctx_, -1);
         if (llama_vocab_is_eog(vocab, token)) {
             emit_hymt_message(DiagnosticLevel::Debug,
                               "EOG at token " + std::to_string(i));
@@ -450,10 +461,12 @@ std::string LocalRuntime::generate(
 
         const std::string piece = token_to_text(vocab, token);
         response.append(piece);
+        if (stats != nullptr) stats->output_tokens = i + 1;
 
         if (on_token) {
             const std::string emit = utf8_stream.push(piece);
             if (!emit.empty()) {
+                if (stats != nullptr) stats->output_text += emit;
                 try {
                     on_token(emit);
                 } catch (const runtime_detail::TranslationCallbackFailed &) {
@@ -471,9 +484,15 @@ std::string LocalRuntime::generate(
         batch = llama_batch_get_one(const_cast<llama_token *>(&token), 1);
     }
 
+    if (stats != nullptr) {
+        stats->stopped_at_end = response.empty() || stats->output_tokens < max_gen;
+        stats->reached_limit = stats->output_tokens >= max_gen;
+    }
+
     if (on_token) {
         const std::string tail = utf8_stream.flush();
         if (!tail.empty()) {
+            if (stats != nullptr) stats->output_text += tail;
             try {
                 on_token(tail);
             } catch (const runtime_detail::TranslationCallbackFailed &) {
@@ -491,7 +510,7 @@ std::string LocalRuntime::generate(
                       "generate done, response_len=" + std::to_string(response.size()));
 
     diagnostics::emit_ai_trace(prompt, response);
-    return response;
+    return stats != nullptr ? stats->output_text : response;
 }
 
 }  // namespace qtrans::core

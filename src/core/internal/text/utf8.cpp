@@ -2,6 +2,8 @@
 
 #include <simdutf.h>
 
+#include <string>
+
 namespace qtrans::core {
 
 bool is_valid_utf8(std::string_view text) {
@@ -9,6 +11,22 @@ bool is_valid_utf8(std::string_view text) {
         return true;
     }
     return simdutf::validate_utf8(text.data(), text.size());
+}
+
+std::string sanitize_utf8(std::string_view text) {
+    std::string output;
+    size_t offset = 0;
+    while (offset < text.size()) {
+        const auto result = simdutf::validate_utf8_with_errors(text.data() + offset, text.size() - offset);
+        if (result.error == simdutf::error_code::SUCCESS) {
+            output.append(text.substr(offset));
+            break;
+        }
+        if (result.count > 0) output.append(text.substr(offset, result.count));
+        if (result.error == simdutf::error_code::TOO_SHORT) break;
+        offset += result.count + 1;
+    }
+    return output;
 }
 
 size_t complete_prefix_length(std::string_view text) {
@@ -26,7 +44,7 @@ size_t complete_prefix_length(std::string_view text) {
         if (result.error == simdutf::error_code::TOO_SHORT) {
             return index + result.count;
         }
-        index += 1;
+        return index + result.count;
     }
     return index;
 }

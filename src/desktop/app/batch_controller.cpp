@@ -5,7 +5,6 @@
 #include "domain/batch/batch_store.h"
 #include "domain/logging/component.h"
 #include "domain/logging/logger.h"
-#include "domain/tasks/task_types.h"
 
 #include <algorithm>
 #include <chrono>
@@ -41,24 +40,22 @@ BatchEntry *find_entry(std::vector<BatchEntry> &entries,
 
 }  // namespace
 
-BatchController::BatchController(TaskService *taskService,
+BatchController::BatchController(InferenceService *inferenceService,
                                  std::filesystem::path queueFilePath,
                                  std::filesystem::path outputDir,
                                  QObject *parent)
     : QObject(parent),
-      taskService_(taskService),
+      inferenceService_(inferenceService),
       store_(std::move(queueFilePath)),
       outputDir_(std::move(outputDir)) {
     requeueTimer_.setSingleShot(true);
 
-    connect(taskService_, &TaskService::translationFinished,
+    connect(inferenceService_, &InferenceService::translationStarted,
+            this, &BatchController::onTranslationStarted);
+    connect(inferenceService_, &InferenceService::translationDelta,
+            this, &BatchController::onTranslationDelta);
+    connect(inferenceService_, &InferenceService::translationFinished,
             this, &BatchController::onTranslationFinished);
-    connect(taskService_, &TaskService::taskFailed,
-            this, &BatchController::onTaskFailed);
-    connect(taskService_, &TaskService::targetReset,
-            this, &BatchController::onTargetReset);
-    connect(taskService_, &TaskService::targetAppended,
-            this, &BatchController::onTargetAppended);
     connect(&requeueTimer_, &QTimer::timeout,
             this, &BatchController::onRequeueTimer);
 }
@@ -130,9 +127,9 @@ void BatchController::addFile(const QString &path,
 
 void BatchController::removeEntry(const QString &entry_id) {
     const std::string id = qtrans::app::to_utf8(entry_id);
-    if (running_ && currentEntryId_ == id && currentTaskId_.is_valid()) {
-        taskService_->cancel(currentTaskId_);
-        currentTaskId_ = TaskId{};
+    if (running_ && currentEntryId_ == id && currentJobId_.is_valid()) {
+        inferenceService_->cancel(currentJobId_);
+        currentJobId_ = TranslationJobId{};
         currentEntryId_.clear();
         currentSegmentIndex_ = -1;
         currentOutputText_.clear();
@@ -146,7 +143,7 @@ void BatchController::removeEntry(const QString &entry_id) {
 
 void BatchController::start() {
     if (running_) return;
-    if (!taskService_->isModelLoaded()) {
+    if (!inferenceService_->isModelLoaded()) {
         emit errorOccurred(QStringLiteral("Load a model before starting batch translation"));
         return;
     }
@@ -159,15 +156,15 @@ void BatchController::start() {
 void BatchController::pause() {
     if (!running_ || paused_) return;
     paused_ = true;
-    if (currentTaskId_.is_valid()) {
-        taskService_->preemptBatchTask();
+    if (currentJobId_.is_valid()) {
+        inferenceService_->preemptBatch();
     }
     emitBatchState();
 }
 
 void BatchController::resume() {
     if (!running_ || !paused_) return;
-    if (!taskService_->isModelLoaded()) {
+    if (!inferenceService_->isModelLoaded()) {
         paused_ = false;
         running_ = false;
         emitBatchState();
@@ -324,11 +321,24 @@ QVariantMap BatchController::entryMetadata(const QString &entry_id) const {
 
 // ── Private slots ───────────────────────────────────────────────────────────
 
-void BatchController::onTranslationFinished(quint64 task_id, int state) {
-    if (!currentTaskId_.is_valid() || task_id != currentTaskId_.value) return;
+void BatchController::onTranslationStarted(TranslationJobId job_id) {
+    if (!currentJobId_.is_valid() || job_id != currentJobId_) return;
+    currentOutputText_.clear();
+}
+
+void BatchController::onTranslationDelta(TranslationJobId job_id,
+                                         TranslationChannel channel,
+                                         const QString &piece) {
+    if (!currentJobId_.is_valid() || job_id != currentJobId_) return;
+    if (channel != TranslationChannel::Target) return;
+    currentOutputText_ += piece;
+}
+
+void BatchController::onTranslationFinished(const TranslationJobResult &result) {
+    if (!currentJobId_.is_valid() || result.id != currentJobId_) return;
     if (!running_) return;
 
-    const auto s = static_cast<TaskState>(state);
+    const TranslationState state = result.state;
 
     auto entries = store_.load();
     bool found = false;
@@ -336,7 +346,7 @@ void BatchController::onTranslationFinished(quint64 task_id, int state) {
         if (entry.id != currentEntryId_) continue;
         found = true;
 
-        if (s == TaskState::Completed) {
+        if (state == TranslationState::Completed) {
             for (auto &seg : entry.file.segments) {
                 if (seg.index == currentSegmentIndex_) {
                     seg.state = BatchSegmentState::Completed;
@@ -344,7 +354,7 @@ void BatchController::onTranslationFinished(quint64 task_id, int state) {
                     break;
                 }
             }
-        } else if (s == TaskState::Failed) {
+        } else if (state == TranslationState::Failed) {
             for (auto &seg : entry.file.segments) {
                 if (seg.index == currentSegmentIndex_) {
                     seg.state = BatchSegmentState::Failed;
@@ -360,7 +370,7 @@ void BatchController::onTranslationFinished(quint64 task_id, int state) {
 
     if (found) {
         store_.save(entries);
-        if (s == TaskState::Completed) {
+        if (state == TranslationState::Completed) {
             store_.update_segment_translated(currentEntryId_, currentSegmentIndex_,
                                              currentOutputText_.toStdString());
         }
@@ -381,11 +391,13 @@ void BatchController::onTranslationFinished(quint64 task_id, int state) {
         emit segmentProgress(QString::fromStdString(currentEntryId_), done, total);
     }
 
-    const QString error_message = currentErrorMessage_;
-    currentTaskId_ = TaskId{};
+    const QString error_message = result.error_message.empty()
+                                      ? QString{}
+                                      : QString::fromStdString(result.error_message);
+    currentJobId_ = TranslationJobId{};
     currentOutputText_.clear();
 
-    if (s == TaskState::Completed) {
+    if (state == TranslationState::Completed) {
         emit entryStateChanged(QString::fromStdString(currentEntryId_),
                                static_cast<int>(BatchEntryState::Processing));
 
@@ -422,7 +434,7 @@ void BatchController::onTranslationFinished(quint64 task_id, int state) {
         }
 
         if (!paused_) advanceBatch();
-    } else if (s == TaskState::Failed) {
+    } else if (state == TranslationState::Failed) {
         setEntryState(currentEntryId_, BatchEntryState::Failed);
         emit entryStateChanged(QString::fromStdString(currentEntryId_),
                                static_cast<int>(BatchEntryState::Failed));
@@ -440,27 +452,9 @@ void BatchController::onTranslationFinished(quint64 task_id, int state) {
     currentErrorMessage_.clear();
 }
 
-void BatchController::onTaskFailed(quint64 task_id, const QString &message) {
-    if (currentTaskId_.is_valid() && task_id == currentTaskId_.value) {
-        currentErrorMessage_ = message;
-    }
-}
-
-void BatchController::onTargetReset(quint64 task_id) {
-    if (currentTaskId_.is_valid() && task_id == currentTaskId_.value) {
-        currentOutputText_.clear();
-    }
-}
-
-void BatchController::onTargetAppended(quint64 task_id, const QString &piece) {
-    if (currentTaskId_.is_valid() && task_id == currentTaskId_.value) {
-        currentOutputText_ += piece;
-    }
-}
-
 void BatchController::onRequeueTimer() {
     if (!running_ || paused_) return;
-    if (currentTaskId_.is_valid()) return;
+    if (currentJobId_.is_valid()) return;
     advanceBatch();
 }
 
@@ -468,8 +462,8 @@ void BatchController::onRequeueTimer() {
 
 void BatchController::advanceBatch() {
     if (!running_ || paused_) return;
-    if (currentTaskId_.is_valid()) return;
-    if (!taskService_->isModelLoaded()) {
+    if (currentJobId_.is_valid()) return;
+    if (!inferenceService_->isModelLoaded()) {
         running_ = false;
         paused_ = false;
         emitBatchState();
@@ -530,12 +524,10 @@ void BatchController::submitNextSegment(const BatchEntry &entry,
 
     const auto &seg = entry.file.segments[segment_index];
 
-    TranslatePipelinePayload payload;
-    payload.source = seg.source_text;
-    payload.target_language = entry.target_language;
-    payload.source_language = entry.source_language;
-    payload.back_translate = false;
-    payload.wordselect = false;
+    BatchTranslationRequest request;
+    request.source = seg.source_text;
+    request.target_language = entry.target_language;
+    request.source_language = entry.source_language;
 
     currentEntryId_ = entry.id;
     currentSegmentIndex_ = segment_index;
@@ -546,7 +538,7 @@ void BatchController::submitNextSegment(const BatchEntry &entry,
     emit entryStateChanged(QString::fromStdString(entry.id),
                            static_cast<int>(BatchEntryState::Processing));
 
-    currentTaskId_ = taskService_->submitBatchTranslate(payload);
+    currentJobId_ = inferenceService_->translateBatch(request);
 }
 
 void BatchController::setEntryState(const std::string &entry_id,

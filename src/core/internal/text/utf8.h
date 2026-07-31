@@ -7,6 +7,7 @@
 namespace qtrans::core {
 
 bool is_valid_utf8(std::string_view text);
+std::string sanitize_utf8(std::string_view text);
 
 size_t complete_prefix_length(std::string_view text);
 

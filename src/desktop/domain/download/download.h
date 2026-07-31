@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <string>
 
-class CancelToken;
+class DownloadCancelToken;
 
 struct DownloadCancelled : public std::runtime_error {
     DownloadCancelled()
@@ -53,9 +53,9 @@ void download_set_progress_callback(DownloadProgressCallback callback);
 ModelHub download_probe_hub(const DownloadSpec &spec);
 
 void download_to_file(const std::string &local_path, const DownloadSpec &spec, bool force = false,
-                      const CancelToken *cancel_token = nullptr);
+                      const DownloadCancelToken *cancel_token = nullptr);
 
 void download_ensure(const std::string &local_path, const DownloadSpec &spec, bool force = false,
-                     const CancelToken *cancel_token = nullptr);
+                     const DownloadCancelToken *cancel_token = nullptr);
 
 void download_set_quiet(bool quiet);
