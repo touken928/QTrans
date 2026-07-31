@@ -9,8 +9,10 @@
 #include <QThread>
 
 #include <chrono>
+#include <filesystem>
 #include <functional>
 #include <atomic>
+#include <system_error>
 #include <thread>
 #include <fstream>
 #include <vector>
@@ -372,6 +374,523 @@ TEST(InferenceService, BatchPreemptionRequeuesOnWorkerTimer) {
     std::error_code error;
     std::filesystem::remove(input, error);
     std::filesystem::remove(input.string() + ".queue", error);
+}
+
+TEST(InferenceService, RemovingActiveBatchEntryAdvancesQueue) {
+    int argc = 1;
+    char name[] = "batch-remove-active-test";
+    char *argv[] = {name, nullptr};
+    QCoreApplication application(argc, argv);
+    std::atomic<int> calls{0};
+    qtrans::core::test::ModelHostHooks hooks;
+    hooks.generate = [&calls](std::string_view, const qtrans::core::SamplingOptions &,
+                              const std::function<void(std::string_view)> &emit_piece,
+                              const std::function<bool()> &stop) {
+        const int call = ++calls;
+        if (call == 1) {
+            // First job stays in-flight until the controller cancels it when
+            // its entry is removed mid-run.
+            emit_piece("partial");
+            while (!stop()) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        return qtrans::core::test::TestGeneration{"done", 1, 1, false, {}};
+    };
+    qtrans::core::test::ScopedModelHostHooks scoped_hooks(hooks);
+    const auto dir = std::filesystem::temp_directory_path() / "qtrans-batch-remove-active";
+    const auto input_a = dir / "a.txt";
+    const auto input_b = dir / "b.txt";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    {
+        std::ofstream file(input_a);
+        file << "first file";
+    }
+    {
+        std::ofstream file(input_b);
+        file << "second file";
+    }
+    QThread worker;
+    worker.start();
+    auto *context = new QObject;
+    context->moveToThread(&worker);
+    InferenceService *service = nullptr;
+    BatchController *batch = nullptr;
+    QMetaObject::invokeMethod(context, [&] {
+        qtrans::core::test::ScopedModelHostHooks worker_hooks(hooks);
+        service = new InferenceService;
+        service->setModelConfig(QStringLiteral("demo"), QString());
+        batch = new BatchController(service, (dir / "queue.bq").string(), dir); }, Qt::BlockingQueuedConnection);
+
+    QString id_a;
+    QString id_b;
+    bool loaded = false;
+    bool finished = false;
+    bool removed = false;
+    bool last_running = true;
+    QObject::connect(service, &InferenceService::modelLoadFinished, &application,
+                     [&](bool success, const QString &, const QString &) { loaded = success; });
+    QObject::connect(batch, &BatchController::entryAdded, &application,
+                     [&](const QString &id, const QString &, const QString &) {
+                         if (id_a.isEmpty())
+                             id_a = id;
+                         else
+                             id_b = id;
+                     });
+    QObject::connect(batch, &BatchController::entryRemoved, &application,
+                     [&](const QString &id) { if (id == id_a) removed = true; });
+    QObject::connect(batch, &BatchController::batchStateChanged, &application,
+                     [&](bool running, bool) { last_running = running; });
+    QObject::connect(batch, &BatchController::batchFinished, &application, [&] { finished = true; });
+    service->loadModel();
+    process_until(application, [&] { return loaded; });
+    ASSERT_TRUE(loaded);
+
+    QMetaObject::invokeMethod(batch, "addFile", Qt::QueuedConnection,
+                              Q_ARG(QString, QString::fromStdString(input_a.string())),
+                              Q_ARG(QString, QStringLiteral("Auto")),
+                              Q_ARG(QString, QStringLiteral("English")));
+    QMetaObject::invokeMethod(batch, "addFile", Qt::QueuedConnection,
+                              Q_ARG(QString, QString::fromStdString(input_b.string())),
+                              Q_ARG(QString, QStringLiteral("Auto")),
+                              Q_ARG(QString, QStringLiteral("English")));
+
+    bool removal_requested = false;
+    QObject::connect(service, &InferenceService::translationStarted, &application,
+                     [&](TranslationJobId) {
+                         if (removal_requested) return;
+                         removal_requested = true;
+                         QMetaObject::invokeMethod(batch, "removeEntry", Qt::QueuedConnection,
+                                                   Q_ARG(QString, id_a));
+                     });
+    QMetaObject::invokeMethod(batch, "start", Qt::QueuedConnection);
+    process_until(application, [&] { return finished; });
+
+    EXPECT_TRUE(removed);
+    // First entry was aborted mid-run (call 1); second entry ran to completion.
+    EXPECT_EQ(calls.load(), 2);
+    EXPECT_EQ(batch->entryIds().size(), 1);
+    EXPECT_EQ(batch->entryState(id_a), -1);
+    EXPECT_EQ(batch->entryState(id_b), static_cast<int>(BatchEntryState::Completed));
+    EXPECT_FALSE(last_running);
+    EXPECT_TRUE(std::filesystem::exists(dir / "b_translated.txt"));
+    EXPECT_FALSE(std::filesystem::exists(dir / "a_translated.txt"));
+
+    QMetaObject::invokeMethod(service, &InferenceService::shutdown, Qt::BlockingQueuedConnection);
+    QMetaObject::invokeMethod(context, [&] {
+        delete batch;
+        delete service;
+        context->moveToThread(QCoreApplication::instance()->thread()); }, Qt::BlockingQueuedConnection);
+    worker.quit();
+    worker.wait();
+    delete context;
+    std::filesystem::remove_all(dir, ec);
+}
+
+TEST(InferenceService, RemovingActiveBatchEntryWaitsForOldJobTerminal) {
+    int argc = 1;
+    char name[] = "batch-remove-wait-terminal-test";
+    char *argv[] = {name, nullptr};
+    QCoreApplication application(argc, argv);
+    std::atomic<int> calls{0};
+    std::atomic<bool> release_first{false};
+    qtrans::core::test::ModelHostHooks hooks;
+    hooks.generate = [&](std::string_view, const qtrans::core::SamplingOptions &,
+                         const std::function<void(std::string_view)> &,
+                         const std::function<bool()> &) {
+        const int call = ++calls;
+        if (call == 1) {
+            // The first job stays in-flight until the test releases it, even
+            // after the controller cancels it, so the window in which the old
+            // job has no terminal event yet is deterministic.
+            while (!release_first.load())
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        return qtrans::core::test::TestGeneration{"done", 1, 1, false, {}};
+    };
+    qtrans::core::test::ScopedModelHostHooks scoped_hooks(hooks);
+    const auto dir = std::filesystem::temp_directory_path() / "qtrans-batch-remove-wait-terminal";
+    const auto input_a = dir / "a.txt";
+    const auto input_b = dir / "b.txt";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    {
+        std::ofstream file(input_a);
+        file << "first file";
+    }
+    {
+        std::ofstream file(input_b);
+        file << "second file";
+    }
+    QThread worker;
+    worker.start();
+    auto *context = new QObject;
+    context->moveToThread(&worker);
+    InferenceService *service = nullptr;
+    BatchController *batch = nullptr;
+    QMetaObject::invokeMethod(context, [&] {
+        qtrans::core::test::ScopedModelHostHooks worker_hooks(hooks);
+        service = new InferenceService;
+        service->setModelConfig(QStringLiteral("demo"), QString());
+        batch = new BatchController(service, (dir / "queue.bq").string(), dir); }, Qt::BlockingQueuedConnection);
+
+    QString id_a;
+    QString id_b;
+    bool loaded = false;
+    bool finished = false;
+    bool removal_requested = false;
+    QObject::connect(service, &InferenceService::modelLoadFinished, &application,
+                     [&](bool success, const QString &, const QString &) { loaded = success; });
+    QObject::connect(batch, &BatchController::entryAdded, &application,
+                     [&](const QString &id, const QString &, const QString &) {
+                         if (id_a.isEmpty())
+                             id_a = id;
+                         else
+                             id_b = id;
+                     });
+    QObject::connect(batch, &BatchController::batchFinished, &application, [&] { finished = true; });
+    service->loadModel();
+    process_until(application, [&] { return loaded; });
+    ASSERT_TRUE(loaded);
+
+    QMetaObject::invokeMethod(batch, "addFile", Qt::QueuedConnection,
+                              Q_ARG(QString, QString::fromStdString(input_a.string())),
+                              Q_ARG(QString, QStringLiteral("Auto")),
+                              Q_ARG(QString, QStringLiteral("English")));
+    QMetaObject::invokeMethod(batch, "addFile", Qt::QueuedConnection,
+                              Q_ARG(QString, QString::fromStdString(input_b.string())),
+                              Q_ARG(QString, QStringLiteral("Auto")),
+                              Q_ARG(QString, QStringLiteral("English")));
+    QObject::connect(service, &InferenceService::translationStarted, &application,
+                     [&](TranslationJobId) {
+                         if (removal_requested) return;
+                         removal_requested = true;
+                         QMetaObject::invokeMethod(batch, "removeEntry", Qt::QueuedConnection,
+                                                   Q_ARG(QString, id_a));
+                     });
+    QMetaObject::invokeMethod(batch, "start", Qt::QueuedConnection);
+
+    // Wait until removeEntry was processed (entry A is gone from the store).
+    process_until(application, [&] {
+        return !id_a.isEmpty() && batch->entryState(id_a) == -1;
+    });
+
+    // The old job is still blocked on the gate, so its terminal event has not
+    // been observed yet: the next entry must not have been submitted.
+    EXPECT_EQ(batch->entryState(id_b), static_cast<int>(BatchEntryState::Queued));
+
+    // Release the old job; its terminal is consumed and only then does the
+    // queue advance to entry B.
+    release_first = true;
+    process_until(application, [&] { return finished; });
+    EXPECT_EQ(calls.load(), 2);
+    EXPECT_EQ(batch->entryState(id_a), -1);
+    EXPECT_EQ(batch->entryState(id_b), static_cast<int>(BatchEntryState::Completed));
+    EXPECT_TRUE(std::filesystem::exists(dir / "b_translated.txt"));
+    EXPECT_FALSE(std::filesystem::exists(dir / "a_translated.txt"));
+
+    QMetaObject::invokeMethod(service, &InferenceService::shutdown, Qt::BlockingQueuedConnection);
+    QMetaObject::invokeMethod(context, [&] {
+        delete batch;
+        delete service;
+        context->moveToThread(QCoreApplication::instance()->thread()); }, Qt::BlockingQueuedConnection);
+    worker.quit();
+    worker.wait();
+    delete context;
+    std::filesystem::remove_all(dir, ec);
+}
+
+TEST(InferenceService, RemovingActiveBatchEntryWhilePausedResumesQueue) {
+    int argc = 1;
+    char name[] = "batch-remove-paused-test";
+    char *argv[] = {name, nullptr};
+    QCoreApplication application(argc, argv);
+    std::atomic<int> calls{0};
+    qtrans::core::test::ModelHostHooks hooks;
+    hooks.generate = [&calls](std::string_view, const qtrans::core::SamplingOptions &,
+                              const std::function<void(std::string_view)> &emit_piece,
+                              const std::function<bool()> &stop) {
+        const int call = ++calls;
+        if (call == 1) {
+            emit_piece("partial");
+            while (!stop()) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        return qtrans::core::test::TestGeneration{"done", 1, 1, false, {}};
+    };
+    qtrans::core::test::ScopedModelHostHooks scoped_hooks(hooks);
+    const auto dir = std::filesystem::temp_directory_path() / "qtrans-batch-remove-paused";
+    const auto input_a = dir / "a.txt";
+    const auto input_b = dir / "b.txt";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    {
+        std::ofstream file(input_a);
+        file << "first file";
+    }
+    {
+        std::ofstream file(input_b);
+        file << "second file";
+    }
+    QThread worker;
+    worker.start();
+    auto *context = new QObject;
+    context->moveToThread(&worker);
+    InferenceService *service = nullptr;
+    BatchController *batch = nullptr;
+    QMetaObject::invokeMethod(context, [&] {
+        qtrans::core::test::ScopedModelHostHooks worker_hooks(hooks);
+        service = new InferenceService;
+        service->setModelConfig(QStringLiteral("demo"), QString());
+        batch = new BatchController(service, (dir / "queue.bq").string(), dir); }, Qt::BlockingQueuedConnection);
+
+    QString id_a;
+    QString id_b;
+    bool loaded = false;
+    bool started = false;
+    bool paused_seen = false;
+    bool finished = false;
+    bool last_running = true;
+    QObject::connect(service, &InferenceService::modelLoadFinished, &application,
+                     [&](bool success, const QString &, const QString &) { loaded = success; });
+    QObject::connect(batch, &BatchController::entryAdded, &application,
+                     [&](const QString &id, const QString &, const QString &) {
+                         if (id_a.isEmpty())
+                             id_a = id;
+                         else
+                             id_b = id;
+                     });
+    QObject::connect(service, &InferenceService::translationStarted, &application,
+                     [&](TranslationJobId) { started = true; });
+    QObject::connect(batch, &BatchController::batchStateChanged, &application,
+                     [&](bool running, bool paused) {
+                         last_running = running;
+                         if (running && paused) paused_seen = true;
+                     });
+    QObject::connect(batch, &BatchController::batchFinished, &application, [&] { finished = true; });
+    service->loadModel();
+    process_until(application, [&] { return loaded; });
+    ASSERT_TRUE(loaded);
+
+    QMetaObject::invokeMethod(batch, "addFile", Qt::QueuedConnection,
+                              Q_ARG(QString, QString::fromStdString(input_a.string())),
+                              Q_ARG(QString, QStringLiteral("Auto")),
+                              Q_ARG(QString, QStringLiteral("English")));
+    QMetaObject::invokeMethod(batch, "addFile", Qt::QueuedConnection,
+                              Q_ARG(QString, QString::fromStdString(input_b.string())),
+                              Q_ARG(QString, QStringLiteral("Auto")),
+                              Q_ARG(QString, QStringLiteral("English")));
+    QMetaObject::invokeMethod(batch, "start", Qt::QueuedConnection);
+    process_until(application, [&] { return started; });
+
+    // Pause the running batch, remove the active entry, then resume: the
+    // remaining queue item must be processed only after resume.
+    QMetaObject::invokeMethod(batch, "pause", Qt::QueuedConnection);
+    process_until(application, [&] { return paused_seen; });
+    QMetaObject::invokeMethod(batch, "removeEntry", Qt::QueuedConnection,
+                              Q_ARG(QString, id_a));
+    process_until(application, [&] {
+        return !id_a.isEmpty() && batch->entryState(id_a) == -1;
+    });
+    EXPECT_FALSE(finished);
+    QMetaObject::invokeMethod(batch, "resume", Qt::QueuedConnection);
+    process_until(application, [&] { return finished; });
+
+    EXPECT_EQ(calls.load(), 2);
+    EXPECT_EQ(batch->entryState(id_a), -1);
+    EXPECT_EQ(batch->entryState(id_b), static_cast<int>(BatchEntryState::Completed));
+    EXPECT_FALSE(last_running);
+    EXPECT_TRUE(std::filesystem::exists(dir / "b_translated.txt"));
+    EXPECT_FALSE(std::filesystem::exists(dir / "a_translated.txt"));
+
+    QMetaObject::invokeMethod(service, &InferenceService::shutdown, Qt::BlockingQueuedConnection);
+    QMetaObject::invokeMethod(context, [&] {
+        delete batch;
+        delete service;
+        context->moveToThread(QCoreApplication::instance()->thread()); }, Qt::BlockingQueuedConnection);
+    worker.quit();
+    worker.wait();
+    delete context;
+    std::filesystem::remove_all(dir, ec);
+}
+
+TEST(InferenceService, StoreExceptionsAreContainedAtQtBoundaries) {
+    int argc = 1;
+    char name[] = "batch-store-exception-test";
+    char *argv[] = {name, nullptr};
+    QCoreApplication application(argc, argv);
+    qtrans::core::test::ScopedModelHostHooks scoped_hooks(qtrans::core::test::ModelHostHooks{});
+    const auto dir = std::filesystem::temp_directory_path() / "qtrans-batch-corrupt-store";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    // A corrupt queue makes BatchStore deserialization throw
+    // std::invalid_argument (from std::stoi).
+    {
+        std::ofstream file(dir / "queue.bq");
+        file << "id=corrupt\nfile_type=notanint\n";
+    }
+    QThread worker;
+    worker.start();
+    auto *context = new QObject;
+    context->moveToThread(&worker);
+    InferenceService *service = nullptr;
+    BatchController *batch = nullptr;
+    QMetaObject::invokeMethod(context, [&] {
+        qtrans::core::test::ScopedModelHostHooks worker_hooks(
+            qtrans::core::test::ModelHostHooks{});
+        service = new InferenceService;
+        service->setModelConfig(QStringLiteral("demo"), QString());
+        batch = new BatchController(service, (dir / "queue.bq").string(), dir); }, Qt::BlockingQueuedConnection);
+
+    int errors = 0;
+    bool loaded = false;
+    bool last_running = true;
+    QObject::connect(service, &InferenceService::modelLoadFinished, &application,
+                     [&](bool success, const QString &, const QString &) { loaded = success; });
+    QObject::connect(batch, &BatchController::errorOccurred, &application,
+                     [&](const QString &) { ++errors; });
+    QObject::connect(batch, &BatchController::batchStateChanged, &application,
+                     [&](bool running, bool) { last_running = running; });
+    service->loadModel();
+    process_until(application, [&] { return loaded; });
+    ASSERT_TRUE(loaded);
+
+    // Query boundaries must swallow the store exception and return defaults.
+    QStringList ids;
+    QMetaObject::invokeMethod(batch, "entryIds", Qt::BlockingQueuedConnection,
+                              Q_RETURN_ARG(QStringList, ids));
+    EXPECT_TRUE(ids.isEmpty());
+    int state = -2;
+    QMetaObject::invokeMethod(batch, "entryState", Qt::BlockingQueuedConnection,
+                              Q_RETURN_ARG(int, state),
+                              Q_ARG(QString, QStringLiteral("corrupt")));
+    EXPECT_EQ(state, -1);
+
+    // loadPersistedEntries surfaces the failure via errorOccurred.
+    QMetaObject::invokeMethod(batch, "loadPersistedEntries", Qt::QueuedConnection);
+    process_until(application, [&] { return errors >= 1; });
+
+    // start() must surface the failure and stop cleanly instead of letting
+    // the exception escape through the worker event loop.
+    QMetaObject::invokeMethod(batch, "start", Qt::QueuedConnection);
+    process_until(application, [&] { return errors >= 2; });
+    EXPECT_FALSE(last_running);
+
+    QMetaObject::invokeMethod(service, &InferenceService::shutdown, Qt::BlockingQueuedConnection);
+    QMetaObject::invokeMethod(context, [&] {
+        delete batch;
+        delete service;
+        context->moveToThread(QCoreApplication::instance()->thread()); }, Qt::BlockingQueuedConnection);
+    worker.quit();
+    worker.wait();
+    delete context;
+    std::filesystem::remove_all(dir, ec);
+}
+
+TEST(InferenceService, FailedSegmentNeverCompletesEntryOrWritesOutput) {
+    int argc = 1;
+    char name[] = "batch-failed-segment-test";
+    char *argv[] = {name, nullptr};
+    QCoreApplication application(argc, argv);
+    std::atomic<int> calls{0};
+    qtrans::core::test::ModelHostHooks hooks;
+    hooks.generate = [&calls](std::string_view, const qtrans::core::SamplingOptions &,
+                              const std::function<void(std::string_view)> &emit_piece,
+                              const std::function<bool()> &) {
+        const int call = ++calls;
+        if (call == 2) {
+            return qtrans::core::test::TestGeneration{
+                "", 1, 0, false, {qtrans::core::FailureCode::Runtime, "segment failed"}};
+        }
+        emit_piece("done");
+        return qtrans::core::test::TestGeneration{"done", 1, 1, false, {}};
+    };
+    qtrans::core::test::ScopedModelHostHooks scoped_hooks(hooks);
+    const auto dir = std::filesystem::temp_directory_path() / "qtrans-batch-failed-segment";
+    const auto input_a = dir / "segments.txt";
+    const auto input_b = dir / "b.txt";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    {
+        std::ofstream file(input_a);
+        file << "first paragraph\n\nsecond paragraph";
+    }
+    {
+        std::ofstream file(input_b);
+        file << "second file";
+    }
+    QThread worker;
+    worker.start();
+    auto *context = new QObject;
+    context->moveToThread(&worker);
+    InferenceService *service = nullptr;
+    BatchController *batch = nullptr;
+    QMetaObject::invokeMethod(context, [&] {
+        qtrans::core::test::ScopedModelHostHooks worker_hooks(hooks);
+        service = new InferenceService;
+        service->setModelConfig(QStringLiteral("demo"), QString());
+        batch = new BatchController(service, (dir / "queue.bq").string(), dir); }, Qt::BlockingQueuedConnection);
+
+    QString id_a;
+    QString id_b;
+    int errors = 0;
+    bool loaded = false;
+    bool finished = false;
+    bool last_running = true;
+    QObject::connect(service, &InferenceService::modelLoadFinished, &application,
+                     [&](bool success, const QString &, const QString &) { loaded = success; });
+    QObject::connect(batch, &BatchController::entryAdded, &application,
+                     [&](const QString &id, const QString &, const QString &) {
+                         if (id_a.isEmpty())
+                             id_a = id;
+                         else
+                             id_b = id;
+                     });
+    QObject::connect(batch, &BatchController::batchStateChanged, &application,
+                     [&](bool running, bool) { last_running = running; });
+    QObject::connect(batch, &BatchController::batchFinished, &application, [&] { finished = true; });
+    QObject::connect(batch, &BatchController::errorOccurred, &application,
+                     [&](const QString &) { ++errors; });
+    service->loadModel();
+    process_until(application, [&] { return loaded; });
+    ASSERT_TRUE(loaded);
+
+    QMetaObject::invokeMethod(batch, "addFile", Qt::QueuedConnection,
+                              Q_ARG(QString, QString::fromStdString(input_a.string())),
+                              Q_ARG(QString, QStringLiteral("Auto")),
+                              Q_ARG(QString, QStringLiteral("English")));
+    QMetaObject::invokeMethod(batch, "addFile", Qt::QueuedConnection,
+                              Q_ARG(QString, QString::fromStdString(input_b.string())),
+                              Q_ARG(QString, QStringLiteral("Auto")),
+                              Q_ARG(QString, QStringLiteral("English")));
+    QMetaObject::invokeMethod(batch, "start", Qt::QueuedConnection);
+
+    // First run: the second segment of entry A fails, so A must land in Failed,
+    // the batch stops, and no output file is written for either entry.
+    process_until(application, [&] { return errors >= 1; });
+    EXPECT_EQ(batch->entryState(id_a), static_cast<int>(BatchEntryState::Failed));
+    EXPECT_EQ(batch->entryState(id_b), static_cast<int>(BatchEntryState::Queued));
+    EXPECT_FALSE(last_running);
+    EXPECT_FALSE(std::filesystem::exists(dir / "segments_translated.txt"));
+    EXPECT_FALSE(std::filesystem::exists(dir / "b_translated.txt"));
+
+    // Restart: entry A's remaining Pending segments must not execute because a
+    // segment already failed; the queue skips A and completes entry B instead.
+    QMetaObject::invokeMethod(batch, "start", Qt::QueuedConnection);
+    process_until(application, [&] { return finished; });
+    EXPECT_EQ(batch->entryState(id_a), static_cast<int>(BatchEntryState::Failed));
+    EXPECT_EQ(batch->entryState(id_b), static_cast<int>(BatchEntryState::Completed));
+    EXPECT_EQ(calls.load(), 3);
+    EXPECT_FALSE(std::filesystem::exists(dir / "segments_translated.txt"));
+    EXPECT_TRUE(std::filesystem::exists(dir / "b_translated.txt"));
+
+    QMetaObject::invokeMethod(service, &InferenceService::shutdown, Qt::BlockingQueuedConnection);
+    QMetaObject::invokeMethod(context, [&] {
+        delete batch;
+        delete service;
+        context->moveToThread(QCoreApplication::instance()->thread()); }, Qt::BlockingQueuedConnection);
+    worker.quit();
+    worker.wait();
+    delete context;
+    std::filesystem::remove_all(dir, ec);
 }
 
 TEST(InferenceService, ConcurrentPopupMainAndBatchJobsCorrelateIndependently) {

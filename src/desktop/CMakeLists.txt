@@ -45,6 +45,12 @@ if(QTRANS_GPU_METAL_VALUE)
     target_compile_definitions(qtrans_desktop PUBLIC QTRANS_GPU_METAL)
 endif()
 
+# Test-only failure injection (src/desktop/domain/batch/batch_store.cpp) is
+# compiled only when building the unit tests; production builds exclude it.
+if(QTRANS_BUILD_TESTS)
+    target_compile_definitions(qtrans_desktop PRIVATE QTRANS_BUILD_TESTS)
+endif()
+
 # ── QTrans executable ────────────────────────────────────────────────────────
 
 set(_QT_SOURCES_COMMON

@@ -11,6 +11,7 @@
 #include <QTimer>
 #include <QVariantMap>
 
+#include <exception>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -97,6 +98,10 @@ private:
     void setEntryState(const std::string &entry_id, BatchEntryState state);
     void writeOutputFile(const BatchEntry &entry);
     void emitBatchState();
+    // Never let exceptions escape Qt-invokable/slot boundaries: log, stop the
+    // batch (state + error signal) when stop_batch is true.
+    void handleBoundaryError(bool stop_batch, const char *operation,
+                             const std::exception &error);
 
     InferenceService *inferenceService_;
     BatchStore store_;
@@ -105,6 +110,10 @@ private:
 
     bool running_ = false;
     bool paused_ = false;
+    // Set while an entry removed mid-run awaits its cancelled job's terminal
+    // event; the event is consumed (not state-processed) before the queue
+    // advances to the next item.
+    bool removedActiveEntry_ = false;
 
     std::string currentEntryId_;
     int currentSegmentIndex_ = -1;

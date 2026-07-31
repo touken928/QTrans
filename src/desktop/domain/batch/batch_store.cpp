@@ -1,12 +1,24 @@
 #include "domain/batch/batch_store.h"
 
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <fstream>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <system_error>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 namespace {
 
@@ -81,6 +93,114 @@ std::string make_kv(const std::string &key, std::int64_t value) {
     return key + kSep + std::to_string(value);
 }
 
+// ── Test-only failure injection ─────────────────────────────────────────────
+//
+// Real disks rarely fail on demand, so the I/O failure paths below are hard to
+// reach from tests. These hooks let tests force each step to fail
+// deterministically so the "never replace an existing queue with temp content"
+// guarantee can be verified on every platform. They are compiled only when
+// QTRANS_BUILD_TESTS is defined (set by CMake for test builds); production
+// builds contain no hook state, setter symbols, or test branches at all.
+#if defined(QTRANS_BUILD_TESTS)
+struct IoFailureHooks {
+    bool write = false;
+    bool flush = false;
+    bool close = false;
+    bool sync = false;
+    bool commit = false;
+};
+
+IoFailureHooks &io_failure_hooks() {
+    static IoFailureHooks hooks;
+    return hooks;
+}
+#endif  // QTRANS_BUILD_TESTS
+
+// Best-effort removal of a temp file that failed to be committed. Errors are
+// ignored because there is nothing more we can do about them (e.g. the file is
+// still locked by a half-closed handle).
+void remove_best_effort(const std::filesystem::path &path) {
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+}
+
+// Writes `content` to `path` (binary, truncated) and returns a non-empty
+// message describing the first stream failure (create, write, flush, or
+// close). Returns an empty string on success. The caller must remove the file
+// when a failure is reported; the stream is always closed before returning.
+std::string write_file_safely(const std::filesystem::path &path,
+                              const std::string &content) {
+    std::ofstream out(path, std::ios::binary);
+    if (!out) {
+        return "failed to create batch queue temp file: " + path.u8string();
+    }
+    out << content;
+#if defined(QTRANS_BUILD_TESTS)
+    if (io_failure_hooks().write) out.setstate(std::ios::badbit);
+#endif
+    if (!out.good()) {
+        return "failed to write batch queue temp file: " + path.u8string();
+    }
+    out.flush();
+#if defined(QTRANS_BUILD_TESTS)
+    if (io_failure_hooks().flush) out.setstate(std::ios::badbit);
+#endif
+    if (!out.good()) {
+        return "failed to flush batch queue temp file: " + path.u8string();
+    }
+    out.close();
+#if defined(QTRANS_BUILD_TESTS)
+    if (io_failure_hooks().close) out.setstate(std::ios::badbit);
+#endif
+    if (!out.good()) {
+        return "failed to close batch queue temp file: " + path.u8string();
+    }
+    return {};
+}
+
+// Best-effort flush of a file's contents to stable storage before it is
+// atomically swapped into place, so a crash right after the swap cannot leave
+// a zero-length or truncated queue behind. Returns an error_code describing
+// the first failure (open, flush, or close); a cleared error_code means the
+// data reached stable storage.
+std::error_code sync_file_to_disk(const std::filesystem::path &path) {
+#if defined(QTRANS_BUILD_TESTS)
+    if (io_failure_hooks().sync) {
+        return std::make_error_code(std::errc::io_error);
+    }
+#endif
+#ifdef _WIN32
+    const HANDLE handle = ::CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr,
+                                        OPEN_EXISTING, 0, nullptr);
+    if (handle == INVALID_HANDLE_VALUE) {
+        return std::error_code(::GetLastError(), std::system_category());
+    }
+    if (::FlushFileBuffers(handle) == FALSE) {
+        const std::error_code ec(::GetLastError(), std::system_category());
+        ::CloseHandle(handle);
+        return ec;
+    }
+    if (::CloseHandle(handle) == FALSE) {
+        return std::error_code(::GetLastError(), std::system_category());
+    }
+    return std::error_code();
+#else
+    const int fd = ::open(path.c_str(), O_RDONLY);
+    if (fd < 0) {
+        return std::error_code(errno, std::generic_category());
+    }
+    if (::fsync(fd) != 0) {
+        const std::error_code ec(errno, std::generic_category());
+        ::close(fd);
+        return ec;
+    }
+    if (::close(fd) != 0) {
+        return std::error_code(errno, std::generic_category());
+    }
+    return std::error_code();
+#endif
+}
+
 // ── Format ─────────────────────────────────────────────────────────────────
 //
 // Each entry block:
@@ -113,6 +233,33 @@ constexpr const char *kFieldSegSource = "ss";
 constexpr const char *kFieldSegText = "st";
 
 }  // namespace
+
+// ── Test-only failure-injection API ─────────────────────────────────────────
+//
+// Declared directly by tests/batch/test_batch_store.cpp (no header, so the
+// production API surface stays unchanged). Compiled only under
+// QTRANS_BUILD_TESTS; normal production builds emit no setter symbols.
+#if defined(QTRANS_BUILD_TESTS)
+namespace batch_store_test {
+
+void set_fail_write(bool enabled) {
+    io_failure_hooks().write = enabled;
+}
+void set_fail_flush(bool enabled) {
+    io_failure_hooks().flush = enabled;
+}
+void set_fail_close(bool enabled) {
+    io_failure_hooks().close = enabled;
+}
+void set_fail_sync(bool enabled) {
+    io_failure_hooks().sync = enabled;
+}
+void set_fail_commit(bool enabled) {
+    io_failure_hooks().commit = enabled;
+}
+
+}  // namespace batch_store_test
+#endif  // QTRANS_BUILD_TESTS
 
 // ── BatchStore implementation ───────────────────────────────────────────────
 
@@ -251,21 +398,71 @@ void BatchStore::atomic_write(const std::filesystem::path &path,
     std::filesystem::path tmp = path;
     tmp += ".tmp";
 
-    {
-        std::ofstream out(tmp, std::ios::binary);
-        if (!out) {
-            throw std::runtime_error("failed to write batch queue temp file: " +
-                                     tmp.string());
-        }
-        out << content;
-        out.flush();
+    // 1. Write the full contents to a temp file next to the queue. Any stream
+    //    failure (create/write/flush/close) aborts here, before the existing
+    //    queue could be touched, and the failed temp file is removed.
+    const std::string write_error = write_file_safely(tmp, content);
+    if (!write_error.empty()) {
+        remove_best_effort(tmp);
+        throw std::runtime_error(write_error);
     }
 
-    std::error_code ec;
-    std::filesystem::rename(tmp, path, ec);
-    if (ec) {
+    // 2. Make the temp file durable before swapping it into place so a crash
+    //    right after the swap cannot leave a zero-length or truncated queue
+    //    behind. A sync failure also aborts before the queue is touched.
+    const std::error_code sync_error = sync_file_to_disk(tmp);
+    if (sync_error) {
+        remove_best_effort(tmp);
+        throw std::runtime_error("failed to sync batch queue temp file: " +
+                                 tmp.u8string() + " (" + sync_error.message() +
+                                 ")");
+    }
+
+    // 3. Atomically swap the temp file into place.
+    std::error_code commit_error;
+#if defined(QTRANS_BUILD_TESTS)
+    if (io_failure_hooks().commit) {
+        commit_error = std::make_error_code(std::errc::io_error);
+    } else
+#endif
+    {
+#ifdef _WIN32
+        // std::filesystem::rename cannot reliably replace an existing file on
+        // Windows. ReplaceFileW is the documented atomic-replace primitive but
+        // requires the destination to already exist, so first writes use a
+        // plain move.
+        std::error_code dest_ec;
+        const bool dest_exists = std::filesystem::exists(path, dest_ec);
+        bool replaced = false;
+        if (!dest_ec && dest_exists) {
+            replaced = ::ReplaceFileW(path.c_str(), tmp.c_str(), nullptr,
+                                      REPLACEFILE_WRITE_THROUGH |
+                                          REPLACEFILE_IGNORE_MERGE_ERRORS,
+                                      nullptr, nullptr) != FALSE;
+        } else if (dest_ec) {
+            // Could not inspect the destination; fall back to move-with-replace.
+            replaced = ::MoveFileExW(tmp.c_str(), path.c_str(),
+                                     MOVEFILE_REPLACE_EXISTING |
+                                         MOVEFILE_WRITE_THROUGH) != FALSE;
+        } else {
+            replaced = ::MoveFileExW(tmp.c_str(), path.c_str(),
+                                     MOVEFILE_WRITE_THROUGH) != FALSE;
+        }
+        if (!replaced) {
+            commit_error =
+                std::error_code(::GetLastError(), std::system_category());
+        }
+#else
+        std::filesystem::rename(tmp, path, commit_error);
+#endif
+    }
+    if (commit_error) {
+        // The temp file was not consumed by the failed swap; drop it so the
+        // next write starts fresh and load() is not confused by a stale temp.
+        remove_best_effort(tmp);
         throw std::runtime_error("failed to commit batch queue: " +
-                                 path.string() + " (" + ec.message() + ")");
+                                 path.u8string() + " (" +
+                                 commit_error.message() + ")");
     }
 }
 
@@ -276,7 +473,7 @@ std::string BatchStore::serialize(const std::vector<BatchEntry> &entries) {
     for (std::size_t ei = 0; ei < entries.size(); ++ei) {
         const auto &e = entries[ei];
         out << make_kv(kFieldId, e.id) << kDelim;
-        out << make_kv(kFieldPath, e.file.path.string()) << kDelim;
+        out << make_kv(kFieldPath, e.file.path.u8string()) << kDelim;
         out << make_kv(kFieldFileType, static_cast<int>(e.file.file_type))
             << kDelim;
         out << make_kv(kFieldSourceLang, e.source_language) << kDelim;
@@ -344,7 +541,7 @@ std::vector<BatchEntry> BatchStore::deserialize(const std::string &content) {
             current.id = value;
             in_entry = true;
         } else if (key == kFieldPath && in_entry) {
-            current.file.path = value;
+            current.file.path = std::filesystem::u8path(value);
         } else if (key == kFieldFileType && in_entry) {
             current.file.file_type = static_cast<BatchFileType>(std::stoi(value));
         } else if (key == kFieldSourceLang && in_entry) {
