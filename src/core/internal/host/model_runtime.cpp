@@ -10,7 +10,8 @@
 namespace qtrans::core::host_detail {
 
 ModelRuntime::ModelRuntime(RuntimeInjection injection)
-    : runtime_(initialize_backend(Backend::Automatic)), injection_(std::move(injection)) {
+    : runtime_(injection ? BackendState{} : initialize_backend(Backend::Automatic)),
+      injection_(std::move(injection)) {
 }
 
 Failure ModelRuntime::load(const ModelSpec &model) {
