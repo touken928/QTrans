@@ -56,7 +56,6 @@ void init(const LogConfig &config) {
     register_component(Component::App, sinks);
     register_component(Component::Hymt, sinks);
     register_component(Component::Inference, sinks);
-    register_component(Component::Task, sinks);
     register_component(Component::Download, sinks);
     register_component(Component::WordSelect, sinks);
     register_component(Component::Clipboard, sinks);

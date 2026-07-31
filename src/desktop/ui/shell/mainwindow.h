@@ -1,22 +1,26 @@
 #pragma once
 
+#include "domain/inference/inference_types.h"
+#include "domain/download/download_types.h"
 #include "domain/storage/app_paths.h"
 #include "domain/settings/settings.h"
 
 #include <QMainWindow>
+#include <QString>
 
 class BatchController;
 class BatchLangPanel;
 class BatchPage;
 class DownloadProgressPanel;
+class DownloadService;
 class HotkeyManager;
+class InferenceService;
 class ModalOverlay;
 class ModelPage;
 class PopupWindow;
 class SessionController;
 class SidebarWidget;
 class SystemTray;
-class TaskService;
 class TranslatePage;
 class WordSelectPage;
 class QStackedWidget;
@@ -27,7 +31,8 @@ class MainWindow : public QMainWindow {
 
 public:
     explicit MainWindow(
-        TaskService *task_service,
+        InferenceService *inference_service,
+        DownloadService *download_service,
         BatchController *batch_controller,
         QThread *worker_thread,
         const AppPaths &paths,
@@ -55,17 +60,18 @@ private slots:
     void onCancelRequested();
     void onLanguageChanged();
     void onWordSelectSettingsChanged();
-    void onTranslateTaskStarted(quint64 task_id);
-    void onTranslationFinished(quint64 task_id, int state);
+    void onTranslationStarted(TranslationJobId job_id);
+    void onTranslationReset(TranslationJobId job_id, TranslationChannel channel);
+    void onTranslationDelta(TranslationJobId job_id, TranslationChannel channel,
+                            const QString &piece);
+    void onTranslationFinished(const TranslationJobResult &result);
     void onStatusChanged(const QString &message, bool busy);
     void onModelLoadFinished(bool success, const QString &error_message, const QString &backend_label);
     void onModelUnloadFinished();
-    void onDownloadProgress(qint64 downloaded, qint64 total, double speed_bps, double eta_seconds);
-    void onDownloadFinished(bool success);
-    void onTargetReset(quint64 task_id);
-    void onTargetAppended(quint64 task_id, const QString &piece);
-    void onBackTranslateReset(quint64 task_id);
-    void onBackTranslateAppended(quint64 task_id, const QString &piece);
+    void onDownloadStarted(DownloadId id);
+    void onDownloadProgress(DownloadId id, qint64 downloaded, qint64 total,
+                            double speed_bps, double eta_seconds);
+    void onDownloadFinished(const DownloadResult &result);
 
     // ── Batch slots ─────────────────────────────────────────────────────
     void onBatchShowLanguagePicker();
@@ -87,7 +93,7 @@ private slots:
 private:
     void performStartupCheck();
     void initializeInferenceBackend();
-    void syncSettingsToTaskService();
+    void syncSettingsToServices();
     void syncLanguagesToSettings();
     void saveSettings();
     void setUiBusy(bool busy);
@@ -95,7 +101,7 @@ private:
     void refreshModelPage();
     void applySettingsFromPage();
     QString currentModelPath() const;
-    bool isActiveTranslateTask(quint64 task_id) const;
+    bool isActiveTranslateJob(TranslationJobId job_id) const;
 
     void showModelMissingDialog();
     void showAlertDialog(const QString &title, const QString &message);
@@ -104,7 +110,8 @@ private:
     void startDownloadAndLoad();
     void startLoadModel();
 
-    TaskService *task_service_ = nullptr;
+    InferenceService *inference_service_ = nullptr;
+    DownloadService *download_service_ = nullptr;
     BatchController *batch_controller_ = nullptr;
     QThread *worker_thread_ = nullptr;
     AppPaths paths_;
@@ -127,7 +134,8 @@ private:
     bool busy_ = false;
     bool awaiting_download_load_ = false;
     bool own_translation_active_ = false;
-    quint64 active_translate_task_id_ = 0;
+    TranslationJobId active_translate_job_id_{};
+    DownloadId active_download_id_{};
 
     SystemTray *system_tray_ = nullptr;
     HotkeyManager *hotkey_manager_ = nullptr;

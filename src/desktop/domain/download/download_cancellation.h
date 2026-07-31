@@ -3,7 +3,9 @@
 #include <atomic>
 #include <functional>
 
-class CancelToken {
+// Shared cancellation control for a dedicated download run. Owned by
+// DownloadService; observed by the download executor and curl callbacks.
+class DownloadCancelToken {
 public:
     void cancel() {
         cancelled_.store(true, std::memory_order_relaxed);

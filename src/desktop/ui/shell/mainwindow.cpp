@@ -2,7 +2,8 @@
 
 #include "ui/shared/modal_overlay.h"
 #include "app/batch_controller.h"
-#include "app/task_service.h"
+#include "app/download_service.h"
+#include "app/inference_service.h"
 #include "ui/pages/batch/batch_lang_panel.h"
 #include "ui/shared/theme/app_theme.h"
 #include "ui/shared/panels/alert_panel.h"
@@ -41,12 +42,18 @@
 #include <QVariantMap>
 
 MainWindow::MainWindow(
-    TaskService *task_service,
+    InferenceService *inference_service,
+    DownloadService *download_service,
     BatchController *batch_controller,
     QThread *worker_thread,
     const AppPaths &paths,
     QWidget *parent)
-    : QMainWindow(parent), task_service_(task_service), batch_controller_(batch_controller), worker_thread_(worker_thread), paths_(paths) {
+    : QMainWindow(parent),
+      inference_service_(inference_service),
+      download_service_(download_service),
+      batch_controller_(batch_controller),
+      worker_thread_(worker_thread),
+      paths_(paths) {
     setWindowTitle(QStringLiteral("QTrans"));
     resize(960, 600);
     setMinimumSize(720, 480);
@@ -55,7 +62,7 @@ MainWindow::MainWindow(
     settings_.ensureStorage(paths_);
     initializeInferenceBackend();
     settings_.migrateModelSelection(RuntimeCapabilities::instance());
-    syncSettingsToTaskService();
+    syncSettingsToServices();
 
     central_root_ = new QWidget(this);
     central_root_->setObjectName(QStringLiteral("centralRoot"));
@@ -103,17 +110,16 @@ MainWindow::MainWindow(
     connect(translate_page_, &TranslatePage::translateRequested, this, &MainWindow::onTranslateRequested);
     connect(translate_page_, &TranslatePage::cancelRequested, this, &MainWindow::onCancelRequested);
     connect(translate_page_, &TranslatePage::languageChanged, this, &MainWindow::onLanguageChanged);
-    connect(task_service_, &TaskService::statusChanged, this, &MainWindow::onStatusChanged);
-    connect(task_service_, &TaskService::modelLoadFinished, this, &MainWindow::onModelLoadFinished);
-    connect(task_service_, &TaskService::modelUnloadFinished, this, &MainWindow::onModelUnloadFinished);
-    connect(task_service_, &TaskService::downloadProgress, this, &MainWindow::onDownloadProgress);
-    connect(task_service_, &TaskService::downloadFinished, this, &MainWindow::onDownloadFinished);
-    connect(task_service_, &TaskService::targetReset, this, &MainWindow::onTargetReset);
-    connect(task_service_, &TaskService::targetAppended, this, &MainWindow::onTargetAppended);
-    connect(task_service_, &TaskService::backTranslateReset, this, &MainWindow::onBackTranslateReset);
-    connect(task_service_, &TaskService::backTranslateAppended, this, &MainWindow::onBackTranslateAppended);
-    connect(task_service_, &TaskService::translationFinished, this, &MainWindow::onTranslationFinished);
-    connect(task_service_, &TaskService::translateTaskStarted, this, &MainWindow::onTranslateTaskStarted);
+    connect(inference_service_, &InferenceService::statusChanged, this, &MainWindow::onStatusChanged);
+    connect(inference_service_, &InferenceService::modelLoadFinished, this, &MainWindow::onModelLoadFinished);
+    connect(inference_service_, &InferenceService::modelUnloadFinished, this, &MainWindow::onModelUnloadFinished);
+    connect(inference_service_, &InferenceService::translationStarted, this, &MainWindow::onTranslationStarted);
+    connect(inference_service_, &InferenceService::translationReset, this, &MainWindow::onTranslationReset);
+    connect(inference_service_, &InferenceService::translationDelta, this, &MainWindow::onTranslationDelta);
+    connect(inference_service_, &InferenceService::translationFinished, this, &MainWindow::onTranslationFinished);
+    connect(download_service_, &DownloadService::downloadStarted, this, &MainWindow::onDownloadStarted);
+    connect(download_service_, &DownloadService::downloadProgress, this, &MainWindow::onDownloadProgress);
+    connect(download_service_, &DownloadService::downloadFinished, this, &MainWindow::onDownloadFinished);
 
     // ── Batch page wiring (batch controller lives on worker thread;
     //     use queued invocations for UI→worker calls) ─────────────────────
@@ -166,7 +172,7 @@ MainWindow::MainWindow(
     popup_window_ = new PopupWindow(nullptr);
 
     session_controller_ = new SessionController(
-        hotkey_manager_, task_service_, popup_window_, this);
+        hotkey_manager_, inference_service_, popup_window_, this);
     session_controller_->initialize();
     const QString hotkeyStr = qtrans::app::from_utf8(settings_.hotkey);
     if (!hotkeyStr.isEmpty()) {
@@ -245,25 +251,27 @@ void MainWindow::refreshModelPage() {
 }
 
 void MainWindow::initializeInferenceBackend() {
-    QMetaObject::invokeMethod(task_service_, "initializeBackend", Qt::BlockingQueuedConnection);
+    inference_service_->initializeBackend();
 }
 
 void MainWindow::applySettingsFromPage() {
     model_page_->applyTo(settings_);
-    syncSettingsToTaskService();
+    syncSettingsToServices();
 }
 
 QString MainWindow::currentModelPath() const {
     return qtrans::app::from_utf8(settings_.effectiveModelPath(paths_));
 }
 
-void MainWindow::syncSettingsToTaskService() {
+void MainWindow::syncSettingsToServices() {
     const ModelCatalogEntry *model = settings_.selectedModel();
-    task_service_->setModelId(qtrans::app::from_utf8(model->id));
-    task_service_->setModelPath(currentModelPath());
-    task_service_->setRemoteSpec(qtrans::app::from_utf8(model->remote_spec));
-    task_service_->setModelscopeRemoteSpec(qtrans::app::from_utf8(model->modelscope_remote_spec));
-    task_service_->setDownloadHub(model->download_hub);
+    inference_service_->setModelConfig(qtrans::app::from_utf8(model->id), currentModelPath());
+    DownloadRequest request;
+    request.local_path = qtrans::app::to_utf8(currentModelPath());
+    request.remote_spec = model->remote_spec;
+    request.modelscope_remote_spec = model->modelscope_remote_spec;
+    request.download_hub = model->download_hub;
+    download_service_->setDownloadRequest(request);
 }
 
 void MainWindow::syncLanguagesToSettings() {
@@ -307,7 +315,7 @@ void MainWindow::onSaveModelSettings() {
     applySettingsFromPage();
     settings_.ensureStorage(paths_);
     saveSettings();
-    syncSettingsToTaskService();
+    syncSettingsToServices();
     refreshModelPage();
     translate_page_->setStatus(QStringLiteral("Model settings saved"));
 }
@@ -316,7 +324,7 @@ void MainWindow::onLoadModelFromPage() {
     applySettingsFromPage();
     settings_.ensureStorage(paths_);
     saveSettings();
-    syncSettingsToTaskService();
+    syncSettingsToServices();
     refreshModelPage();
 
     if (download_file_exists(settings_.effectiveModelPath(paths_))) {
@@ -332,7 +340,7 @@ void MainWindow::onUnloadModelFromPage() {
         return;
     }
 
-    QMetaObject::invokeMethod(task_service_, "unloadModel", Qt::QueuedConnection);
+    inference_service_->unloadModel();
 }
 
 void MainWindow::onDeleteModel() {
@@ -413,7 +421,9 @@ void MainWindow::showDownloadDialog() {
     connect(download_panel_, &DownloadProgressPanel::cancelRequested, this, [this]() {
         awaiting_download_load_ = false;
         hideModal();
-        task_service_->cancelTask(0);
+        if (active_download_id_.is_valid()) {
+            download_service_->cancel(active_download_id_);
+        }
     });
     modal_->setContent(download_panel_, QSize(460, 260));
     modal_->showModal();
@@ -430,12 +440,13 @@ void MainWindow::showAlertDialog(const QString &title, const QString &message) {
 void MainWindow::startDownloadAndLoad() {
     awaiting_download_load_ = true;
     showDownloadDialog();
-    QMetaObject::invokeMethod(task_service_, "downloadModel", Qt::QueuedConnection);
+    translate_page_->setStatus(QStringLiteral("Downloading model"));
+    active_download_id_ = download_service_->startDownload();
 }
 
 void MainWindow::startLoadModel() {
-    syncSettingsToTaskService();
-    QMetaObject::invokeMethod(task_service_, "loadModel", Qt::QueuedConnection);
+    syncSettingsToServices();
+    inference_service_->loadModel();
 }
 
 void MainWindow::onTranslateRequested(
@@ -443,64 +454,60 @@ void MainWindow::onTranslateRequested(
     const QString &target_language,
     const QString &source_language,
     bool back_translate) {
-    active_translate_task_id_ = 0;
+    active_translate_job_id_ = TranslationJobId{};
     own_translation_active_ = true;
 
-    QMetaObject::invokeMethod(
-        task_service_,
-        "translateInteractive",
-        Qt::QueuedConnection,
-        Q_ARG(QString, source),
-        Q_ARG(QString, target_language),
-        Q_ARG(QString, source_language),
-        Q_ARG(bool, back_translate),
-        Q_ARG(bool, false));
+    NativeTranslationRequest request;
+    request.source = qtrans::app::to_utf8(source);
+    request.target_language = qtrans::app::to_utf8(target_language);
+    request.source_language = qtrans::app::to_utf8(source_language);
+    request.back_translate = back_translate;
+    request.wordselect = false;
+    active_translate_job_id_ = inference_service_->translateNative(request);
 
     translate_page_->setTranslating(true);
 }
 
-void MainWindow::onTranslateTaskStarted(quint64 task_id) {
-    qtrans::log::get(qtrans::log::Component::App)
-        ->debug(
-            "translateTaskStarted task:{} own_active:{}",
-            task_id,
-            own_translation_active_);
-    if (own_translation_active_) {
-        active_translate_task_id_ = task_id;
+void MainWindow::onTranslationStarted(TranslationJobId job_id) {
+    // The active job id is the synchronously returned value from
+    // translateNative(); a started event from an unrelated (popup/batch) job
+    // must never overwrite it.
+    if (!isActiveTranslateJob(job_id)) {
+        return;
     }
+    qtrans::log::get(qtrans::log::Component::App)
+        ->debug("translationStarted job:{} own_active:{}", job_id.value,
+                own_translation_active_);
 }
 
 void MainWindow::onCancelRequested() {
     qtrans::log::get(qtrans::log::Component::App)
-        ->debug("cancelRequested task:{}", active_translate_task_id_);
-    QMetaObject::invokeMethod(
-        task_service_,
-        "cancelTask",
-        Qt::DirectConnection,
-        Q_ARG(quint64, active_translate_task_id_));
+        ->debug("cancelRequested job:{}", active_translate_job_id_.value);
+    if (active_translate_job_id_.is_valid()) {
+        inference_service_->cancel(active_translate_job_id_);
+    }
 }
 
 void MainWindow::onLanguageChanged() {
     syncLanguagesToSettings();
 }
 
-bool MainWindow::isActiveTranslateTask(quint64 task_id) const {
-    return active_translate_task_id_ != 0 && active_translate_task_id_ == task_id;
+bool MainWindow::isActiveTranslateJob(TranslationJobId job_id) const {
+    return active_translate_job_id_.is_valid() && active_translate_job_id_ == job_id;
 }
 
-void MainWindow::onTranslationFinished(quint64 task_id, int state) {
-    Q_UNUSED(state);
+void MainWindow::onTranslationFinished(const TranslationJobResult &result) {
     qtrans::log::get(qtrans::log::Component::App)
         ->debug(
-            "translationFinished task:{} active:{} own:{}",
-            task_id,
-            active_translate_task_id_,
+            "translationFinished job:{} active:{} own:{}",
+            result.id.value,
+            active_translate_job_id_.value,
             own_translation_active_);
-    if (!isActiveTranslateTask(task_id)) {
+    if (!isActiveTranslateJob(result.id)) {
         return;
     }
 
-    active_translate_task_id_ = 0;
+    active_translate_job_id_ = TranslationJobId{};
     own_translation_active_ = false;
     translate_page_->setTranslating(false);
 }
@@ -510,21 +517,31 @@ void MainWindow::onStatusChanged(const QString &message, bool busy) {
     setUiBusy(busy);
 }
 
-void MainWindow::onTargetReset(quint64 task_id) {
-    if (!isActiveTranslateTask(task_id)) {
-        return;
-    }
-    qtrans::log::get(qtrans::log::Component::App)->debug("targetReset task:{}", task_id);
-    translate_page_->resetTarget();
-}
-
-void MainWindow::onTargetAppended(quint64 task_id, const QString &piece) {
-    if (!isActiveTranslateTask(task_id)) {
+void MainWindow::onTranslationReset(TranslationJobId job_id, TranslationChannel channel) {
+    if (!isActiveTranslateJob(job_id)) {
         return;
     }
     qtrans::log::get(qtrans::log::Component::App)
-        ->debug("targetAppended task:{} len:{}", task_id, piece.size());
-    translate_page_->appendTarget(piece);
+        ->debug("translationReset job:{} channel:{}", job_id.value, static_cast<int>(channel));
+    if (channel == TranslationChannel::Target) {
+        translate_page_->resetTarget();
+    } else {
+        translate_page_->resetBackTranslate();
+    }
+}
+
+void MainWindow::onTranslationDelta(TranslationJobId job_id, TranslationChannel channel,
+                                    const QString &piece) {
+    if (!isActiveTranslateJob(job_id)) {
+        return;
+    }
+    qtrans::log::get(qtrans::log::Component::App)
+        ->debug("translationDelta job:{} len:{}", job_id.value, piece.size());
+    if (channel == TranslationChannel::Target) {
+        translate_page_->appendTarget(piece);
+    } else {
+        translate_page_->appendBackTranslate(piece);
+    }
 }
 
 void MainWindow::onModelLoadFinished(
@@ -565,19 +582,34 @@ void MainWindow::onModelUnloadFinished() {
     setUiBusy(busy_);
 }
 
+void MainWindow::onDownloadStarted(DownloadId id) {
+    // The active id is normally already set from startDownload()'s return
+    // value; keep it in sync and ignore stale started events.
+    active_download_id_ = id;
+}
+
 void MainWindow::onDownloadProgress(
+    DownloadId id,
     qint64 downloaded,
     qint64 total,
     double speed_bps,
     double eta_seconds) {
+    if (!active_download_id_.is_valid() || id != active_download_id_) {
+        return;
+    }
     if (download_panel_ != nullptr) {
         download_panel_->setProgress(downloaded, total, speed_bps, eta_seconds);
     }
 }
 
-void MainWindow::onDownloadFinished(bool success) {
-    if (!success) {
+void MainWindow::onDownloadFinished(const DownloadResult &result) {
+    // Ignore completions from earlier/consecutive downloads.
+    if (!active_download_id_.is_valid() || result.id != active_download_id_) {
+        return;
+    }
+    if (result.state != DownloadState::Completed) {
         awaiting_download_load_ = false;
+        translate_page_->setStatus(QStringLiteral("Ready"));
         if (download_panel_ != nullptr) {
             download_panel_->setFailure();
         }
@@ -593,23 +625,9 @@ void MainWindow::onDownloadFinished(bool success) {
     }
 }
 
-void MainWindow::onBackTranslateReset(quint64 task_id) {
-    if (!isActiveTranslateTask(task_id)) {
-        return;
-    }
-    translate_page_->resetBackTranslate();
-}
-
-void MainWindow::onBackTranslateAppended(quint64 task_id, const QString &piece) {
-    if (!isActiveTranslateTask(task_id)) {
-        return;
-    }
-    translate_page_->appendBackTranslate(piece);
-}
-
 // ── Batch UI slots ───────────────────────────────────────────────────────────
 // All UI→worker calls use QueuedConnection since BatchController lives on the
-// worker thread alongside TaskService.
+// worker thread alongside InferenceService and DownloadService.
 
 void MainWindow::onBatchAddFiles(const QString &source_lang,
                                  const QString &target_lang) {

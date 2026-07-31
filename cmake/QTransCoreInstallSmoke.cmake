@@ -26,8 +26,13 @@ file(WRITE "${smoke_root}/consumer/main.cpp" [=[
 #include <qtrans/core.h>
 
 int main() {
-    qtrans::core::Translator translator;
-    return translator.loaded() ? 1 : 0;
+    // Backend probing and the ModelHost lifecycle are the public core surface.
+    const qtrans::core::BackendState backend = qtrans::core::backend_state();
+    (void)backend;
+    qtrans::core::ModelHost host;
+    if (host.snapshot().state != qtrans::core::LifecycleState::Unloaded) return 1;
+    if (!host.shutdown()) return 1;
+    return host.snapshot().state == qtrans::core::LifecycleState::Stopped ? 0 : 1;
 }
 ]=])
 
@@ -53,4 +58,17 @@ execute_process(
 )
 if(NOT build_result EQUAL 0)
     message(FATAL_ERROR "core consumer build failed: ${build_result}")
+endif()
+
+set(smoke_binary "${smoke_root}/build/consumer")
+if(WIN32)
+    set(smoke_binary "${smoke_binary}.exe")
+endif()
+
+execute_process(
+    COMMAND "${smoke_binary}"
+    RESULT_VARIABLE run_result
+)
+if(NOT run_result EQUAL 0)
+    message(FATAL_ERROR "core consumer run failed with exit code: ${run_result}")
 endif()

@@ -6,6 +6,20 @@
 
 namespace qtrans::core {
 
+TEST(LocalRuntimeLifecycle, MinimalLoadRequestCarriesOnlyPathAndRuntimeConfig) {
+    runtime_detail::ModelLoad load;
+    EXPECT_TRUE(load.path.empty());
+    EXPECT_EQ(load.generation.context_tokens, 4096);
+    EXPECT_EQ(load.generation.max_output_tokens, 4096);
+
+    load.path = std::filesystem::path("model.gguf");
+    load.generation.context_tokens = 2048;
+    load.generation.max_output_tokens = 1024;
+    EXPECT_EQ(load.path, std::filesystem::path("model.gguf"));
+    EXPECT_EQ(load.generation.context_tokens, 2048);
+    EXPECT_EQ(load.generation.max_output_tokens, 1024);
+}
+
 TEST(LocalRuntimeLifecycle, UnloadPreservesSelectedBackendForReloadAttempt) {
     BackendState state;
     state.initialized = true;
@@ -20,7 +34,7 @@ TEST(LocalRuntimeLifecycle, UnloadPreservesSelectedBackendForReloadAttempt) {
     EXPECT_FALSE(runtime.loaded());
     EXPECT_EQ(runtime.backend(), Backend::Vulkan);
 
-    Model model;
+    runtime_detail::ModelLoad model;
     model.path = std::filesystem::path("controlled-missing-model.gguf");
     EXPECT_THROW(runtime.load(model), std::exception);
     EXPECT_EQ(runtime.backend(), Backend::Vulkan);

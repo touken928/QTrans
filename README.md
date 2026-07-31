@@ -68,9 +68,9 @@ See [docs/develop/](docs/develop/) (Chinese) for workflow, CI, branch protection
 ## Project Layout
 
 - `src/core/` - reusable translation runtime, backends, and remote/local runtime integration
-- `src/desktop/domain/` - desktop-side non-UI logic such as download, settings, storage, tasks, and batch translation
+- `src/desktop/domain/` - desktop-side non-UI logic such as download, settings, storage, inference, and batch translation
 - `src/desktop/ui/` - Qt Widgets UI including translate, word selection, batch, model, and shell pages
-- `src/desktop/app/` - desktop entry and worker-thread glue such as `main.cpp`, `task_service.*`, and `batch_controller.*`
+- `src/desktop/app/` - desktop entry and worker-thread glue such as `main.cpp`, `inference_service.*`, `download_service.*`, and `batch_controller.*`
 - `tests/core/` - core runtime unit tests
 
 ## License

@@ -2,10 +2,13 @@ include(CMakePackageConfigHelpers)
 include(GNUInstallDirs)
 
 add_library(qtrans_core STATIC
-    internal/translator.cpp
     internal/diagnostics.cpp
     internal/backend.cpp
     internal/local_runtime.cpp
+    internal/host/model_host.cpp
+    internal/host/model_runtime.cpp
+    internal/host/prompt_profiles.cpp
+    internal/host/invocation_scheduler.cpp
     internal/text/utf8.cpp
     internal/text/utf8_stream_buffer.cpp
     internal/text/sentence_splitter.cpp

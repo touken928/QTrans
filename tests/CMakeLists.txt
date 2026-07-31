@@ -3,7 +3,7 @@ include(GoogleTest)
 
 add_executable(qtrans_tests_core
     core/test_core_api.cpp
-    core/test_translation_model.cpp
+    core/test_model_host.cpp
 )
 target_link_libraries(qtrans_tests_core
     PRIVATE
@@ -12,6 +12,7 @@ target_link_libraries(qtrans_tests_core
         GTest::gtest_main
 )
 target_compile_options(qtrans_tests_core PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(qtrans_tests_core PRIVATE ${PROJECT_SOURCE_DIR}/src/core/internal/host)
 gtest_discover_tests(qtrans_tests_core
     PROPERTIES
         LABELS "dir:core"
@@ -43,7 +44,7 @@ add_test(
 )
 
 set(QTRANS_TEST_DIRS
-    task
+    services
     storage
     network
     model
@@ -71,6 +72,10 @@ foreach(test_dir IN LISTS QTRANS_TEST_DIRS)
         target_compile_options(qtrans_tests_${test_dir} PRIVATE /W4)
     else()
         target_compile_options(qtrans_tests_${test_dir} PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    if(test_dir STREQUAL "services")
+        target_include_directories(qtrans_tests_${test_dir} PRIVATE ${PROJECT_SOURCE_DIR}/src/core/internal/host)
     endif()
 
     gtest_discover_tests(qtrans_tests_${test_dir}

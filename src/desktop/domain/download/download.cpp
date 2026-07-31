@@ -1,6 +1,6 @@
 #include "domain/download/download.h"
 
-#include "domain/tasks/cancel_token.h"
+#include "domain/download/download_cancellation.h"
 #include "domain/logging/component.h"
 #include "domain/logging/console_progress.h"
 #include "domain/logging/logger.h"
@@ -28,7 +28,7 @@ struct DownloadContext {
     std::chrono::steady_clock::time_point last_time = std::chrono::steady_clock::now();
     std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
     qtrans::log::ConsoleProgress progress;
-    const CancelToken *cancel_token = nullptr;
+    const DownloadCancelToken *cancel_token = nullptr;
 };
 
 bool g_quiet = false;
@@ -205,7 +205,7 @@ bool remote_file_available(const std::string &url, ModelHub hub) {
 }
 
 void download_from_hub(const std::string &local_path, const DownloadSpec &spec, ModelHub hub,
-                       const CancelToken *cancel_token) {
+                       const DownloadCancelToken *cancel_token) {
     ensure_curl_initialized();
 
     const DownloadSpec resolved = spec_for_hub(spec, hub);
@@ -381,7 +381,7 @@ ModelHub download_probe_hub(const DownloadSpec &spec) {
 }
 
 void download_to_file(const std::string &local_path, const DownloadSpec &spec, bool force,
-                      const CancelToken *cancel_token) {
+                      const DownloadCancelToken *cancel_token) {
     if (!force && download_file_exists(local_path)) {
         return;
     }
@@ -425,7 +425,7 @@ void download_to_file(const std::string &local_path, const DownloadSpec &spec, b
 }
 
 void download_ensure(const std::string &local_path, const DownloadSpec &spec, bool force,
-                     const CancelToken *cancel_token) {
+                     const DownloadCancelToken *cancel_token) {
     if (!force && download_file_exists(local_path)) {
         download_logger()->info("using cached model: {}", local_path);
         return;

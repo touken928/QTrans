@@ -3,7 +3,7 @@
 ## Core Boundaries
 - This repo is C++17/CMake/Ninja with vcpkg; root `CMakeLists.txt` still owns all targets.
 - `src/core/` is the reusable translation runtime. `src/core/include/qtrans/core.h` is the only public core header; llama-cpp, curl, ICU, simdutf, spdlog, Qt, and platform API types belong only in `src/core/internal/` implementation headers.
-- `src/desktop/` is the Qt Widgets app layer: UI, settings, download, task queue, word selection, hotkeys, logs, and glue.
+- `src/desktop/` is the Qt Widgets app layer: UI, settings, download, inference, word selection, hotkeys, logs, and glue.
 - `qtrans_desktop` is the desktop support library and links `qtrans_core`; it is not a reusable core library.
 - Backend bootstrap and selection are exposed only through `qtrans/core.h`; local llama-cpp runtime, backend probing, chunking, and callback control are `src/core/internal/` implementation details.
 
@@ -13,17 +13,17 @@
 - Focus tests by label, e.g. `ctest --test-dir build/arm64-osx-release -L dir:core --output-on-failure` or `-L dir:model`.
 
 ## Runtime Notes
-- `src/core/runtime/local_runtime.*` wraps local llama-cpp inference; macOS uses Metal and Windows x64 uses Vulkan through the vcpkg `llama-cpp` package.
+- `src/core/internal/local_runtime.*` wraps local llama-cpp inference; macOS uses Metal and Windows x64 uses Vulkan through the vcpkg `llama-cpp` package.
 - Local inference chooses CPU/GPU layer behavior inside the internal LocalRuntime from the resolved backend.
-- The public Translator owns chunking/context behavior through the facade; runtime traits and factories are internal implementation details.
+- Desktop inference goes exclusively through `ModelHost`, owned by `InferenceService` (`src/desktop/app/inference_service.*`); chunking and context budgeting are internal core/host implementation details behind the public `ModelHost` boundary.
 - Word-selection translation must fail with a clear context-limit error instead of auto-chunking past the local context window.
-- Batch translation should submit work through `BatchController` -> `TaskService::submitBatchTranslate()` -> `TaskOrchestrator` with `TaskPriority::Background`; paused or interactive-preempted work should surface as `TaskState::Preempted`, not `Cancelled`.
+- Batch translation should submit work through `BatchController` -> `InferenceService::translateBatch()` (core `WorkClass::Batch`); paused or interactive-preempted work should surface as `TranslationState::Preempted`, not `Cancelled`.
 
 ## Desktop Boundaries
 - Model downloads stay in `src/desktop/domain/download/`; do not move download UI/task behavior into `src/core/`.
-- Desktop layout worth keeping: `domain/` for non-UI logic (`batch/`, `download/`, `inference/`, `logging/`, `model-adapters/`, `model-catalog/`, `platform/`, `settings/`, `storage/`, `tasks/`), `ui/` for `shared/`, `sidebar/`, `shell/`, `pages/`, and `popup/`, `shared/` for cross-cutting desktop helpers, and `app/` for entry/glue such as `main.cpp`, `task_service.*`, and `batch_controller.*`.
+- Desktop layout worth keeping: `domain/` for non-UI logic (`batch/`, `download/`, `inference/`, `logging/`, `model-catalog/`, `platform/`, `settings/`, `storage/`), `ui/` for `shared/`, `sidebar/`, `shell/`, `pages/`, and `popup/`, `shared/` for cross-cutting desktop helpers, and `app/` for entry/glue such as `main.cpp`, `inference_service.*`, `download_service.*`, and `batch_controller.*`.
 - Qt string conversion belongs in `src/desktop/shared/string_bridge.*`; do not introduce `QString` into core or other app-independent code.
-- `TaskService` runs on a worker `QThread`; widget updates must cross via Qt signals/slots, not direct worker-to-UI calls.
+- `InferenceService` owns the desktop `ModelHost`; `DownloadService` owns dedicated download execution. Both run on the worker `QThread`; widget updates must cross via Qt signals/slots, not direct worker-to-UI calls. Download cancellation uses `DownloadCancelToken` (`src/desktop/domain/download/download_cancellation.h`).
 - Batch file translation lives in three layers: `src/desktop/domain/batch/` for Qt-free file types, handlers, and durable queue storage; `src/desktop/app/batch_controller.*` for worker-thread orchestration; and `src/desktop/ui/pages/batch/` for the card queue page, file actions, and language picker UI.
 - Batch queue persistence and outputs belong under `AppPaths::batch_dir`; keep queue state in `queue.bq`, write translated files under `batch/output/`, and keep batch-specific settings in `AppSettings::batch_*`.
 

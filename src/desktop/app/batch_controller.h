@@ -1,8 +1,9 @@
 #pragma once
 
-#include "app/task_service.h"
+#include "app/inference_service.h"
 #include "domain/batch/batch_store.h"
 #include "domain/batch/batch_types.h"
+#include "domain/inference/inference_types.h"
 
 #include <QObject>
 #include <QString>
@@ -15,13 +16,13 @@
 #include <vector>
 
 // App-layer batch controller. Owns a BatchStore, submits segments through
-// TaskService, and tracks progress. Lives on the worker thread alongside
-// TaskService; public API is Q_INVOKABLE for cross-thread use.
+// InferenceService, and tracks progress. Lives on the worker thread alongside
+// InferenceService; public API is Q_INVOKABLE for cross-thread use.
 class BatchController : public QObject {
     Q_OBJECT
 
 public:
-    explicit BatchController(TaskService *taskService,
+    explicit BatchController(InferenceService *inferenceService,
                              std::filesystem::path queueFilePath,
                              std::filesystem::path outputDir,
                              QObject *parent = nullptr);
@@ -84,10 +85,10 @@ signals:
     void errorOccurred(const QString &message);
 
 private slots:
-    void onTranslationFinished(quint64 task_id, int state);
-    void onTaskFailed(quint64 task_id, const QString &message);
-    void onTargetReset(quint64 task_id);
-    void onTargetAppended(quint64 task_id, const QString &piece);
+    void onTranslationStarted(TranslationJobId job_id);
+    void onTranslationDelta(TranslationJobId job_id, TranslationChannel channel,
+                            const QString &piece);
+    void onTranslationFinished(const TranslationJobResult &result);
     void onRequeueTimer();
 
 private:
@@ -97,7 +98,7 @@ private:
     void writeOutputFile(const BatchEntry &entry);
     void emitBatchState();
 
-    TaskService *taskService_;
+    InferenceService *inferenceService_;
     BatchStore store_;
     std::filesystem::path outputDir_;
     QTimer requeueTimer_;
@@ -107,7 +108,7 @@ private:
 
     std::string currentEntryId_;
     int currentSegmentIndex_ = -1;
-    TaskId currentTaskId_{};
+    TranslationJobId currentJobId_{};
     QString currentOutputText_;
     QString currentErrorMessage_;
 };

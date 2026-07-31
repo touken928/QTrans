@@ -10,8 +10,6 @@ const char *component_name(Component component) {
             return "hymt";
         case Component::Inference:
             return "inference";
-        case Component::Task:
-            return "task";
         case Component::Download:
             return "download";
         case Component::WordSelect:

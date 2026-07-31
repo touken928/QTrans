@@ -3,12 +3,12 @@
 #include "domain/download/download.h"
 
 ExecutionResult ProductionModelDownloader::download(
-    const DownloadModelPayload &payload,
-    const CancelToken *cancel_token,
+    const DownloadRequest &request,
+    const DownloadCancelToken *cancel_token,
     DownloadProgressHandler on_progress) {
     try {
         DownloadSpec spec{};
-        switch (payload.download_hub) {
+        switch (request.download_hub) {
             case 0:
                 spec.hub = ModelHub::HuggingFace;
                 break;
@@ -19,12 +19,12 @@ ExecutionResult ProductionModelDownloader::download(
                 spec.hub = ModelHub::Auto;
                 break;
         }
-        if (!download_parse_spec(payload.remote_spec, spec)) {
-            throw std::runtime_error("invalid remote spec: " + payload.remote_spec);
+        if (!download_parse_spec(request.remote_spec, spec)) {
+            throw std::runtime_error("invalid remote spec: " + request.remote_spec);
         }
-        if (!payload.modelscope_remote_spec.empty()) {
+        if (!request.modelscope_remote_spec.empty()) {
             DownloadSpec modelscope_spec{};
-            if (download_parse_spec(payload.modelscope_remote_spec, modelscope_spec)) {
+            if (download_parse_spec(request.modelscope_remote_spec, modelscope_spec)) {
                 spec.modelscope_repo = modelscope_spec.repo;
             }
         }
@@ -40,7 +40,7 @@ ExecutionResult ProductionModelDownloader::download(
                 });
             }
         });
-        download_to_file(payload.local_path, spec, true, cancel_token);
+        download_to_file(request.local_path, spec, true, cancel_token);
         download_set_progress_callback(nullptr);
         return {ExecutionOutcome::Completed, {}};
     } catch (const DownloadCancelled &) {
