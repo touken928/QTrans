@@ -19,6 +19,8 @@ struct AppSettings {
     std::string wordselect_target_language = "Auto";
     bool wordselect_enabled = true;
     bool close_to_tray = true;
+    bool api_enabled = false;
+    int api_port = 8000;
     std::string batch_source_language = "English";
     std::string batch_target_language = "Chinese";
     bool batch_preserve_structure = true;

@@ -15,6 +15,7 @@ class DownloadProgressPanel;
 class DownloadService;
 class HotkeyManager;
 class InferenceService;
+class LocalApiService;
 class ModalOverlay;
 class ModelPage;
 class PopupWindow;
@@ -34,12 +35,14 @@ public:
         InferenceService *inference_service,
         DownloadService *download_service,
         BatchController *batch_controller,
+        LocalApiService *local_api_service,
         QThread *worker_thread,
         const AppPaths &paths,
         QWidget *parent = nullptr);
     ~MainWindow() override;
 
     void bringToForeground();
+    LocalApiService *localApiService() const;
 
 protected:
     void showEvent(QShowEvent *event) override;
@@ -96,6 +99,7 @@ private:
     void syncSettingsToServices();
     void syncLanguagesToSettings();
     void saveSettings();
+    void syncApiService();
     void setUiBusy(bool busy);
     void switchPage(int index);
     void refreshModelPage();
@@ -113,6 +117,7 @@ private:
     InferenceService *inference_service_ = nullptr;
     DownloadService *download_service_ = nullptr;
     BatchController *batch_controller_ = nullptr;
+    LocalApiService *local_api_service_ = nullptr;
     QThread *worker_thread_ = nullptr;
     AppPaths paths_;
     AppSettings settings_;

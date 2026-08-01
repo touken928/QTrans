@@ -233,6 +233,10 @@ struct LifecycleSnapshot {
     std::optional<ModelId> model;
     std::size_t active_invocations = 0;
     std::optional<Failure> failure;
+    // True when the currently loaded model's prompt profile accepts
+    // ConversationInput. Populated on successful load (Ready) and cleared by
+    // the existing `LifecycleSnapshot{}` reset on unload/load failure.
+    bool supports_conversation = false;
 };
 
 struct OperationResult {

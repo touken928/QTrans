@@ -408,23 +408,33 @@ std::string LocalRuntime::generate(
     const llama_vocab *vocab = llama_model_get_vocab(impl_->model_holder_.model);
     emit_hymt_message(DiagnosticLevel::Trace, "tokenizing prompt");
 
-    const int n_prompt = -llama_tokenize(
+    // Two-pass tokenization: the first call measures the required capacity
+    // (llama_tokenize returns the negated count when the buffer is too small),
+    // the second fills a buffer of exactly that size. The actual second-call
+    // result is validated against the allocated capacity, the vector is
+    // resized to the actual count, and that actual count drives the batch,
+    // context budget, and token statistics. add_special=false and
+    // parse_special=true are preserved.
+    const int n_prompt_measured = -llama_tokenize(
         vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()),
         nullptr, 0, false, true);
     runtime_detail::check_stop(callback_state);
-    emit_hymt_message(DiagnosticLevel::Trace, "prompt token count=" + std::to_string(n_prompt));
-    if (stats != nullptr) stats->prompt_tokens = n_prompt;
-    if (n_prompt <= 0) throw std::runtime_error("failed to measure prompt tokens");
+    emit_hymt_message(DiagnosticLevel::Trace,
+                      "prompt token count=" + std::to_string(n_prompt_measured));
+    if (n_prompt_measured <= 0) throw std::runtime_error("failed to measure prompt tokens");
 
-    std::vector<llama_token> prompt_tokens(static_cast<size_t>(n_prompt));
-    if (llama_tokenize(vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()),
-                       prompt_tokens.data(), static_cast<int32_t>(prompt_tokens.size()),
-                       false, true) < 0)
+    std::vector<llama_token> prompt_tokens(static_cast<size_t>(n_prompt_measured));
+    const int n_prompt = llama_tokenize(
+        vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()),
+        prompt_tokens.data(), static_cast<int32_t>(prompt_tokens.size()), false, true);
+    if (n_prompt < 0 || n_prompt > static_cast<int32_t>(prompt_tokens.size()))
         throw std::runtime_error("failed to tokenize prompt");
+    prompt_tokens.resize(static_cast<size_t>(n_prompt));
     runtime_detail::check_stop(callback_state);
 
-    llama_batch batch = llama_batch_get_one(
-        prompt_tokens.data(), static_cast<int32_t>(prompt_tokens.size()));
+    if (stats != nullptr) stats->prompt_tokens = n_prompt;
+
+    llama_batch batch = llama_batch_get_one(prompt_tokens.data(), n_prompt);
     std::string response;
 
     const int ctx_room = generation.context_tokens - n_prompt;
@@ -437,6 +447,10 @@ std::string LocalRuntime::generate(
                           " n_ctx=" + std::to_string(generation.context_tokens));
 
     core::Utf8StreamBuffer utf8_stream;
+    // Storage for the last sampled token. It must outlive the llama_decode()
+    // call of the following iteration because llama_batch_get_one() borrows
+    // the pointer instead of copying the token.
+    llama_token last_token = 0;
     for (int i = 0; i < max_gen; ++i) {
         if (i > 0 && i % 10 == 0) {
             emit_hymt_message(DiagnosticLevel::Trace,
@@ -452,14 +466,14 @@ std::string LocalRuntime::generate(
         }
         runtime_detail::check_stop(callback_state);
 
-        const llama_token token = llama_sampler_sample(sampler, impl_->ctx_, -1);
-        if (llama_vocab_is_eog(vocab, token)) {
+        last_token = llama_sampler_sample(sampler, impl_->ctx_, -1);
+        if (llama_vocab_is_eog(vocab, last_token)) {
             emit_hymt_message(DiagnosticLevel::Debug,
                               "EOG at token " + std::to_string(i));
             break;
         }
 
-        const std::string piece = token_to_text(vocab, token);
+        const std::string piece = token_to_text(vocab, last_token);
         response.append(piece);
         if (stats != nullptr) stats->output_tokens = i + 1;
 
@@ -481,7 +495,7 @@ std::string LocalRuntime::generate(
         }
 
         runtime_detail::check_stop(callback_state);
-        batch = llama_batch_get_one(const_cast<llama_token *>(&token), 1);
+        batch = llama_batch_get_one(&last_token, 1);
     }
 
     if (stats != nullptr) {

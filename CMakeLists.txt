@@ -10,7 +10,7 @@ find_package(CURL REQUIRED)
 find_package(ICU REQUIRED COMPONENTS uc i18n data)
 find_package(simdutf CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Network)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)

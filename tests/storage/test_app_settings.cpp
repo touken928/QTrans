@@ -60,6 +60,8 @@ TEST_F(AppSettingsTest, LoadOnMissingFileKeepsDefaults) {
     EXPECT_TRUE(settings.wordselect_enabled);
     EXPECT_TRUE(settings.models_dir.empty());
     EXPECT_EQ(settings.model_id, default_model_id_for_platform());
+    EXPECT_FALSE(settings.api_enabled);
+    EXPECT_EQ(settings.api_port, 8000);
 }
 
 TEST_F(AppSettingsTest, SaveAndLoadRoundTrip) {
@@ -73,6 +75,8 @@ TEST_F(AppSettingsTest, SaveAndLoadRoundTrip) {
     out.wordselect_source_language = "German";
     out.wordselect_target_language = "Korean";
     out.wordselect_enabled = false;
+    out.api_enabled = true;
+    out.api_port = 54321;
     out.save(paths_);
 
     AppSettings in;
@@ -85,6 +89,8 @@ TEST_F(AppSettingsTest, SaveAndLoadRoundTrip) {
     EXPECT_EQ(in.wordselect_source_language, "German");
     EXPECT_EQ(in.wordselect_target_language, "Korean");
     EXPECT_FALSE(in.wordselect_enabled);
+    EXPECT_TRUE(in.api_enabled);
+    EXPECT_EQ(in.api_port, 54321);
 }
 
 TEST_F(AppSettingsTest, LoadSkipsCommentsAndBlankLines) {
@@ -248,4 +254,98 @@ TEST_F(AppSettingsTest, EnsureStorageCreatesModelsDirectory) {
     s.models_dir = "qtrans_ensure_storage";
     s.ensureStorage(paths_);
     EXPECT_TRUE(std::filesystem::exists((paths_.data_root / s.models_dir)));
+}
+
+TEST_F(AppSettingsTest, ApiPortSaveAndLoadRoundTrip) {
+    AppSettings out;
+    out.api_enabled = true;
+    out.api_port = 23456;
+    out.save(paths_);
+
+    AppSettings in;
+    in.load(paths_);
+    EXPECT_TRUE(in.api_enabled);
+    EXPECT_EQ(in.api_port, 23456);
+}
+
+TEST_F(AppSettingsTest, ApiEnabledParsesTrueAndFalse) {
+    paths_.ensureDirectories();
+    {
+        std::ofstream(paths_.settings_file) << "api_enabled=true\n";
+        AppSettings s;
+        s.load(paths_);
+        EXPECT_TRUE(s.api_enabled);
+    }
+    {
+        std::ofstream(paths_.settings_file) << "api_enabled=1\n";
+        AppSettings s;
+        s.load(paths_);
+        EXPECT_TRUE(s.api_enabled);
+    }
+    {
+        std::ofstream(paths_.settings_file) << "api_enabled=false\n";
+        AppSettings s;
+        s.load(paths_);
+        EXPECT_FALSE(s.api_enabled);
+    }
+    {
+        std::ofstream(paths_.settings_file) << "api_enabled=0\n";
+        AppSettings s;
+        s.load(paths_);
+        EXPECT_FALSE(s.api_enabled);
+    }
+}
+
+TEST_F(AppSettingsTest, ApiPortMalformedResetsToDefault) {
+    paths_.ensureDirectories();
+    {
+        std::ofstream(paths_.settings_file) << "api_port=not-a-number\n";
+        AppSettings s;
+        s.load(paths_);
+        EXPECT_EQ(s.api_port, 8000);
+    }
+    {
+        std::ofstream(paths_.settings_file) << "api_port=\n";
+        AppSettings s;
+        s.load(paths_);
+        EXPECT_EQ(s.api_port, 8000);
+    }
+}
+
+TEST_F(AppSettingsTest, ApiPortOutOfRangeResetsToDefault) {
+    paths_.ensureDirectories();
+    {
+        std::ofstream(paths_.settings_file) << "api_port=123\n";  // below 1024
+        AppSettings s;
+        s.load(paths_);
+        EXPECT_EQ(s.api_port, 8000);
+    }
+    {
+        std::ofstream(paths_.settings_file) << "api_port=70000\n";  // above 65535
+        AppSettings s;
+        s.load(paths_);
+        EXPECT_EQ(s.api_port, 8000);
+    }
+    {
+        std::ofstream(paths_.settings_file) << "api_port=-1\n";
+        AppSettings s;
+        s.load(paths_);
+        EXPECT_EQ(s.api_port, 8000);
+    }
+}
+
+TEST_F(AppSettingsTest, ApiPortBoundaryValuesAreAccepted) {
+    paths_.ensureDirectories();
+    {
+        std::ofstream(paths_.settings_file) << "api_port=1024\n";
+        AppSettings s;
+        s.load(paths_);
+        EXPECT_EQ(s.api_port, 1024);
+    }
+    {
+        std::ofstream(paths_.settings_file) << "api_port=65535\n";
+        AppSettings s;
+        s.load(paths_);
+        EXPECT_EQ(s.api_port, 65535);
+    }
 }

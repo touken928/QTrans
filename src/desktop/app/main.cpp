@@ -3,6 +3,7 @@
 #include "app/batch_controller.h"
 #include "app/download_service.h"
 #include "app/inference_service.h"
+#include "app/local_api_service.h"
 #include "ui/shell/mainwindow.h"
 #include "domain/logging/config.h"
 #include "domain/logging/init.h"
@@ -66,7 +67,7 @@ int main(int argc, char *argv[]) {
             paths.batch_output_dir); }, Qt::BlockingQueuedConnection);
 
     MainWindow window(inference_service, download_service, batch_controller,
-                      &worker_thread, paths);
+                      new LocalApiService(inference_service), &worker_thread, paths);
     QObject::connect(&app, &QGuiApplication::applicationStateChanged, &window,
                      [&window](Qt::ApplicationState state) {
                          if (state == Qt::ApplicationActive && !window.isVisible()) {
@@ -76,6 +77,12 @@ int main(int argc, char *argv[]) {
     window.show();
 
     const int result = app.exec();
+
+    // The local API service is UI-thread owned: shut it down (cancelling any
+    // in-flight requests) before the worker-thread services stop, and delete
+    // it on its owning (UI) thread.
+    auto *local_api_service = window.localApiService();
+    local_api_service->stop();
 
     // Shut down the services on their owning worker thread before quitting.
     QMetaObject::invokeMethod(download_service, &DownloadService::shutdown,
@@ -93,6 +100,7 @@ int main(int argc, char *argv[]) {
     worker_thread.quit();
     worker_thread.wait();
     delete worker_context;
+    delete local_api_service;
     qtrans::log::shutdown();
 
     return result;

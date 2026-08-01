@@ -9,6 +9,13 @@
 
 namespace {
 
+// Valid local API port range. Mirrors the WordSelectPage spinbox range
+// (1024..65535) so a persisted value can never produce an out-of-range or
+// signed-to-quint16-wrapped listen port.
+constexpr int kMinApiPort = 1024;
+constexpr int kMaxApiPort = 65535;
+constexpr int kDefaultApiPort = 8000;
+
 std::string trim(const std::string &value) {
     const auto start = value.find_first_not_of(" \t\r\n");
     if (start == std::string::npos) {
@@ -105,6 +112,18 @@ void AppSettings::load(const AppPaths &paths) {
             wordselect_enabled = (value == "1" || value == "true");
         } else if (key == "close_to_tray") {
             close_to_tray = (value == "1" || value == "true");
+        } else if (key == "api_enabled") {
+            api_enabled = (value == "1" || value == "true");
+        } else if (key == "api_port") {
+            try {
+                std::size_t parsed_chars = 0;
+                const int parsed = std::stoi(value, &parsed_chars);
+                api_port = (parsed_chars == value.size() && parsed >= kMinApiPort && parsed <= kMaxApiPort)
+                               ? parsed
+                               : kDefaultApiPort;
+            } catch (const std::exception &) {
+                api_port = kDefaultApiPort;
+            }
         } else if (key == "batch_source_language") {
             batch_source_language = value;
         } else if (key == "batch_target_language") {
@@ -135,6 +154,8 @@ void AppSettings::save(const AppPaths &paths) const {
     output << "wordselect_target_language=" << wordselect_target_language << '\n';
     output << "wordselect_enabled=" << (wordselect_enabled ? "true" : "false") << '\n';
     output << "close_to_tray=" << (close_to_tray ? "true" : "false") << '\n';
+    output << "api_enabled=" << (api_enabled ? "true" : "false") << '\n';
+    output << "api_port=" << api_port << '\n';
     output << "batch_source_language=" << batch_source_language << '\n';
     output << "batch_target_language=" << batch_target_language << '\n';
     output << "batch_preserve_structure=" << (batch_preserve_structure ? "true" : "false") << '\n';

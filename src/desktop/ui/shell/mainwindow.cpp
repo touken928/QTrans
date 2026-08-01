@@ -4,6 +4,7 @@
 #include "app/batch_controller.h"
 #include "app/download_service.h"
 #include "app/inference_service.h"
+#include "app/local_api_service.h"
 #include "ui/pages/batch/batch_lang_panel.h"
 #include "ui/shared/theme/app_theme.h"
 #include "ui/shared/panels/alert_panel.h"
@@ -41,10 +42,13 @@
 #include <QUrl>
 #include <QVariantMap>
 
+#include <algorithm>
+
 MainWindow::MainWindow(
     InferenceService *inference_service,
     DownloadService *download_service,
     BatchController *batch_controller,
+    LocalApiService *local_api_service,
     QThread *worker_thread,
     const AppPaths &paths,
     QWidget *parent)
@@ -52,6 +56,7 @@ MainWindow::MainWindow(
       inference_service_(inference_service),
       download_service_(download_service),
       batch_controller_(batch_controller),
+      local_api_service_(local_api_service),
       worker_thread_(worker_thread),
       paths_(paths) {
     setWindowTitle(QStringLiteral("QTrans"));
@@ -192,6 +197,8 @@ MainWindow::MainWindow(
     wordselect_page_->setTargetLanguage(qtrans::app::from_utf8(settings_.wordselect_target_language));
     wordselect_page_->setHotkey(hotkeyStr);
     wordselect_page_->setAutoCloseMs(settings_.auto_close_ms);
+    wordselect_page_->setApiEnabled(settings_.api_enabled);
+    wordselect_page_->setApiPort(settings_.api_port);
     connect(wordselect_page_, &WordSelectPage::settingsChanged,
             this, &MainWindow::onWordSelectSettingsChanged);
 
@@ -200,6 +207,9 @@ MainWindow::MainWindow(
     connect(system_tray_, &SystemTray::toggleTranslation,
             session_controller_, &SessionController::setEnabled);
     connect(system_tray_, &SystemTray::quitApp, qApp, &QCoreApplication::quit);
+
+    // Enable the persisted local API service once the UI is fully wired.
+    syncApiService();
 }
 
 MainWindow::~MainWindow() = default;
@@ -208,6 +218,10 @@ void MainWindow::bringToForeground() {
     show();
     raise();
     activateWindow();
+}
+
+LocalApiService *MainWindow::localApiService() const {
+    return local_api_service_;
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {
@@ -274,6 +288,25 @@ void MainWindow::syncSettingsToServices() {
     download_service_->setDownloadRequest(request);
 }
 
+void MainWindow::syncApiService() {
+    if (!settings_.api_enabled) {
+        local_api_service_->stop();
+        return;
+    }
+    // settings_.api_port is validated on load and by the UI spinbox
+    // (1024..65535); clamp defensively so a corrupted value can never wrap a
+    // signed int into an invalid quint16 listener port.
+    const int port = std::clamp(settings_.api_port, 1024, 65535);
+    QString error;
+    const bool started = local_api_service_->start(static_cast<quint16>(port), &error);
+    if (!started) {
+        translate_page_->setStatus(
+            QStringLiteral("Local API failed to start on port %1: %2")
+                .arg(settings_.api_port)
+                .arg(error.isEmpty() ? QStringLiteral("unknown error") : error));
+    }
+}
+
 void MainWindow::syncLanguagesToSettings() {
     const QString source = translate_page_->sourceLanguageName();
     const QString target = translate_page_->targetLanguageName();
@@ -288,12 +321,16 @@ void MainWindow::onWordSelectSettingsChanged() {
     const QString target = wordselect_page_->targetLanguage();
     const QString hotkey = wordselect_page_->hotkey();
     const int auto_close = wordselect_page_->autoCloseMs();
+    const bool api_enabled = wordselect_page_->isApiEnabled();
+    const int api_port = wordselect_page_->apiPort();
 
     settings_.wordselect_enabled = enabled;
     settings_.close_to_tray = close_to_tray;
     settings_.wordselect_target_language = qtrans::app::to_utf8(target);
     settings_.hotkey = qtrans::app::to_utf8(hotkey);
     settings_.auto_close_ms = auto_close;
+    settings_.api_enabled = api_enabled;
+    settings_.api_port = api_port;
     saveSettings();
 
     session_controller_->setEnabled(enabled);
@@ -301,6 +338,7 @@ void MainWindow::onWordSelectSettingsChanged() {
     if (!hotkey.isEmpty()) {
         session_controller_->setHotkey(hotkey);
     }
+    syncApiService();
 }
 
 void MainWindow::saveSettings() {

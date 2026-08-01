@@ -88,12 +88,16 @@ TEST(ModelHost, LifecycleAndAdmissionStatesAreExplicit) {
     EXPECT_EQ(host.snapshot().state, LifecycleState::Unloaded);
 }
 
-TEST(ModelHostPrompt, ProfilesPreserveConversationHistoryAndCapabilityErrors) {
+TEST(ModelHostPrompt, ProfilesPreserveConversationHistoryForAllSupportedModels) {
     host_detail::PromptProfile profile;
-    ASSERT_FALSE(host_detail::select_prompt_profile(ModelId{"hymt2-q4"}, profile));
     ConversationInput conversation{{Message{Role::System, "system"}, Message{Role::User, "first"},
                                     Message{Role::Assistant, "answer"}, Message{Role::User, "second"}}};
     std::string prompt;
+
+    // 1.8B: full history interleaved with the Hy-MT2-1.8B user/assistant
+    // control tokens, ending on the assistant prefix for generation.
+    ASSERT_FALSE(host_detail::select_prompt_profile(ModelId{"hymt2-q4"}, profile));
+    EXPECT_TRUE(profile.supports_conversation);
     ASSERT_FALSE(profile.render(conversation, prompt));
     EXPECT_NE(prompt.find("system"), std::string::npos);
     EXPECT_NE(prompt.find("first"), std::string::npos);
@@ -107,8 +111,20 @@ TEST(ModelHostPrompt, ProfilesPreserveConversationHistoryAndCapabilityErrors) {
                           u8"<\xEF\xBD\x9Chy_User\xEF\xBD\x9C>second" +
                           u8"<\xEF\xBD\x9Chy_Assistant\xEF\xBD\x9C>");
 
+    // 7B: the official multi-turn template — a system turn emits
+    // "<|startoftext|>{content}<|extra_4|>"; the user turn that immediately
+    // follows it continues with "{content}<|extra_0|>" (no second BOS); a
+    // later user turn (e.g. after an assistant turn) emits
+    // "<|startoftext|>{content}<|extra_0|>"; assistant turns emit
+    // "{content}<|eos|>". The final user turn's <|extra_0|> is left as the
+    // generation prompt.
     ASSERT_FALSE(host_detail::select_prompt_profile(ModelId{"hymt2-7b-q4"}, profile));
-    EXPECT_EQ(profile.render(conversation, prompt).code, FailureCode::UnsupportedCapability);
+    EXPECT_TRUE(profile.supports_conversation);
+    ASSERT_FALSE(profile.render(conversation, prompt));
+    EXPECT_EQ(prompt, std::string("<|startoftext|>system<|extra_4|>") +
+                          "first<|extra_0|>" +
+                          "answer<|eos|>" +
+                          "<|startoftext|>second<|extra_0|>");
 }
 
 TEST(ModelHostPrompt, HymtTemplatesMatchEstablishedControlBytes) {
@@ -198,6 +214,51 @@ TEST(ModelHostRuntime, SamplingIsPropagatedAndIncompleteUtf8IsDiscarded) {
     for (const auto &event : log.events) {
         if (const auto *delta = std::get_if<InvocationDelta>(&event)) EXPECT_EQ(delta->text, "€");
     }
+}
+
+TEST(ModelHostRuntime, MultiTokenGenerationCompletesAndPreservesOutput) {
+    // Regression guard for the sampled-token storage fix in
+    // LocalRuntime::generate(): llama_batch_get_one() borrows the pointer to
+    // the last sampled token, so that storage must outlive the next
+    // llama_decode() call. That exact path needs a real llama model, which the
+    // ModelHost hooks cannot reach; here we assert the behavioral contract it
+    // protects: a multi-token completion emits every sampled piece in order
+    // and the terminal result preserves the full output without truncation.
+    std::vector<std::string> deltas;
+    test::ModelHostHooks hooks;
+    hooks.generate = [&deltas](std::string_view, const SamplingOptions &,
+                               const std::function<void(std::string_view)> &on_delta,
+                               const std::function<bool()> &should_stop) {
+        test::TestGeneration result;
+        result.prompt_tokens = 4;
+        result.output_tokens = 0;
+        const char *const pieces[] = {"Hel", "lo", ", wor", "ld!"};
+        for (const char *piece : pieces) {
+            if (should_stop && should_stop()) {
+                result.failure = {FailureCode::Cancelled, "generation cancelled"};
+                return result;
+            }
+            on_delta(piece);
+            deltas.emplace_back(piece);
+            result.output += piece;
+            ++result.output_tokens;
+        }
+        return result;
+    };
+    test::ScopedModelHostHooks scoped_hooks(hooks);
+    ModelHost host;
+    ASSERT_TRUE(host.load({ModelId{"demo"}, {}}));
+    EventLog log;
+    ASSERT_TRUE(host.submit(request(), [&](const InvocationEvent &event) { log.add(event); }));
+    ASSERT_TRUE(log.wait_for_terminal());
+    std::lock_guard lock(log.mutex);
+    const auto &result = std::get<InvocationFinished>(log.events.back()).result;
+    EXPECT_EQ(deltas, std::vector<std::string>({"Hel", "lo", ", wor", "ld!"}));
+    EXPECT_EQ(result.output, "Hello, world!");
+    EXPECT_EQ(result.usage.output_tokens, 4U);
+    EXPECT_EQ(result.usage.input_tokens, 4U);
+    EXPECT_EQ(result.finish_reason, FinishReason::Completed);
+    EXPECT_FALSE(result.failure.has_value());
 }
 
 TEST(ModelHostScheduler, InteractivePreemptsOnlyRunningBatch) {
