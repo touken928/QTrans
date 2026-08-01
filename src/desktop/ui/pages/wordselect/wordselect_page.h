@@ -4,6 +4,7 @@
 
 class QCheckBox;
 class QComboBox;
+class QLabel;
 class QLineEdit;
 class QSpinBox;
 
@@ -18,12 +19,16 @@ public:
     void setTargetLanguage(const QString &model_name);
     void setHotkey(const QString &shortcut);
     void setAutoCloseMs(int ms);
+    void setApiEnabled(bool enabled);
+    void setApiPort(int port);
 
     bool isEnabled() const;
     bool isCloseToTray() const;
     QString targetLanguage() const;
     QString hotkey() const;
     int autoCloseMs() const;
+    bool isApiEnabled() const;
+    int apiPort() const;
 
 signals:
     void settingsChanged();
@@ -34,4 +39,7 @@ private:
     QComboBox *target_lang_combo_ = nullptr;
     QLineEdit *hotkey_edit_ = nullptr;
     QSpinBox *auto_close_spin_ = nullptr;
+    QCheckBox *api_checkbox_ = nullptr;
+    QSpinBox *api_port_spin_ = nullptr;
+    QLabel *api_endpoint_label_ = nullptr;
 };

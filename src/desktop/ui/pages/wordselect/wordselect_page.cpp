@@ -32,6 +32,10 @@ QString modelNameAt(const QComboBox *combo) {
     return qtrans::app::from_utf8(translation_languages()[index].model_name);
 }
 
+QString apiEndpointText(int port) {
+    return QStringLiteral("http://127.0.0.1:%1/v1").arg(port);
+}
+
 }  // namespace
 
 WordSelectPage::WordSelectPage(QWidget *parent)
@@ -127,6 +131,43 @@ WordSelectPage::WordSelectPage(QWidget *parent)
     behavior_form->addRow(auto_close_label, auto_close_spin_);
 
     root->addWidget(behavior_card);
+
+    // ── Local API card ─────────────────────────────────────────────────
+    auto *api_card = new QFrame(this);
+    api_card->setObjectName(QStringLiteral("settingsSection"));
+    auto *api_form = new QFormLayout(api_card);
+    api_form->setContentsMargins(Theme::Space::xl, Theme::Space::lg,
+                                 Theme::Space::xl, Theme::Space::lg);
+    api_form->setSpacing(Theme::Space::md);
+    api_form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+
+    auto *api_title = new QLabel(QStringLiteral("Local API"), api_card);
+    api_title->setObjectName(QStringLiteral("sectionTitle"));
+    api_form->addRow(api_title);
+
+    api_checkbox_ = new QCheckBox(
+        QStringLiteral("Enable local API (exposes an OpenAI-compatible local endpoint)"),
+        api_card);
+    api_form->addRow(QString(), api_checkbox_);
+
+    api_port_spin_ = new QSpinBox(api_card);
+    api_port_spin_->setRange(1024, 65535);
+    api_port_spin_->setValue(8000);
+
+    auto *port_label = new QLabel(QStringLiteral("Port:"), api_card);
+    port_label->setObjectName(QStringLiteral("formLabel"));
+    api_form->addRow(port_label, api_port_spin_);
+
+    api_endpoint_label_ = new QLabel(api_card);
+    api_endpoint_label_->setObjectName(QStringLiteral("statusLabel"));
+    api_endpoint_label_->setText(apiEndpointText(api_port_spin_->value()));
+    api_endpoint_label_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+
+    auto *endpoint_label = new QLabel(QStringLiteral("Endpoint:"), api_card);
+    endpoint_label->setObjectName(QStringLiteral("formLabel"));
+    api_form->addRow(endpoint_label, api_endpoint_label_);
+
+    root->addWidget(api_card);
     root->addStretch(1);
 
     // ── Connections ───────────────────────────────────────────────────
@@ -140,6 +181,15 @@ WordSelectPage::WordSelectPage(QWidget *parent)
             this, &WordSelectPage::settingsChanged);
     connect(auto_close_spin_, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &WordSelectPage::settingsChanged);
+    connect(api_checkbox_, &QCheckBox::toggled,
+            this, &WordSelectPage::settingsChanged);
+    // The API port restarts the local service on settingsChanged, so emit
+    // only on committed edits (Return, arrows + focus-out); the endpoint
+    // label below still tracks the value live while typing.
+    connect(api_port_spin_, &QSpinBox::editingFinished,
+            this, &WordSelectPage::settingsChanged);
+    connect(api_port_spin_, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, [this](int port) { api_endpoint_label_->setText(apiEndpointText(port)); });
 }
 
 void WordSelectPage::setEnabled(bool enabled) {
@@ -183,4 +233,21 @@ QString WordSelectPage::hotkey() const {
 
 int WordSelectPage::autoCloseMs() const {
     return auto_close_spin_->value();
+}
+
+void WordSelectPage::setApiEnabled(bool enabled) {
+    api_checkbox_->setChecked(enabled);
+}
+
+void WordSelectPage::setApiPort(int port) {
+    api_port_spin_->setValue(port);
+    api_endpoint_label_->setText(apiEndpointText(api_port_spin_->value()));
+}
+
+bool WordSelectPage::isApiEnabled() const {
+    return api_checkbox_->isChecked();
+}
+
+int WordSelectPage::apiPort() const {
+    return api_port_spin_->value();
 }

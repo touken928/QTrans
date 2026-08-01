@@ -25,6 +25,7 @@
       "features": [
         "gui",
         "widgets",
+        "network",
         "png"
       ]
     },

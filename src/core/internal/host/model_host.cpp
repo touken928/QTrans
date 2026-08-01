@@ -531,6 +531,11 @@ OperationResult ModelHost::load(const ModelSpec &model) {
         std::lock_guard lock(impl->state_mutex);
         impl->state.state = LifecycleState::Ready;
         impl->state.model = model.id;
+        // Sole source of truth for whether the loaded model accepts
+        // ConversationInput: the resolved prompt profile. Cleared implicitly
+        // by the `LifecycleSnapshot{}` reset on unload/load failure.
+        impl->state.supports_conversation =
+            impl->runtime != nullptr && impl->runtime->profile().supports_conversation;
         return Failure{};
     });
     if (!result) {

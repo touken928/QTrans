@@ -7,6 +7,8 @@ namespace {
 
 constexpr const char k_7b_bos[] = "<|startoftext|>";
 constexpr const char k_7b_end[] = "<|extra_0|>";
+constexpr const char k_7b_extra4[] = "<|extra_4|>";
+constexpr const char k_7b_eos[] = "<|eos|>";
 constexpr const char k_18b_bos[] = u8"<\xEF\xBD\x9Chy_begin\xE2\x96\x81of\xE2\x96\x81sentence\xEF\xBD\x9C>";
 constexpr const char k_18b_user[] = u8"<\xEF\xBD\x9Chy_User\xEF\xBD\x9C>";
 constexpr const char k_18b_assistant[] = u8"<\xEF\xBD\x9Chy_Assistant\xEF\xBD\x9C>";
@@ -72,6 +74,44 @@ Failure PromptProfile::render(const InvocationInput &input, std::string &prompt)
     if (!supports_conversation) return {FailureCode::UnsupportedCapability, "model does not support conversation input"};
     const auto &conversation = std::get<ConversationInput>(input);
     if (conversation.messages.empty()) return {FailureCode::InvalidRequest, "conversation is empty"};
+
+    // Official Hy-MT2-7B multi-turn template: a system turn emits
+    // "<|startoftext|>{content}<|extra_4|>"; the user turn that immediately
+    // follows it continues with "{content}<|extra_0|>" (no second BOS); all
+    // later user turns emit "<|startoftext|>{content}<|extra_0|>"; assistant
+    // turns emit "{content}<|eos|>". The final user turn's "<|extra_0|>" is
+    // left as the generation prompt. No synthetic system content or history
+    // trimming is applied.
+    if (id == PromptProfileId::Hymt2SevenB) {
+        std::string rendered;
+        bool previous_was_system = false;
+        for (const Message &message : conversation.messages) {
+            if (message.content.empty() || role_name(message.role) == nullptr)
+                return {FailureCode::InvalidRequest, "conversation contains an invalid message"};
+            switch (message.role) {
+                case Role::System:
+                    rendered += k_7b_bos;
+                    rendered += message.content;
+                    rendered += k_7b_extra4;
+                    previous_was_system = true;
+                    break;
+                case Role::User:
+                    if (!previous_was_system) rendered += k_7b_bos;
+                    rendered += message.content;
+                    rendered += k_7b_end;
+                    previous_was_system = false;
+                    break;
+                case Role::Assistant:
+                    rendered += message.content;
+                    rendered += k_7b_eos;
+                    previous_was_system = false;
+                    break;
+            }
+        }
+        prompt = std::move(rendered);
+        return {};
+    }
+
     std::ostringstream rendered;
     rendered << k_18b_bos;
     for (const Message &message : conversation.messages) {
@@ -92,7 +132,7 @@ Failure PromptProfile::render(const InvocationInput &input, std::string &prompt)
 
 Failure select_prompt_profile(const ModelId &model, PromptProfile &profile) {
     if (model.value == "hymt2-7b-q4") {
-        profile = {PromptProfileId::Hymt2SevenB, 8192, 1024, false};
+        profile = {PromptProfileId::Hymt2SevenB, 8192, 1024, true};
         return {};
     }
     if (model.value == "hymt2-q4") {

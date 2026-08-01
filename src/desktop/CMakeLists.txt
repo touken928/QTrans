@@ -18,6 +18,8 @@ add_library(qtrans_desktop STATIC
     domain/batch/batch_file_handler.cpp
     app/inference_service.cpp
     app/inference_service.h
+    app/local_api_service.cpp
+    app/local_api_service.h
     app/download_service.cpp
     app/download_service.h
     app/batch_controller.cpp
@@ -26,7 +28,7 @@ add_library(qtrans_desktop STATIC
 )
 
 target_include_directories(qtrans_desktop PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(qtrans_desktop PUBLIC qtrans_core Qt6::Core)
+target_link_libraries(qtrans_desktop PUBLIC qtrans_core Qt6::Core Qt6::Network)
 
 target_link_libraries(qtrans_desktop PUBLIC
     CURL::libcurl
