@@ -42,6 +42,8 @@ SessionController::SessionController(
 
     connect(m_popup, &PopupWindow::dismissed,
             this, &SessionController::onPopupDismissed);
+    connect(m_popup, &PopupWindow::retryRequested,
+            this, &SessionController::onRetryRequested);
 }
 
 void SessionController::initialize() {
@@ -56,25 +58,69 @@ void SessionController::setTranslateLanguages(const QString &source, const QStri
     m_targetLanguage = target;
 }
 
-void SessionController::setHotkey(const QString &shortcut) {
-    m_hotkeyStr = shortcut.trimmed();
-    const QKeySequence ks(m_hotkeyStr);
-    if (ks.isEmpty()) {
+bool SessionController::setHotkey(const QString &shortcut) {
+    const QString new_shortcut = shortcut.trimmed();
+    const QKeySequence new_sequence(new_shortcut);
+    if (new_sequence.isEmpty()) {
         m_hotkeyManager->unregisterHotkey(m_translateHotkeyId);
-        return;
+        m_hotkeyStr.clear();
+        return true;
     }
 
-    const Qt::KeyboardModifiers mods = ks[0].keyboardModifiers();
-    const Qt::Key key = static_cast<Qt::Key>(ks[0].key());
+    // Transactional replacement: the requested shortcut that is already the
+    // active registration is a safe no-op — re-registering it would drop and
+    // re-acquire the same binding for no benefit (and could fail, losing a
+    // working shortcut). If the manager lost the binding while the session
+    // still tracks it (startup failure, unregisterAll, ...), fall through to
+    // an actual registration attempt so the runtime recovers.
+    if (new_shortcut == m_hotkeyStr &&
+        m_hotkeyManager->isRegistered(m_translateHotkeyId)) {
+        return true;
+    }
 
-    m_hotkeyManager->unregisterHotkey(m_translateHotkeyId);
+    const QString previous = m_hotkeyStr;
+    const Qt::KeyboardModifiers mods = new_sequence[0].keyboardModifiers();
+    const Qt::Key key = static_cast<Qt::Key>(new_sequence[0].key());
+
+    // Register the new binding first. The manager replaces the binding for
+    // the same id, so if registration fails the old shortcut must be
+    // re-registered: a failed change must never leave the user without any
+    // working shortcut.
     if (!m_hotkeyManager->registerHotkey(m_translateHotkeyId, mods, key)) {
         wordselect_logger()->warn(
             "failed to register hotkey '{}' (mods={} key={})",
-            qtrans::app::to_utf8(m_hotkeyStr),
+            qtrans::app::to_utf8(new_shortcut),
             static_cast<int>(mods),
             static_cast<int>(key));
+        if (!previous.isEmpty() && previous != new_shortcut) {
+            const QKeySequence previous_sequence(previous);
+            if (!m_hotkeyManager->registerHotkey(
+                    m_translateHotkeyId,
+                    previous_sequence[0].keyboardModifiers(),
+                    static_cast<Qt::Key>(previous_sequence[0].key()))) {
+                wordselect_logger()->error(
+                    "rollback: re-registering previous hotkey '{}' failed",
+                    qtrans::app::to_utf8(previous));
+                // Neither binding is active: report no shortcut rather than
+                // a stale one, so callers never persist a dead value.
+                m_hotkeyStr.clear();
+                return false;
+            }
+            wordselect_logger()->debug(
+                "rollback: restored previous hotkey '{}'",
+                qtrans::app::to_utf8(previous));
+            // m_hotkeyStr already holds the now-active previous binding.
+            return false;
+        }
+        // Nothing to roll back to (the previous registration was the same
+        // shortcut or already gone): report the actual active state, which
+        // is "no shortcut".
+        m_hotkeyStr.clear();
+        return false;
     }
+
+    m_hotkeyStr = new_shortcut;
+    return true;
 }
 
 QString SessionController::hotkey() const {
@@ -174,16 +220,50 @@ void SessionController::doTranslate() {
         qtrans::app::to_utf8(text),
         static_cast<int>(text.size()));
 
-    m_state = PopupState::Translating;
-    m_activeJobId = TranslationJobId{};
-
     NativeTranslationRequest request;
     request.source = qtrans::app::to_utf8(text);
     request.target_language = qtrans::app::to_utf8(m_targetLanguage);
     request.source_language = qtrans::app::to_utf8(m_sourceLanguage);
     request.back_translate = false;
     request.wordselect = true;
-    m_activeJobId = m_inferenceService->translateNative(request);
+    submitRequest(request, text);
+}
+
+void SessionController::submitRequest(const NativeTranslationRequest &request,
+                                      const QString &sourceText) {
+    m_state = PopupState::Translating;
+    m_activeJobId = TranslationJobId{};
+
+    // Retain the request so a failure can offer Retry with the exact same
+    // source and languages.
+    m_lastRequest = request;
+    m_lastSourceText = sourceText;
+    m_hasLastRequest = true;
+
+    m_activeJobId = m_inferenceService->translateNative(m_lastRequest);
+}
+
+void SessionController::onRetryRequested() {
+    wordselect_logger()->debug("retry requested, state={}", static_cast<int>(m_state));
+    if (m_state == PopupState::Translating || m_state == PopupState::Capturing) {
+        // A job is already in flight; a second retry click must not submit
+        // a duplicate that would orphan the active job id.
+        wordselect_logger()->debug("retry ignored: session busy");
+        return;
+    }
+    if (!m_hasLastRequest) {
+        m_popup->showError(QStringLiteral("Nothing to retry."));
+        return;
+    }
+    if (!m_inferenceService->isModelLoaded()) {
+        m_popup->showError(QStringLiteral(
+            "Model not loaded. Open main window and load a model first."));
+        return;
+    }
+
+    // The popup keeps showing; the retried job's start event swaps it to
+    // the loading state with the retained source.
+    submitRequest(m_lastRequest, m_lastSourceText);
 }
 
 void SessionController::onTranslationStarted(TranslationJobId jobId) {
@@ -195,7 +275,7 @@ void SessionController::onTranslationStarted(TranslationJobId jobId) {
     if (jobId != m_activeJobId) {
         return;
     }
-    m_popup->showLoading(QString());
+    m_popup->showLoading(m_lastSourceText);
 #ifdef Q_OS_MACOS
     macRestoreFrontApp();
 #endif
@@ -222,9 +302,13 @@ void SessionController::onTranslationFinished(const TranslationJobResult &result
     if (result.state == TranslationState::Completed) {
         m_popup->finishStreaming();
         m_state = PopupState::Showing;
-    } else if (result.state == TranslationState::Cancelled) {
-        m_popup->hide();
+    } else if (result.state == TranslationState::Cancelled ||
+               result.state == TranslationState::Preempted) {
+        // Reset before hiding: hide() emits dismissed() synchronously, and
+        // the dismissal handler must see an idle session so it never
+        // re-cancels a job that already reached its terminal state.
         resetSession();
+        m_popup->hide();
     } else {
         QString message = QString::fromStdString(result.error_message).trimmed();
         if (message.startsWith(QStringLiteral("Error:"))) {
@@ -239,6 +323,23 @@ void SessionController::onTranslationFinished(const TranslationJobResult &result
 }
 
 void SessionController::onPopupDismissed() {
+    // A visible popup dismissed mid-stream must stop its in-flight job
+    // before session state resets. The state + id checks below are what
+    // keep this from ever cancelling a stale/finished id: resetSession()
+    // (or the terminal-state handler) clears the active id first, and a
+    // finished job only ever leaves the Translating state here.
+    if (m_state == PopupState::Translating && m_activeJobId.is_valid()) {
+        wordselect_logger()->debug(
+            "popup dismissed while translating; cancelling job:{}",
+            m_activeJobId.value);
+        m_inferenceService->cancel(m_activeJobId);
+    }
+#ifdef Q_OS_MACOS
+    // The popup never activates, so normally nothing to restore; this is a
+    // safety net for dismissal before the started event ran the restore
+    // (e.g. Escape pressed while the 50 ms capture delay is pending).
+    macRestoreFrontApp();
+#endif
     resetSession();
 }
 
@@ -254,4 +355,7 @@ bool SessionController::checkDebounce() {
 void SessionController::resetSession() {
     m_state = PopupState::Idle;
     m_activeJobId = TranslationJobId{};
+    m_lastRequest = NativeTranslationRequest{};
+    m_lastSourceText.clear();
+    m_hasLastRequest = false;
 }

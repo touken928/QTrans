@@ -44,6 +44,12 @@ std::int64_t now_epoch_sec() {
         .count();
 }
 
+std::int64_t now_epoch_ms() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+}
+
 // Find entry by id in a vector; returns nullptr if not found.
 const BatchEntry *find_entry(const std::vector<BatchEntry> &entries,
                              const std::string &id) {
@@ -92,6 +98,13 @@ BatchController::BatchController(InferenceService *inferenceService,
 
 void BatchController::loadPersistedEntries() {
     try {
+        // Startup recovery: an interrupted run can leave entries in
+        // Processing (normalize back to Queued, keeping completed segment
+        // checkpoints) or duplicate ids (rewrite to unique ids). Both are
+        // repaired here, before any UI projection is emitted.
+        store_.recover_abandoned_processing();
+        store_.repair_duplicate_ids();
+
         const auto entries = store_.load();
         for (const auto &e : entries) {
             emit entryAdded(QString::fromStdString(e.id),
@@ -116,6 +129,9 @@ void BatchController::loadPersistedEntries() {
                 }
             }
         }
+        // One complete projection so a table UI can populate without
+        // per-entry round trips.
+        emitQueueSnapshot();
     }
     QTRANS_BATCH_BOUNDARY(false)
 }
@@ -142,7 +158,11 @@ void BatchController::addFile(const QString &path,
         }
 
         BatchEntry entry;
-        entry.id = native_path.stem().u8string() + "_" + std::to_string(now_epoch_sec());
+        // Millisecond timestamp plus a monotonic per-controller suffix makes
+        // the durable id collision-resistant: two files with the same stem
+        // enqueued within one second (or even one tick) can never collide.
+        entry.id = native_path.stem().u8string() + "_" +
+                   std::to_string(now_epoch_ms()) + "_" + std::to_string(++id_seq_);
         entry.file.path = native_path;
         entry.file.file_type = type;
         entry.file.segments = std::move(parsed.segments);
@@ -155,6 +175,7 @@ void BatchController::addFile(const QString &path,
         store_.append(entry);
         emit entryAdded(QString::fromStdString(entry.id), source_lang, target_lang);
         emitBatchState();
+        emitQueueSnapshot();
     }
     QTRANS_BATCH_BOUNDARY(false)
 }
@@ -179,6 +200,7 @@ void BatchController::removeEntry(const QString &entry_id) {
         }
         store_.remove(id);
         emit entryRemoved(entry_id);
+        emitQueueSnapshot();
         if (was_active && running_ && !paused_ && !removedActiveEntry_) {
             // No in-flight job to wait for (e.g. entry removed after a
             // preempted/failed run): continue with the remaining queue now.
@@ -249,6 +271,7 @@ void BatchController::saveEntry(const QString &entry_id) {
         writeOutputFile(*entry);
         const auto path = output_path_for(entry->file.path, outputDir_);
         emit entrySaved(entry_id, QString::fromStdString(path.u8string()));
+        emitQueueSnapshot();
     }
     QTRANS_BATCH_BOUNDARY(false)
 }
@@ -288,6 +311,23 @@ void BatchController::saveEntriesToDirectory(const QStringList &entry_ids,
                 ->debug("batch saved to: {} ({} bytes)", out_path.u8string(), text.size());
             emit entrySaved(eid, QString::fromStdString(out_path.u8string()));
         }
+        emitQueueSnapshot();
+    }
+    QTRANS_BATCH_BOUNDARY(false)
+}
+
+// ── Retry ───────────────────────────────────────────────────────────────────
+
+void BatchController::retryEntry(const QString &entry_id) {
+    try {
+        const std::string id = qtrans::app::to_utf8(entry_id);
+        if (store_.reset_for_retry(id)) {
+            emit entryStateChanged(entry_id, static_cast<int>(BatchEntryState::Queued));
+            emitQueueSnapshot();
+            return;
+        }
+        emit errorOccurred(QStringLiteral(
+            "Entry cannot be retried: only failed entries can be re-run"));
     }
     QTRANS_BATCH_BOUNDARY(false)
 }
@@ -382,40 +422,57 @@ QVariantMap BatchController::entryMetadata(const QString &entry_id) const {
         const auto entries = store_.load();
         const auto *e = find_entry(entries, qtrans::app::to_utf8(entry_id));
         if (!e) return m;
-
-        m.insert(QStringLiteral("id"), QString::fromStdString(e->id));
-        m.insert(QStringLiteral("file"),
-                 QString::fromStdString(e->file.path.filename().u8string()));
-        m.insert(QStringLiteral("file_path"),
-                 QString::fromStdString(e->file.path.u8string()));
-        m.insert(QStringLiteral("source"), QString::fromStdString(e->source_language));
-        m.insert(QStringLiteral("target"), QString::fromStdString(e->target_language));
-        m.insert(QStringLiteral("state"), static_cast<int>(e->state));
-
-        int done = 0;
-        for (const auto &seg : e->file.segments) {
-            if (seg.state == BatchSegmentState::Completed) ++done;
-        }
-        m.insert(QStringLiteral("segments_done"), done);
-        m.insert(QStringLiteral("segments_total"), static_cast<int>(e->file.segments.size()));
-
-        const bool completed = (e->state == BatchEntryState::Completed);
-        m.insert(QStringLiteral("completed"), completed);
-
-        if (completed) {
-            const auto path = output_path_for(e->file.path, outputDir_);
-            const bool exists = std::filesystem::exists(path);
-            m.insert(QStringLiteral("saved"), exists);
-            m.insert(QStringLiteral("save_path"),
-                     exists ? QString::fromStdString(path.u8string()) : QString{});
-        } else {
-            m.insert(QStringLiteral("saved"), false);
-            m.insert(QStringLiteral("save_path"), QString{});
-        }
-
-        return m;
+        return snapshotEntry(*e);
     }
     QTRANS_BATCH_QUERY_BOUNDARY(m)
+}
+
+QVariantMap BatchController::snapshotEntry(const BatchEntry &entry) const {
+    QVariantMap m;
+    m.insert(QStringLiteral("id"), QString::fromStdString(entry.id));
+    m.insert(QStringLiteral("file"),
+             QString::fromStdString(entry.file.path.filename().u8string()));
+    m.insert(QStringLiteral("file_path"),
+             QString::fromStdString(entry.file.path.u8string()));
+    m.insert(QStringLiteral("source"), QString::fromStdString(entry.source_language));
+    m.insert(QStringLiteral("target"), QString::fromStdString(entry.target_language));
+    m.insert(QStringLiteral("state"), static_cast<int>(entry.state));
+
+    int done = 0;
+    for (const auto &seg : entry.file.segments) {
+        if (seg.state == BatchSegmentState::Completed) ++done;
+    }
+    m.insert(QStringLiteral("segments_done"), done);
+    m.insert(QStringLiteral("segments_total"), static_cast<int>(entry.file.segments.size()));
+
+    const bool completed = (entry.state == BatchEntryState::Completed);
+    m.insert(QStringLiteral("completed"), completed);
+
+    if (completed) {
+        const auto path = output_path_for(entry.file.path, outputDir_);
+        const bool exists = std::filesystem::exists(path);
+        m.insert(QStringLiteral("saved"), exists);
+        m.insert(QStringLiteral("save_path"),
+                 exists ? QString::fromStdString(path.u8string()) : QString{});
+    } else {
+        m.insert(QStringLiteral("saved"), false);
+        m.insert(QStringLiteral("save_path"), QString{});
+    }
+
+    return m;
+}
+
+void BatchController::emitQueueSnapshot() {
+    try {
+        const auto entries = store_.load();
+        QVariantList list;
+        list.reserve(static_cast<int>(entries.size()));
+        for (const auto &e : entries) {
+            list.append(snapshotEntry(e));
+        }
+        emit queueSnapshot(list);
+    }
+    QTRANS_BATCH_BOUNDARY(false)
 }
 
 // ── Private slots ───────────────────────────────────────────────────────────
@@ -450,6 +507,7 @@ void BatchController::onTranslationFinished(const TranslationJobResult &result) 
             removedActiveEntry_ = false;
             currentJobId_ = TranslationJobId{};
             currentOutputText_.clear();
+            emitQueueSnapshot();
             advanceBatch();
             return;
         }
@@ -507,6 +565,9 @@ void BatchController::onTranslationFinished(const TranslationJobResult &result) 
         }
         if (total > 0) {
             emit segmentProgress(QString::fromStdString(currentEntryId_), done, total);
+            // Project the segment checkpoint immediately; the terminal
+            // snapshot at the end of this slot covers state transitions.
+            emitQueueSnapshot();
         }
 
         const QString error_message = result.error_message.empty()
@@ -568,6 +629,7 @@ void BatchController::onTranslationFinished(const TranslationJobResult &result) 
         }
 
         currentErrorMessage_.clear();
+        emitQueueSnapshot();
     }
     QTRANS_BATCH_BOUNDARY(true)
 }
@@ -655,6 +717,7 @@ void BatchController::advanceBatch() {
         running_ = false;
         emitBatchState();
         emit batchFinished();
+        emitQueueSnapshot();
     }
     QTRANS_BATCH_BOUNDARY(true)
 }
@@ -681,6 +744,9 @@ void BatchController::submitNextSegment(const BatchEntry &entry,
     setEntryState(entry.id, BatchEntryState::Processing);
     emit entryStateChanged(QString::fromStdString(entry.id),
                            static_cast<int>(BatchEntryState::Processing));
+    // Project the Processing transition immediately so the UI never shows a
+    // stale Queued row while the segment runs.
+    emitQueueSnapshot();
 
     currentJobId_ = inferenceService_->translateBatch(request);
 }

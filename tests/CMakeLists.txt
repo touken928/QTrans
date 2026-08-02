@@ -84,3 +84,25 @@ foreach(test_dir IN LISTS QTRANS_TEST_DIRS)
             LABELS "dir:${test_dir}"
     )
 endforeach()
+
+# The batch queue table model lives in the executable target (not the
+# desktop library), so its unit tests compile the model sources directly
+# against the Qt widget-free core/gui modules.
+add_executable(qtrans_tests_batchmodel
+    batchmodel/test_batch_queue_model.cpp
+    ${PROJECT_SOURCE_DIR}/src/desktop/ui/pages/batch/batch_queue_model.cpp
+)
+target_link_libraries(
+    qtrans_tests_batchmodel
+    PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        GTest::gtest
+        GTest::gtest_main
+)
+target_compile_options(qtrans_tests_batchmodel PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(qtrans_tests_batchmodel PRIVATE ${PROJECT_SOURCE_DIR}/src/desktop)
+gtest_discover_tests(qtrans_tests_batchmodel
+    PROPERTIES
+        LABELS "dir:batchmodel"
+)

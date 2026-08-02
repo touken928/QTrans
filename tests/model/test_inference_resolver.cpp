@@ -7,7 +7,7 @@
 namespace {
 
 const ModelCatalogEntry *q4_model() {
-    return find_model_by_id("hymt2-q4");
+    return find_model_by_id("hymt2-1.8b-q4");
 }
 
 }  // namespace

@@ -9,6 +9,7 @@
 #include <QString>
 #include <QStringList>
 #include <QTimer>
+#include <QVariantList>
 #include <QVariantMap>
 
 #include <exception>
@@ -52,6 +53,13 @@ public:
     Q_INVOKABLE void saveEntriesToDirectory(const QStringList &entry_ids,
                                             const QString &dest_dir);
 
+    // ── Retry ────────────────────────────────────────────────────────────
+    // Reset one failed entry back to Queued (its failed segments become
+    // Pending again) so a later batch run re-attempts it. Only entries in
+    // the Failed state transition; anything else is left untouched and an
+    // errorOccurred is emitted instead.
+    Q_INVOKABLE void retryEntry(const QString &entry_id);
+
     // ── Initialisation ───────────────────────────────────────────────────
     // Emit signals for all entries already in the persisted queue so the UI
     // auto-syncs without a manual refresh.  Call once after connecting
@@ -85,6 +93,12 @@ signals:
     void batchFinished();
     void errorOccurred(const QString &message);
 
+    // Complete durable-queue projection, one QVariantMap per entry (same
+    // keys as entryMetadata). Emitted after every mutation so a UI model
+    // can rebuild asynchronously without per-entry blocking round trips;
+    // entries arrive in durable queue order.
+    void queueSnapshot(const QVariantList &entries);
+
 private slots:
     void onTranslationStarted(TranslationJobId job_id);
     void onTranslationDelta(TranslationJobId job_id, TranslationChannel channel,
@@ -98,6 +112,11 @@ private:
     void setEntryState(const std::string &entry_id, BatchEntryState state);
     void writeOutputFile(const BatchEntry &entry);
     void emitBatchState();
+    // Build the UI projection for one entry (shared by entryMetadata and the
+    // queueSnapshot payload).
+    QVariantMap snapshotEntry(const BatchEntry &entry) const;
+    // Load the durable queue and emit queueSnapshot with its full contents.
+    void emitQueueSnapshot();
     // Never let exceptions escape Qt-invokable/slot boundaries: log, stop the
     // batch (state + error signal) when stop_batch is true.
     void handleBoundaryError(bool stop_batch, const char *operation,
@@ -107,6 +126,9 @@ private:
     BatchStore store_;
     std::filesystem::path outputDir_;
     QTimer requeueTimer_;
+    // Monotonic per-controller suffix so entry ids can never collide, even
+    // for the same file stem enqueued twice within one clock tick.
+    std::uint64_t id_seq_ = 0;
 
     bool running_ = false;
     bool paused_ = false;

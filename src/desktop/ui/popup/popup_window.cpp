@@ -1,26 +1,134 @@
 #include "ui/popup/popup_window.h"
 #include "ui/shared/theme/app_theme.h"
+#include "ui/shared/theme/theme.h"
 
 #include <QApplication>
 #include <QClipboard>
 #include <QCursor>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QKeyEvent>
 #include <QLabel>
+#include <QMetaObject>
+#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScreen>
+#include <QShowEvent>
+#include <QStyle>
+#include <QTextCursor>
 #include <QTimer>
 #include <QVBoxLayout>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
+#ifdef Q_OS_MACOS
+#include <ApplicationServices/ApplicationServices.h>
+#include <Carbon/Carbon.h>
+#endif
+
+namespace {
+
+void repolish(QWidget *widget) {
+    if (widget != nullptr && widget->style() != nullptr) {
+        widget->style()->unpolish(widget);
+        widget->style()->polish(widget);
+    }
+}
+
+// ── Escape dismissal listeners ────────────────────────────────────────
+// The popup is non-activating (WA_ShowWithoutActivating + ToolTip window
+// type), so keyboard input normally stays with the front app and Qt key
+// events never reach the popup. While the popup is visible we therefore
+// install a narrowly scoped set of listeners, all removed in hideEvent:
+//  • a Qt application event filter (every platform) — catches Escape when
+//    any QTrans surface has key focus;
+//  • on macOS, a global CGEventTap — gated on the accessibility trust that
+//    word-select already demands; while active, Escape anywhere is
+//    swallowed and dismisses the popup;
+//  • on Windows, a low-level WH_KEYBOARD_LL hook — needs no special
+//    privileges; while active, Escape anywhere is swallowed and dismisses
+//    the popup.
+// The popup's own keyPressEvent remains a last-resort fallback. A modal
+// dialog in the main window keeps its Escape (the listeners pass it
+// through), and the front app is never activated: dismissal only hides the
+// popup, and the session restores the source app on macOS.
+
+// True when our app has a modal surface that should keep its Escape.
+bool modalConsumesEscape() {
+    return QApplication::activeModalWidget() != nullptr;
+}
+
+#ifdef Q_OS_MACOS
+
+CFMachPortRef g_escape_tap_port = nullptr;
+CFRunLoopSourceRef g_escape_tap_source = nullptr;
+PopupWindow *g_escape_tap_owner = nullptr;
+
+CGEventRef escapeTapCallback(CGEventTapProxy proxy, CGEventType type,
+                             CGEventRef event, void *info) {
+    Q_UNUSED(proxy);
+    Q_UNUSED(info);
+    if (type == kCGEventTapDisabledByTimeout ||
+        type == kCGEventTapDisabledByUserInput) {
+        // Re-enable as long as the popup still owns the tap.
+        if (g_escape_tap_port != nullptr && g_escape_tap_owner != nullptr) {
+            CGEventTapEnable(g_escape_tap_port, true);
+        }
+        return event;
+    }
+    if (type == kCGEventKeyDown && !modalConsumesEscape() &&
+        CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) == kVK_Escape) {
+        if (PopupWindow *owner = g_escape_tap_owner) {
+            // Deferred: never mutate Qt state from inside the tap callback.
+            QMetaObject::invokeMethod(owner, [owner]() { owner->dismissByEscape(); }, Qt::QueuedConnection);
+        }
+        // Swallow: while the popup is visible, Escape belongs to it.
+        return nullptr;
+    }
+    return event;
+}
+
+#endif  // Q_OS_MACOS
+
+#ifdef Q_OS_WIN
+
+HHOOK g_escape_hook = nullptr;
+PopupWindow *g_escape_hook_owner = nullptr;
+
+LRESULT CALLBACK escapeHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION && wParam == WM_KEYDOWN && !modalConsumesEscape()) {
+        const auto *kb = reinterpret_cast<const KBDLLHOOKSTRUCT *>(lParam);
+        if (kb->vkCode == VK_ESCAPE) {
+            if (PopupWindow *owner = g_escape_hook_owner) {
+                // Deferred: never mutate Qt state from inside the hook.
+                QMetaObject::invokeMethod(owner, [owner]() { owner->dismissByEscape(); }, Qt::QueuedConnection);
+            }
+            // Swallow: while the popup is visible, Escape belongs to it.
+            return 1;
+        }
+    }
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
+#endif  // Q_OS_WIN
+
+}  // namespace
 
 PopupWindow::PopupWindow(QWidget *parent)
     : QWidget(parent) {
     setWindowFlags(
         Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::ToolTip);
+    // The popup must never steal focus from the front app: it stays
+    // non-activating and keeps the ToolTip window type (which macOS and
+    // Windows both treat as a transient, non-focus-stealing surface).
     setAttribute(Qt::WA_ShowWithoutActivating, true);
     setAttribute(Qt::WA_DeleteOnClose, false);
 
     setMinimumWidth(MIN_WIDTH);
     setMaximumWidth(MAX_WIDTH);
+    setMaximumHeight(MAX_HEIGHT);
 
     setupUI();
 
@@ -34,36 +142,110 @@ void PopupWindow::setupUI() {
     m_frame->setObjectName(QStringLiteral("popupFrame"));
 
     auto *layout = new QVBoxLayout(m_frame);
-    layout->setContentsMargins(14, 12, 14, 8);
-    layout->setSpacing(6);
+    layout->setContentsMargins(14, 10, 14, 8);
+    layout->setSpacing(8);
 
-    m_resultLabel = new QLabel(QStringLiteral(""), m_frame);
-    m_resultLabel->setObjectName(QStringLiteral("popupResult"));
-    m_resultLabel->setWordWrap(true);
-    m_resultLabel->setMaximumWidth(MAX_WIDTH - 28);
-    m_resultLabel->setTextFormat(Qt::PlainText);
-    layout->addWidget(m_resultLabel);
+    // ── Header: title + pin + close ──────────────────────────────────
+    auto *headerRow = new QHBoxLayout();
+    headerRow->setContentsMargins(0, 0, 0, 0);
+    headerRow->setSpacing(4);
 
-    auto *bottomRow = new QHBoxLayout();
-    bottomRow->setContentsMargins(0, 0, 0, 0);
-    bottomRow->setSpacing(8);
+    auto *titleLabel = new QLabel(QStringLiteral("Translation"), m_frame);
+    titleLabel->setObjectName(QStringLiteral("popupTitle"));
+    headerRow->addWidget(titleLabel);
+    headerRow->addStretch(1);
 
-    m_statusLabel = new QLabel(QStringLiteral(""), m_frame);
-    m_statusLabel->setObjectName(QStringLiteral("popupStatus"));
-    bottomRow->addWidget(m_statusLabel, 1);
-
-    m_copyBtn = new QPushButton(QStringLiteral("Copy"), m_frame);
-    m_copyBtn->setObjectName(QStringLiteral("popupCopyBtn"));
-    m_copyBtn->setFixedHeight(22);
-    m_copyBtn->setVisible(false);
-    bottomRow->addWidget(m_copyBtn);
+    m_pinBtn = new QPushButton(QStringLiteral("Pin"), m_frame);
+    m_pinBtn->setObjectName(QStringLiteral("popupPinBtn"));
+    m_pinBtn->setCheckable(true);
+    m_pinBtn->setCursor(Qt::PointingHandCursor);
+    m_pinBtn->setToolTip(QStringLiteral("Keep the popup open"));
+    m_pinBtn->setAccessibleName(QStringLiteral("Pin popup"));
+    headerRow->addWidget(m_pinBtn);
 
     m_closeBtn = new QPushButton(QStringLiteral("\u2715"), m_frame);
     m_closeBtn->setObjectName(QStringLiteral("popupCloseBtn"));
     m_closeBtn->setFixedSize(22, 22);
-    bottomRow->addWidget(m_closeBtn);
+    m_closeBtn->setCursor(Qt::PointingHandCursor);
+    m_closeBtn->setToolTip(QStringLiteral("Close (Esc)"));
+    m_closeBtn->setAccessibleName(QStringLiteral("Close popup"));
+    headerRow->addWidget(m_closeBtn);
 
-    layout->addLayout(bottomRow);
+    layout->addLayout(headerRow);
+
+    // ── Bounded source preview ───────────────────────────────────────
+    auto *sourceBox = new QFrame(m_frame);
+    sourceBox->setObjectName(QStringLiteral("popupSourceBox"));
+    auto *sourceLayout = new QVBoxLayout(sourceBox);
+    sourceLayout->setContentsMargins(8, 6, 8, 6);
+    sourceLayout->setSpacing(2);
+
+    auto *sourceCaption = new QLabel(QStringLiteral("SOURCE"), sourceBox);
+    sourceCaption->setObjectName(QStringLiteral("popupSectionLabel"));
+    sourceLayout->addWidget(sourceCaption);
+
+    m_sourceLabel = new QLabel(sourceBox);
+    m_sourceLabel->setObjectName(QStringLiteral("popupSource"));
+    m_sourceLabel->setWordWrap(true);
+    m_sourceLabel->setTextFormat(Qt::PlainText);
+    m_sourceLabel->setMaximumHeight(56);  // ~3 lines at the compact size
+    m_sourceLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    sourceLayout->addWidget(m_sourceLabel);
+
+    layout->addWidget(sourceBox);
+    m_sourceBox = sourceBox;
+
+    // ── Scrollable translation output ─────────────────────────────────
+    auto *resultHeader = new QHBoxLayout();
+    resultHeader->setContentsMargins(0, 0, 0, 0);
+    resultHeader->setSpacing(4);
+
+    auto *resultCaption = new QLabel(QStringLiteral("RESULT"), m_frame);
+    resultCaption->setObjectName(QStringLiteral("popupSectionLabel"));
+    resultHeader->addWidget(resultCaption);
+    resultHeader->addStretch(1);
+
+    m_copyBtn = new QPushButton(QStringLiteral("Copy"), m_frame);
+    m_copyBtn->setObjectName(QStringLiteral("popupCopyBtn"));
+    m_copyBtn->setCursor(Qt::PointingHandCursor);
+    m_copyBtn->setToolTip(QStringLiteral("Copy the translation"));
+    m_copyBtn->setVisible(false);
+    resultHeader->addWidget(m_copyBtn);
+
+    layout->addLayout(resultHeader);
+
+    m_resultEdit = new QPlainTextEdit(m_frame);
+    m_resultEdit->setObjectName(QStringLiteral("popupResult"));
+    m_resultEdit->setReadOnly(true);
+    m_resultEdit->setTabChangesFocus(true);
+    m_resultEdit->setMaximumHeight(168);  // ~7 lines, scrolls beyond
+    m_resultEdit->setPlaceholderText(QStringLiteral("Translation appears here\u2026"));
+    layout->addWidget(m_resultEdit);
+
+    // ── Status row: dot + text + retry ───────────────────────────────
+    m_statusRow = new QWidget(m_frame);
+    m_statusRow->setObjectName(QStringLiteral("popupStatusRow"));
+    auto *statusLayout = new QHBoxLayout(m_statusRow);
+    statusLayout->setContentsMargins(0, 0, 0, 0);
+    statusLayout->setSpacing(6);
+
+    m_statusDot = new QLabel(m_statusRow);
+    m_statusDot->setObjectName(QStringLiteral("popupStatusDot"));
+    m_statusDot->setFixedSize(Theme::Size::statusDot, Theme::Size::statusDot);
+    statusLayout->addWidget(m_statusDot);
+
+    m_statusLabel = new QLabel(m_statusRow);
+    m_statusLabel->setObjectName(QStringLiteral("popupStatus"));
+    statusLayout->addWidget(m_statusLabel, 1);
+
+    m_retryBtn = new QPushButton(QStringLiteral("Retry"), m_statusRow);
+    m_retryBtn->setObjectName(QStringLiteral("popupRetryBtn"));
+    m_retryBtn->setCursor(Qt::PointingHandCursor);
+    m_retryBtn->setToolTip(QStringLiteral("Retry the failed translation"));
+    m_retryBtn->setVisible(false);
+    statusLayout->addWidget(m_retryBtn);
+
+    layout->addWidget(m_statusRow);
 
     auto *outerLayout = new QVBoxLayout(this);
     outerLayout->setContentsMargins(0, 0, 0, 0);
@@ -74,15 +256,28 @@ void PopupWindow::setupUI() {
 
     connect(m_closeBtn, &QPushButton::clicked, this, &PopupWindow::onCloseClicked);
     connect(m_copyBtn, &QPushButton::clicked, this, &PopupWindow::onCopyClicked);
+    connect(m_retryBtn, &QPushButton::clicked, this, &PopupWindow::onRetryClicked);
+    connect(m_pinBtn, &QPushButton::toggled, this, &PopupWindow::onPinToggled);
+
+    setStatusState(QStringLiteral("idle"));
 }
 
 void PopupWindow::showLoading(const QString &sourceText) {
-    Q_UNUSED(sourceText);
+    // A stale auto-close countdown from a previous presentation must never
+    // hide the popup mid-stream: every new loading presentation starts from
+    // a stopped timer.
+    m_closeTimer->stop();
     m_isStreaming = true;
 
-    m_resultLabel->setText(QStringLiteral("Translating\u2026"));
-    m_statusLabel->setText(QStringLiteral("AI Translating\u2026"));
-    m_copyBtn->setVisible(false);
+    // Bounded source preview: only present when a source was captured.
+    m_sourceLabel->setText(sourceText);
+    m_sourceBox->setVisible(!sourceText.trimmed().isEmpty());
+
+    m_resultEdit->clear();
+    m_retryBtn->setVisible(false);
+    updateCopyButton();
+    setStatusState(QStringLiteral("translating"));
+    m_statusLabel->setText(QStringLiteral("Translating\u2026"));
 
     positionNearCursor();
     show();
@@ -92,32 +287,33 @@ void PopupWindow::showLoading(const QString &sourceText) {
 void PopupWindow::appendChunk(const QString &chunk) {
     if (!m_isStreaming) return;
 
-    QString current = m_resultLabel->text();
-    static const QString placeholder = QStringLiteral("Translating\u2026");
-    if (current == placeholder) {
-        m_resultLabel->setText(chunk);
-    } else {
-        m_resultLabel->setText(current + chunk);
-    }
-    adjustPopupSize();
+    m_resultEdit->moveCursor(QTextCursor::End);
+    m_resultEdit->insertPlainText(chunk);
+    m_resultEdit->moveCursor(QTextCursor::End);
+    m_resultEdit->ensureCursorVisible();
+    updateCopyButton();
 }
 
 void PopupWindow::finishStreaming() {
     if (!m_isStreaming) return;
 
     m_isStreaming = false;
-    m_statusLabel->setText(QStringLiteral("AI Translate"));
-    m_copyBtn->setVisible(true);
-    adjustPopupSize();
+    setStatusState(QStringLiteral("done"));
+    m_statusLabel->setText(QStringLiteral("Done"));
+    updateCopyButton();
     startAutoClose();
 }
 
 void PopupWindow::showError(const QString &message) {
+    // Same stale-timer rule as showLoading: an old countdown must not hide
+    // the fresh error presentation early.
+    m_closeTimer->stop();
     m_isStreaming = false;
 
-    m_resultLabel->setText(message);
-    m_statusLabel->setText(QStringLiteral("Error"));
-    m_copyBtn->setVisible(false);
+    setStatusState(QStringLiteral("error"));
+    m_statusLabel->setText(message);
+    m_retryBtn->setVisible(true);
+    updateCopyButton();
 
     positionNearCursor();
     show();
@@ -136,13 +332,159 @@ bool PopupWindow::isStreaming() const {
     return m_isStreaming;
 }
 
+bool PopupWindow::isPinned() const {
+    return m_pinned;
+}
+
 void PopupWindow::onCloseClicked() {
     m_closeTimer->stop();
     hide();
 }
 
 void PopupWindow::onCopyClicked() {
-    QApplication::clipboard()->setText(m_resultLabel->text());
+    QApplication::clipboard()->setText(m_resultEdit->toPlainText());
+}
+
+void PopupWindow::onRetryClicked() {
+    // The session controller retains the request and resubmits it; the
+    // popup itself just asks. The result area is cleared by showLoading()
+    // when the retried job starts streaming.
+    emit retryRequested();
+}
+
+void PopupWindow::onPinToggled(bool pinned) {
+    m_pinned = pinned;
+    if (pinned) {
+        m_closeTimer->stop();
+        return;
+    }
+    // Unpinning restarts the auto-dismiss only when nothing is running and
+    // the pointer has already left the popup (leaveEvent manages that).
+    if (!m_isStreaming && !underMouse()) {
+        startAutoClose();
+    }
+}
+
+void PopupWindow::dismissByEscape() {
+    if (!isVisible()) {
+        return;
+    }
+    onCloseClicked();
+}
+
+bool PopupWindow::eventFilter(QObject *watched, QEvent *event) {
+    Q_UNUSED(watched);
+    // Narrowly scoped: this filter is installed only while the popup is
+    // visible (showEvent/hideEvent). While visible, Escape dismisses the
+    // popup even when the popup itself does not hold key focus — but a
+    // modal dialog in the main window keeps its Escape.
+    if (event->type() == QEvent::KeyPress && !modalConsumesEscape()) {
+        auto *key_event = static_cast<QKeyEvent *>(event);
+        if (key_event->key() == Qt::Key_Escape) {
+            // Defer: dismissing here would remove this filter from qApp
+            // while Qt is iterating the filter chain.
+            QMetaObject::invokeMethod(this, [this]() { dismissByEscape(); }, Qt::QueuedConnection);
+            return true;
+        }
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
+void PopupWindow::showEvent(QShowEvent *event) {
+    installEscapeMonitors();
+    QWidget::showEvent(event);
+}
+
+void PopupWindow::hideEvent(QHideEvent *event) {
+    m_isStreaming = false;
+    m_closeTimer->stop();
+    uninstallEscapeMonitors();
+    emit dismissed();
+    QWidget::hideEvent(event);
+}
+
+void PopupWindow::installEscapeMonitors() {
+    if (m_escapeMonitorsInstalled) {
+        return;
+    }
+    m_escapeMonitorsInstalled = true;
+    QApplication::instance()->installEventFilter(this);
+
+#ifdef Q_OS_MACOS
+    // The global tap needs the accessibility trust word-select already
+    // requires; without it we fall back to the Qt-level filter only.
+    if (AXIsProcessTrusted() && g_escape_tap_port == nullptr) {
+        g_escape_tap_port = CGEventTapCreate(
+            kCGHIDEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault,
+            CGEventMaskBit(kCGEventKeyDown), &escapeTapCallback, nullptr);
+        if (g_escape_tap_port != nullptr) {
+            g_escape_tap_source = CFMachPortCreateRunLoopSource(
+                kCFAllocatorDefault, g_escape_tap_port, 0);
+            if (g_escape_tap_source != nullptr) {
+                CFRunLoopAddSource(CFRunLoopGetMain(), g_escape_tap_source,
+                                   kCFRunLoopCommonModes);
+            }
+            CGEventTapEnable(g_escape_tap_port, true);
+            g_escape_tap_owner = this;
+        }
+    }
+#endif  // Q_OS_MACOS
+
+#ifdef Q_OS_WIN
+    if (g_escape_hook == nullptr) {
+        g_escape_hook = SetWindowsHookExW(WH_KEYBOARD_LL, &escapeHookProc,
+                                          GetModuleHandleW(nullptr), 0);
+        if (g_escape_hook != nullptr) {
+            g_escape_hook_owner = this;
+        }
+    }
+#endif  // Q_OS_WIN
+}
+
+void PopupWindow::uninstallEscapeMonitors() {
+    if (!m_escapeMonitorsInstalled) {
+        return;
+    }
+    m_escapeMonitorsInstalled = false;
+    QApplication::instance()->removeEventFilter(this);
+
+#ifdef Q_OS_MACOS
+    if (g_escape_tap_owner == this) {
+        g_escape_tap_owner = nullptr;
+        if (g_escape_tap_source != nullptr) {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), g_escape_tap_source,
+                                  kCFRunLoopCommonModes);
+            CFRelease(g_escape_tap_source);
+            g_escape_tap_source = nullptr;
+        }
+        if (g_escape_tap_port != nullptr) {
+            CGEventTapEnable(g_escape_tap_port, false);
+            CFRelease(g_escape_tap_port);
+            g_escape_tap_port = nullptr;
+        }
+    }
+#endif  // Q_OS_MACOS
+
+#ifdef Q_OS_WIN
+    if (g_escape_hook_owner == this) {
+        g_escape_hook_owner = nullptr;
+        if (g_escape_hook != nullptr) {
+            UnhookWindowsHookEx(g_escape_hook);
+            g_escape_hook = nullptr;
+        }
+    }
+#endif  // Q_OS_WIN
+}
+
+void PopupWindow::keyPressEvent(QKeyEvent *event) {
+    // Last-resort fallback: normally the application event filter consumes
+    // Escape before delivery while the popup is visible.
+    if (event->key() == Qt::Key_Escape) {
+        dismissByEscape();
+        event->accept();
+        return;
+    }
+    QWidget::keyPressEvent(event);
 }
 
 void PopupWindow::enterEvent(QEnterEvent *event) {
@@ -151,17 +493,10 @@ void PopupWindow::enterEvent(QEnterEvent *event) {
 }
 
 void PopupWindow::leaveEvent(QEvent *event) {
-    if (!m_isStreaming) {
+    if (!m_isStreaming && !m_pinned) {
         startAutoClose();
     }
     QWidget::leaveEvent(event);
-}
-
-void PopupWindow::hideEvent(QHideEvent *event) {
-    m_isStreaming = false;
-    m_closeTimer->stop();
-    emit dismissed();
-    QWidget::hideEvent(event);
 }
 
 void PopupWindow::positionNearCursor() {
@@ -173,7 +508,7 @@ void PopupWindow::positionNearCursor() {
     if (!screen) return;
 
     const QRect geom = screen->availableGeometry();
-    adjustPopupSize();
+    adjustSize();
 
     const int w = width();
     const int h = height();
@@ -195,9 +530,19 @@ void PopupWindow::positionNearCursor() {
 }
 
 void PopupWindow::startAutoClose() {
+    if (m_pinned) {
+        return;
+    }
     m_closeTimer->start(m_autoCloseMs);
 }
 
-void PopupWindow::adjustPopupSize() {
-    adjustSize();
+void PopupWindow::setStatusState(const QString &state) {
+    m_statusRow->setProperty("popupState", state);
+    repolish(m_statusRow);
+}
+
+void PopupWindow::updateCopyButton() {
+    // Copy is available as soon as text exists — including mid-stream —
+    // and on errors that kept a partial result.
+    m_copyBtn->setVisible(!m_resultEdit->toPlainText().isEmpty());
 }

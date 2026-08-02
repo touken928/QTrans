@@ -96,7 +96,7 @@ TEST(ModelHostPrompt, ProfilesPreserveConversationHistoryForAllSupportedModels) 
 
     // 1.8B: full history interleaved with the Hy-MT2-1.8B user/assistant
     // control tokens, ending on the assistant prefix for generation.
-    ASSERT_FALSE(host_detail::select_prompt_profile(ModelId{"hymt2-q4"}, profile));
+    ASSERT_FALSE(host_detail::select_prompt_profile(ModelId{"hymt2-1.8b-q4"}, profile));
     EXPECT_TRUE(profile.supports_conversation);
     ASSERT_FALSE(profile.render(conversation, prompt));
     EXPECT_NE(prompt.find("system"), std::string::npos);
@@ -131,7 +131,7 @@ TEST(ModelHostPrompt, HymtTemplatesMatchEstablishedControlBytes) {
     const TranslationInput translation{"hello", std::nullopt, LanguageTag{"English"}};
     std::string prompt;
     host_detail::PromptProfile profile;
-    ASSERT_FALSE(host_detail::select_prompt_profile(ModelId{"hymt2-q4"}, profile));
+    ASSERT_FALSE(host_detail::select_prompt_profile(ModelId{"hymt2-1.8b-q4"}, profile));
     ASSERT_FALSE(profile.render(translation, prompt));
     EXPECT_EQ(prompt, std::string(u8"<\xEF\xBD\x9Chy_begin\xE2\x96\x81of\xE2\x96\x81sentence\xEF\xBD\x9C>") +
                           u8"<\xEF\xBD\x9Chy_User\xEF\xBD\x9C>Translate the following segment into English, without additional explanation.\n\nhello" +

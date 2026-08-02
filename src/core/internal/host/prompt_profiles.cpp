@@ -135,7 +135,7 @@ Failure select_prompt_profile(const ModelId &model, PromptProfile &profile) {
         profile = {PromptProfileId::Hymt2SevenB, 8192, 1024, true};
         return {};
     }
-    if (model.value == "hymt2-q4") {
+    if (model.value == "hymt2-1.8b-q4") {
         profile = {PromptProfileId::Hymt2EighteenB, 4096, 1024, true};
         return {};
     }
