@@ -86,7 +86,7 @@ inline constexpr int title = 18;
 
 // ── Widget Dimensions ─────────────────────────────────────────────────
 namespace Size {
-inline constexpr int sidebarWidth = 72;     // icon navigation rail
+inline constexpr int sidebarWidth = 152;    // navigation rail with icon + label
 inline constexpr int statusBarHeight = 32;  // bottom operational status bar
 inline constexpr int navItemHeight = 40;
 inline constexpr int navRailIcon = 20;

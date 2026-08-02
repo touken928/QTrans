@@ -25,6 +25,10 @@ namespace {
 // same path can be tinted for normal, hover, checked, and disabled.
 
 constexpr int kIconSize = Theme::Size::navRailIcon;
+// Brand mark inset from the rail edges: the logo is scaled below the full
+// content width and separated from the nav buttons so it never sits flush
+// against the sidebar border, the top edge, or the buttons below.
+constexpr int kLogoMargin = Theme::Space::lg;
 
 QPainterPath bubblePath() {
     QPainterPath path;
@@ -162,7 +166,7 @@ SidebarWidget::SidebarWidget(QWidget *parent)
     logo_label_->setContentsMargins(0, 0, 0, 0);
     logo_label_->setAccessibleName(QStringLiteral("QTrans"));
     layout->addWidget(logo_label_, 0, Qt::AlignHCenter);
-    layout->addSpacing(Theme::Space::sm);
+    layout->addSpacing(kLogoMargin);
 
     // ── Top navigation group ─────────────────────────────────────────
     auto *nav_group = new QButtonGroup(this);
@@ -206,9 +210,12 @@ SidebarWidget::SidebarWidget(QWidget *parent)
 QToolButton *SidebarWidget::makeNavButton(const QString &text, const QIcon &icon) {
     auto *button = new QToolButton(this);
     button->setObjectName(QStringLiteral("navButton"));
+    button->setText(text);
+    button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     button->setIcon(icon);
     button->setIconSize(QSize(kIconSize, kIconSize));
-    button->setFixedSize(Theme::Size::navItemHeight, Theme::Size::navItemHeight);
+    button->setFixedSize(Theme::Size::sidebarWidth - 2 * Theme::Space::sm,
+                         Theme::Size::navItemHeight);
     button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     button->setCheckable(true);
     button->setCursor(Qt::PointingHandCursor);
@@ -259,7 +266,7 @@ void SidebarWidget::refreshLogo() {
         return;
     }
 
-    const int logo_width = qMax(1, width() - (Theme::Space::sm * 2));
+    const int logo_width = qMax(1, width() - (kLogoMargin * 2));
     const QImage source(QStringLiteral(":/branding/logo.png"));
     if (source.isNull()) {
         logo_label_->setText(QStringLiteral("QTrans"));
