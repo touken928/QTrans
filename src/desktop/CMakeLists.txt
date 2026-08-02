@@ -119,6 +119,8 @@ set(_QT_SOURCES_MAC
     domain/platform/mac/hotkey_manager.cpp
     domain/platform/mac/platform_utils.cpp
     domain/platform/mac/platform_utils.h
+    domain/platform/mac/popup_platform.h
+    domain/platform/mac/popup_platform.mm
 )
 
 add_executable(QTrans ${_QT_SOURCES_COMMON})

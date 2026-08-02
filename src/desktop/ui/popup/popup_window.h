@@ -5,13 +5,19 @@
 class QFrame;
 class QLabel;
 class QPlainTextEdit;
+class QProgressBar;
 class QPushButton;
 class QTimer;
 
 // Word-select result popup. A bounded source preview sits above a
-// scrollable translation output; the status row tints by phase
-// (translating / done / error) and offers Copy while text is available —
-// even mid-stream — plus Retry when a job fails.
+// scrollable translation output. The status footer tints by phase
+// (translating / done / error): while text streams in it carries a slim
+// indeterminate progress indicator beside the phase text, and Copy is
+// offered as soon as text exists — even mid-stream. Failures swap the
+// footer for a soft-tinted error banner (message + Retry) that keeps any
+// partial result visible. Sizing is constrained and responsive: the
+// popup adapts to its content and never exceeds the screen's usable
+// area.
 //
 // Dismissal contract: Escape dismisses whenever the popup is visible, and
 // the close button (and auto-close / pin) complete the affordances. Because
@@ -71,15 +77,22 @@ private:
     void startAutoClose();
     void setStatusState(const QString &state);
     void updateCopyButton();
+    void resetCopyButton();
     void installEscapeMonitors();
     void uninstallEscapeMonitors();
 
     QFrame *m_frame = nullptr;
+    QWidget *m_headerBar = nullptr;
     QFrame *m_sourceBox = nullptr;
     QLabel *m_sourceLabel = nullptr;
+    QWidget *m_resultHeader = nullptr;
     QWidget *m_statusRow = nullptr;
     QLabel *m_statusDot = nullptr;
     QLabel *m_statusLabel = nullptr;
+    QProgressBar *m_progressBar = nullptr;
+    QFrame *m_errorBox = nullptr;
+    QLabel *m_errorIcon = nullptr;
+    QLabel *m_errorLabel = nullptr;
     QPlainTextEdit *m_resultEdit = nullptr;
     QPushButton *m_closeBtn = nullptr;
     QPushButton *m_copyBtn = nullptr;

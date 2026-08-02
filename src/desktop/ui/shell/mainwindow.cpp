@@ -277,13 +277,32 @@ MainWindow::MainWindow(
     if (!persisted_hotkey.isEmpty() &&
         !session_controller_->setHotkey(persisted_hotkey)) {
         const QString active_hotkey = session_controller_->hotkey();
-        settings_.hotkey = qtrans::app::to_utf8(active_hotkey);
-        settings_.save(paths_);
+        // A failed registration must never overwrite the previously
+        // configured shortcut with an empty persisted value: hotkey() only
+        // reports empty when the rollback also failed, and persisting that
+        // would strand the preferences page on an empty field next launch.
+        if (!active_hotkey.isEmpty()) {
+            settings_.hotkey = qtrans::app::to_utf8(active_hotkey);
+            settings_.save(paths_);
+        } else {
+            qtrans::log::get(qtrans::log::Component::App)
+                ->warn(
+                    "hotkey '{}' failed to register and rollback left no "
+                    "active binding; keeping persisted shortcut '{}'",
+                    qtrans::app::to_utf8(persisted_hotkey),
+                    settings_.hotkey);
+        }
         preferences_page_->setHotkey(active_hotkey);
         preferences_page_->setFeedback(
-            QStringLiteral("Could not register the saved shortcut \u201C%1\u201D \u2014 "
-                           "it may already be in use. Reverted to %2.")
-                .arg(persisted_hotkey, active_hotkey),
+            active_hotkey.isEmpty()
+                ? QStringLiteral(
+                      "Could not register the saved shortcut \u201C%1\u201D \u2014 "
+                      "it may already be in use. No shortcut is currently active.")
+                      .arg(persisted_hotkey)
+                : QStringLiteral(
+                      "Could not register the saved shortcut \u201C%1\u201D \u2014 "
+                      "it may already be in use. Reverted to %2.")
+                      .arg(persisted_hotkey, active_hotkey),
             true);
         system_tray_->showMessage(
             QStringLiteral("QTrans"),
@@ -441,9 +460,13 @@ void MainWindow::onWordSelectSettingsChanged() {
         effective_hotkey = session_controller_->hotkey();
         preferences_page_->setHotkey(effective_hotkey);
         preferences_page_->setFeedback(
-            QStringLiteral("Could not register shortcut \u201C%1\u201D \u2014 "
-                           "it may already be in use. Reverted to %2.")
-                .arg(hotkey, effective_hotkey),
+            effective_hotkey.isEmpty()
+                ? QStringLiteral("Could not register shortcut \u201C%1\u201D \u2014 "
+                                 "it may already be in use. No shortcut is currently active.")
+                      .arg(hotkey)
+                : QStringLiteral("Could not register shortcut \u201C%1\u201D \u2014 "
+                                 "it may already be in use. Reverted to %2.")
+                      .arg(hotkey, effective_hotkey),
             true);
         system_tray_->showMessage(
             QStringLiteral("QTrans"),
@@ -457,7 +480,19 @@ void MainWindow::onWordSelectSettingsChanged() {
     settings_.wordselect_enabled = enabled;
     settings_.close_to_tray = close_to_tray;
     settings_.wordselect_target_language = qtrans::app::to_utf8(target);
-    settings_.hotkey = qtrans::app::to_utf8(effective_hotkey);
+    // A failed registration must never overwrite the previously configured
+    // hotkey with an empty persisted value; hotkey() only reports empty when
+    // the rollback also failed, so keep the last known-good value instead.
+    if (!effective_hotkey.isEmpty()) {
+        settings_.hotkey = qtrans::app::to_utf8(effective_hotkey);
+    } else {
+        qtrans::log::get(qtrans::log::Component::App)
+            ->warn(
+                "hotkey '{}' failed to register and rollback left no "
+                "active binding; keeping persisted shortcut '{}'",
+                qtrans::app::to_utf8(hotkey),
+                settings_.hotkey);
+    }
     settings_.auto_close_ms = auto_close;
     settings_.api_enabled = api_enabled;
     settings_.api_port = api_port;

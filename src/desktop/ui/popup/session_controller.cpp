@@ -151,16 +151,19 @@ void SessionController::onHotkeyTriggered(int hotkeyId) {
 
     wordselect_logger()->debug("hotkey triggered, state={}", static_cast<int>(m_state));
 
-    if (m_state == PopupState::Capturing) {
-        wordselect_logger()->debug("already capturing, ignoring");
-        return;
-    }
-
     if (m_state == PopupState::Translating) {
         wordselect_logger()->debug("cancelling current translation");
-        if (m_activeJobId.is_valid()) {
-            m_inferenceService->cancel(m_activeJobId);
-        }
+        // Invalidate before the cancel/reset so nothing from the session
+        // being replaced can re-enter afterwards.
+        invalidateSession();
+        cancelActiveJob();
+        resetSession();
+    } else if (m_state == PopupState::CaptureScheduled ||
+               m_state == PopupState::Capturing) {
+        // A newer hotkey supersedes a pending or in-flight capture: reset
+        // the session (which bumps the token) so the stale capture's timer
+        // callback rejects itself, then schedule a fresh capture below.
+        wordselect_logger()->debug("new hotkey supersedes pending capture");
         resetSession();
     }
 
@@ -173,7 +176,11 @@ void SessionController::onHotkeyTriggered(int hotkeyId) {
         return;
     }
 
-    m_state = PopupState::Capturing;
+    // Begin a fresh capture session. The token bump is what lets the
+    // scheduled timer callback (and any capture already pumping the event
+    // loop) tell this session apart from an older one.
+    invalidateSession();
+    m_state = PopupState::CaptureScheduled;
 #ifdef Q_OS_MACOS
     macSaveFrontApp();
 #endif
@@ -181,12 +188,19 @@ void SessionController::onHotkeyTriggered(int hotkeyId) {
 }
 
 void SessionController::doTranslate() {
-    if (m_state != PopupState::Capturing) {
+    // Timer callback for the capture scheduled by the last hotkey. Snapshot
+    // the session token now: clipboard capture pumps the Qt event loop, so
+    // the session may be dismissed or superseded while we are inside it, and
+    // a stale capture must never submit a translation.
+    const std::uint64_t token = m_sessionToken;
+    if (m_state != PopupState::CaptureScheduled) {
         wordselect_logger()->debug(
-            "doTranslate: not capturing (state={}), skipping",
+            "doTranslate: no capture scheduled (state={}), skipping",
             static_cast<int>(m_state));
         return;
     }
+
+    m_state = PopupState::Capturing;
 
     wordselect_logger()->debug("capturing clipboard text");
 #ifdef Q_OS_MACOS
@@ -195,7 +209,6 @@ void SessionController::doTranslate() {
         m_popup->showError(QStringLiteral(
             "Accessibility permission is required to copy selected text. "
             "Enable QTrans in System Settings \u2192 Privacy & Security \u2192 Accessibility, then try again."));
-        m_state = PopupState::Showing;
         resetSession();
         return;
     }
@@ -205,12 +218,23 @@ void SessionController::doTranslate() {
 #endif
 
     const QString text = ClipboardCapture::captureSelectedText(500);
+    // The capture pumped the Qt event loop: the session may have been reset
+    // (popup dismissed) or superseded (newer hotkey) meanwhile. Reject the
+    // stale capture by state and token before submitting anything.
+    if (m_state != PopupState::Capturing || token != m_sessionToken) {
+        wordselect_logger()->debug(
+            "doTranslate: stale capture (state={}, token {} != {}), discarding",
+            static_cast<int>(m_state),
+            token,
+            m_sessionToken);
+        return;
+    }
+
     if (text.isEmpty()) {
         wordselect_logger()->warn("captured text is empty, resetting session");
         m_popup->showError(QStringLiteral(
             "Could not copy selected text. Select text in the front app first, "
             "then press the shortcut again."));
-        m_state = PopupState::Showing;
         resetSession();
         return;
     }
@@ -231,6 +255,11 @@ void SessionController::doTranslate() {
 
 void SessionController::submitRequest(const NativeTranslationRequest &request,
                                       const QString &sourceText) {
+    // A new request replaces the retained one: invalidate the session token
+    // first so any pending capture timer or job signal from an earlier
+    // session is rejected from here on.
+    invalidateSession();
+    m_jobToken = m_sessionToken;
     m_state = PopupState::Translating;
     m_activeJobId = TranslationJobId{};
 
@@ -245,9 +274,12 @@ void SessionController::submitRequest(const NativeTranslationRequest &request,
 
 void SessionController::onRetryRequested() {
     wordselect_logger()->debug("retry requested, state={}", static_cast<int>(m_state));
-    if (m_state == PopupState::Translating || m_state == PopupState::Capturing) {
-        // A job is already in flight; a second retry click must not submit
-        // a duplicate that would orphan the active job id.
+    if (m_state == PopupState::Translating ||
+        m_state == PopupState::CaptureScheduled ||
+        m_state == PopupState::Capturing) {
+        // A job is already in flight (or a capture is pending that will
+        // submit one); a second retry click must not submit a duplicate
+        // that would orphan the active job id.
         wordselect_logger()->debug("retry ignored: session busy");
         return;
     }
@@ -267,14 +299,13 @@ void SessionController::onRetryRequested() {
 }
 
 void SessionController::onTranslationStarted(TranslationJobId jobId) {
-    if (m_state != PopupState::Translating) {
+    if (m_state != PopupState::Translating ||
+        m_jobToken != m_sessionToken ||
+        jobId != m_activeJobId) {
         return;
     }
     // The active job id is the synchronously returned value from
     // translateNative(); ignore started events from unrelated jobs.
-    if (jobId != m_activeJobId) {
-        return;
-    }
     m_popup->showLoading(m_lastSourceText);
 #ifdef Q_OS_MACOS
     macRestoreFrontApp();
@@ -284,7 +315,9 @@ void SessionController::onTranslationStarted(TranslationJobId jobId) {
 void SessionController::onTranslationDelta(TranslationJobId jobId,
                                            TranslationChannel channel,
                                            const QString &piece) {
-    if (jobId != m_activeJobId || m_state != PopupState::Translating) {
+    if (m_state != PopupState::Translating ||
+        m_jobToken != m_sessionToken ||
+        jobId != m_activeJobId) {
         return;
     }
     if (channel != TranslationChannel::Target) {
@@ -295,7 +328,7 @@ void SessionController::onTranslationDelta(TranslationJobId jobId,
 }
 
 void SessionController::onTranslationFinished(const TranslationJobResult &result) {
-    if (result.id != m_activeJobId) {
+    if (m_jobToken != m_sessionToken || result.id != m_activeJobId) {
         return;
     }
 
@@ -323,17 +356,32 @@ void SessionController::onTranslationFinished(const TranslationJobResult &result
 }
 
 void SessionController::onPopupDismissed() {
+    // While a capture is scheduled or in flight, a dismissal belongs to the
+    // prior popup presentation being auto-closed during the clipboard
+    // capture event pump, not to the capture session. Ignore it: the new
+    // capture must not be invalidated, reset, or cancelled, or its
+    // translation would never surface — the capture flow re-shows the popup
+    // once the translation starts.
+    if (m_state == PopupState::CaptureScheduled ||
+        m_state == PopupState::Capturing) {
+        wordselect_logger()->debug(
+            "popup dismissed during capture (state={}), ignoring",
+            static_cast<int>(m_state));
+        return;
+    }
+
+    // Invalidate the session before anything else: a capture may be in
+    // flight (clipboard capture pumps the Qt event loop), and once the pump
+    // unwinds the stale capture must not submit. The invalidation also keeps
+    // job signals from the cancelled work out of any newer session.
+    invalidateSession();
+
     // A visible popup dismissed mid-stream must stop its in-flight job
     // before session state resets. The state + id checks below are what
     // keep this from ever cancelling a stale/finished id: resetSession()
     // (or the terminal-state handler) clears the active id first, and a
     // finished job only ever leaves the Translating state here.
-    if (m_state == PopupState::Translating && m_activeJobId.is_valid()) {
-        wordselect_logger()->debug(
-            "popup dismissed while translating; cancelling job:{}",
-            m_activeJobId.value);
-        m_inferenceService->cancel(m_activeJobId);
-    }
+    cancelActiveJob();
 #ifdef Q_OS_MACOS
     // The popup never activates, so normally nothing to restore; this is a
     // safety net for dismissal before the started event ran the restore
@@ -352,7 +400,24 @@ bool SessionController::checkDebounce() {
     return true;
 }
 
+std::uint64_t SessionController::invalidateSession() {
+    return ++m_sessionToken;
+}
+
+bool SessionController::cancelActiveJob() {
+    if (m_state != PopupState::Translating || !m_activeJobId.is_valid()) {
+        return false;
+    }
+    wordselect_logger()->debug(
+        "cancelling job:{}", m_activeJobId.value);
+    m_inferenceService->cancel(m_activeJobId);
+    return true;
+}
+
 void SessionController::resetSession() {
+    // Bump the token first: any timer callback or job signal still carrying
+    // this session's generation must reject itself from here on.
+    invalidateSession();
     m_state = PopupState::Idle;
     m_activeJobId = TranslationJobId{};
     m_lastRequest = NativeTranslationRequest{};

@@ -7,6 +7,11 @@
 #include <QCoreApplication>
 
 namespace {
+// Sentinel for "no physical key code produces this Qt key" — never a real
+// Carbon virtual key code (kVK codes are 0..127), unlike 0 which is
+// kVK_ANSI_A and would silently rebind any unmapped key to "A".
+constexpr UInt32 kInvalidCarbonKeyCode = static_cast<UInt32>(-1);
+
 EventHandlerUPP gHotkeyHandlerUPP = nullptr;
 EventHandlerRef gHotkeyHandlerRef = nullptr;
 
@@ -54,6 +59,12 @@ bool HotkeyManager::registerHotkey(int id, Qt::KeyboardModifiers modifiers, Qt::
 
     const UInt32 mod = carbonModifiers(modifiers);
     const UInt32 vk = carbonKey(key);
+    if (vk == kInvalidCarbonKeyCode) {
+        qtrans::log::get(qtrans::log::Component::WordSelect)
+            ->error("unsupported key for hotkey id={} qtKey=0x{:x}", id,
+                    static_cast<unsigned>(key));
+        return false;
+    }
 
     EventHotKeyID hotkeyId{};
     hotkeyId.signature = FOUR_CHAR_CODE('QTrs');
@@ -118,11 +129,13 @@ bool HotkeyManager::nativeEventFilter(const QByteArray &eventType, void * /*mess
 
 UInt32 HotkeyManager::carbonModifiers(Qt::KeyboardModifiers modifiers) {
     UInt32 mod = 0;
-    // Match Qt semantics: Control = physical Control, Meta = Command (⌘).
-    // Previously Control was mapped to cmdKey, so default "Ctrl+`" became Cmd+`
-    // and conflicted with the system "cycle windows" shortcut.
+    // Qt on Apple platforms maps the Command (⌘) key to Qt::ControlModifier
+    // and the physical Control (⌃) key to Qt::MetaModifier (the default,
+    // without AA_MacDontSwapCtrlAndMeta). A portable sequence like "Ctrl+`"
+    // therefore means Command+` on macOS. Register the physical keys the user
+    // actually presses so the displayed shortcut and the trigger match.
     if (modifiers & Qt::ControlModifier) {
-        mod |= controlKey;
+        mod |= cmdKey;
     }
     if (modifiers & Qt::ShiftModifier) {
         mod |= shiftKey;
@@ -131,7 +144,7 @@ UInt32 HotkeyManager::carbonModifiers(Qt::KeyboardModifiers modifiers) {
         mod |= optionKey;
     }
     if (modifiers & Qt::MetaModifier) {
-        mod |= cmdKey;
+        mod |= controlKey;
     }
     return mod;
 }
@@ -267,5 +280,5 @@ UInt32 HotkeyManager::carbonKey(Qt::Key key) {
         default:
             break;
     }
-    return 0;
+    return kInvalidCarbonKeyCode;
 }
