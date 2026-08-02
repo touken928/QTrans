@@ -100,12 +100,14 @@ TEST_F(AppSettingsTest, LoadSkipsCommentsAndBlankLines) {
         << "\n"
         << "hotkey=Ctrl+Alt+Z\n"
         << "   # indented comment\n"
-        << "auto_close_ms=42\n";
+        << "auto_close_ms=2500\n";
 
     AppSettings settings;
     settings.load(paths_);
     EXPECT_EQ(settings.hotkey, "Ctrl+Alt+Z");
-    EXPECT_EQ(settings.auto_close_ms, 42);
+    // 2500 sits inside the validated 1000..30000 auto-close range, so the
+    // parse must accept it (out-of-range values fall back to the default).
+    EXPECT_EQ(settings.auto_close_ms, 2500);
 }
 
 TEST_F(AppSettingsTest, LoadTrimsWhitespaceAroundKeysAndValues) {
@@ -171,9 +173,9 @@ TEST_F(AppSettingsTest, EffectiveModelsDirAbsoluteUsedAsIs) {
 TEST_F(AppSettingsTest, EffectiveModelPathJoinsSelectedModelFilename) {
     AppSettings s;
     s.models_dir = "/abs/models";
-    s.model_id = "hymt2-q4";
+    s.model_id = "hymt2-1.8b-q4";
     const std::string path = s.effectiveModelPath(paths_);
-    EXPECT_EQ(path, std::string("/abs/models/") + find_model_by_id("hymt2-q4")->filename);
+    EXPECT_EQ(path, std::string("/abs/models/") + find_model_by_id("hymt2-1.8b-q4")->filename);
 }
 
 TEST_F(AppSettingsTest, SetEffectiveModelsDirClearsWhenMatchingDefault) {
@@ -235,7 +237,7 @@ TEST_F(AppSettingsTest, LegacyModelPathMigrationSetsModelsDir) {
     AppSettings s;
     s.load(paths_);
     EXPECT_EQ(s.models_dir, "/legacy/dir");
-    EXPECT_EQ(s.model_id, "hymt2-q4");
+    EXPECT_EQ(s.model_id, "hymt2-1.8b-q4");
 }
 
 TEST_F(AppSettingsTest, LegacyModelPathMigrationPreservesExistingModelsDir) {
@@ -347,5 +349,65 @@ TEST_F(AppSettingsTest, ApiPortBoundaryValuesAreAccepted) {
         AppSettings s;
         s.load(paths_);
         EXPECT_EQ(s.api_port, 65535);
+    }
+}
+
+TEST_F(AppSettingsTest, AutoCloseMsMalformedResetsToDefault) {
+    paths_.ensureDirectories();
+    {
+        std::ofstream(paths_.settings_file) << "auto_close_ms=not-a-number\n";
+        AppSettings s;
+        s.load(paths_);
+        EXPECT_EQ(s.auto_close_ms, 5000);
+    }
+    {
+        std::ofstream(paths_.settings_file) << "auto_close_ms=\n";
+        AppSettings s;
+        s.load(paths_);
+        EXPECT_EQ(s.auto_close_ms, 5000);
+    }
+    {
+        std::ofstream(paths_.settings_file) << "auto_close_ms=2500junk\n";
+        AppSettings s;
+        s.load(paths_);
+        EXPECT_EQ(s.auto_close_ms, 5000);
+    }
+}
+
+TEST_F(AppSettingsTest, AutoCloseMsOutOfRangeResetsToDefault) {
+    paths_.ensureDirectories();
+    {
+        std::ofstream(paths_.settings_file) << "auto_close_ms=999\n";  // below 1000
+        AppSettings s;
+        s.load(paths_);
+        EXPECT_EQ(s.auto_close_ms, 5000);
+    }
+    {
+        std::ofstream(paths_.settings_file) << "auto_close_ms=30001\n";  // above 30000
+        AppSettings s;
+        s.load(paths_);
+        EXPECT_EQ(s.auto_close_ms, 5000);
+    }
+    {
+        std::ofstream(paths_.settings_file) << "auto_close_ms=-1\n";
+        AppSettings s;
+        s.load(paths_);
+        EXPECT_EQ(s.auto_close_ms, 5000);
+    }
+}
+
+TEST_F(AppSettingsTest, AutoCloseMsBoundaryValuesAreAccepted) {
+    paths_.ensureDirectories();
+    {
+        std::ofstream(paths_.settings_file) << "auto_close_ms=1000\n";
+        AppSettings s;
+        s.load(paths_);
+        EXPECT_EQ(s.auto_close_ms, 1000);
+    }
+    {
+        std::ofstream(paths_.settings_file) << "auto_close_ms=30000\n";
+        AppSettings s;
+        s.load(paths_);
+        EXPECT_EQ(s.auto_close_ms, 30000);
     }
 }

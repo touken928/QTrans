@@ -435,9 +435,12 @@ void InferenceService::unloadModel() {
     }
     emit statusChanged(QStringLiteral("Unloading model"), true);
     const auto result = host_.unload();
-    // Terminal nonbusy status for both success and failure.
+    // Terminal nonbusy status and a terminal result for both success and
+    // failure so consumers can never remain in a lifecycle busy state after
+    // the unload attempt.
     emit statusChanged(QStringLiteral("Ready"), false);
-    if (result) emit modelUnloadFinished();
+    emit modelUnloadFinished(static_cast<bool>(result),
+                             qtrans::app::from_utf8(result.failure.message));
 }
 
 void InferenceService::shutdown() {

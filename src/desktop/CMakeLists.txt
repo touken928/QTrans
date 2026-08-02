@@ -62,6 +62,13 @@ set(_QT_SOURCES_COMMON
     domain/platform/single_instance/single_instance.h
     ui/shell/mainwindow.cpp
     ui/shell/mainwindow.h
+    ui/shell/page_id.h
+    ui/shell/shell_status_bar.cpp
+    ui/shell/shell_status_bar.h
+    ui/shell/model_unavailable_banner.cpp
+    ui/shell/model_unavailable_banner.h
+    ui/shell/preferences_page.cpp
+    ui/shell/preferences_page.h
     ui/shared/modal_overlay.cpp
     ui/shared/modal_overlay.h
     ui/shared/panels/alert_panel.cpp
@@ -76,18 +83,18 @@ set(_QT_SOURCES_COMMON
     ui/shared/panels/model_missing_panel.h
     ui/pages/models/model_page.cpp
     ui/pages/models/model_page.h
+    ui/pages/models/model_row.cpp
+    ui/pages/models/model_row.h
     ui/sidebar/sidebar_widget.cpp
     ui/sidebar/sidebar_widget.h
     ui/pages/translate/translate_page.cpp
     ui/pages/translate/translate_page.h
-    ui/pages/wordselect/wordselect_page.cpp
-    ui/pages/wordselect/wordselect_page.h
     ui/pages/batch/batch_page.cpp
     ui/pages/batch/batch_page.h
-    ui/pages/batch/batch_card.cpp
-    ui/pages/batch/batch_card.h
-    ui/pages/batch/batch_lang_panel.cpp
-    ui/pages/batch/batch_lang_panel.h
+    ui/pages/batch/batch_queue_model.cpp
+    ui/pages/batch/batch_queue_model.h
+    ui/pages/batch/batch_table_view.cpp
+    ui/pages/batch/batch_table_view.h
     ui/shared/widget_utils.cpp
     ui/shared/widget_utils.h
     ui/popup/popup_window.cpp

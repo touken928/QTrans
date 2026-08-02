@@ -1,20 +1,20 @@
 #include "ui/shell/mainwindow.h"
 
+#include "ui/shell/model_unavailable_banner.h"
+#include "ui/shell/preferences_page.h"
+#include "ui/shell/shell_status_bar.h"
 #include "ui/shared/modal_overlay.h"
 #include "app/batch_controller.h"
 #include "app/download_service.h"
 #include "app/inference_service.h"
 #include "app/local_api_service.h"
-#include "ui/pages/batch/batch_lang_panel.h"
 #include "ui/shared/theme/app_theme.h"
 #include "ui/shared/panels/alert_panel.h"
 #include "ui/shared/panels/download_progress_panel.h"
-#include "ui/shared/panels/model_missing_panel.h"
 #include "ui/pages/batch/batch_page.h"
 #include "ui/pages/models/model_page.h"
 #include "ui/sidebar/sidebar_widget.h"
 #include "ui/pages/translate/translate_page.h"
-#include "ui/pages/wordselect/wordselect_page.h"
 #include "domain/batch/batch_enums.h"
 #include "domain/download/download.h"
 #include "domain/model-catalog/model_catalog.h"
@@ -29,9 +29,7 @@
 
 #include <QCloseEvent>
 #include <QCoreApplication>
-#include <QDesktopServices>
 #include <QFile>
-#include <QFileDialog>
 #include <QHBoxLayout>
 #include <QMessageBox>
 #include <QMetaObject>
@@ -39,8 +37,7 @@
 #include <QShowEvent>
 #include <QStackedWidget>
 #include <QThread>
-#include <QUrl>
-#include <QVariantMap>
+#include <QVBoxLayout>
 
 #include <algorithm>
 
@@ -71,38 +68,87 @@ MainWindow::MainWindow(
 
     central_root_ = new QWidget(this);
     central_root_->setObjectName(QStringLiteral("centralRoot"));
-    auto *shell = new QHBoxLayout(central_root_);
+    // Root stacks the shell row above the full-width operational band.
+    auto *root = new QVBoxLayout(central_root_);
+    root->setContentsMargins(0, 0, 0, 0);
+    root->setSpacing(0);
+
+    // ── Shell row: sidebar + content column ───────────────────────────
+    auto *shell = new QHBoxLayout();
     shell->setContentsMargins(0, 0, 0, 0);
     shell->setSpacing(0);
 
     sidebar_ = new SidebarWidget(central_root_);
     shell->addWidget(sidebar_);
 
-    translate_page_ = new TranslatePage(central_root_);
-    model_page_ = new ModelPage(central_root_);
-    model_page_->setSettings(paths_, settings_);
-    wordselect_page_ = new WordSelectPage(central_root_);
-    batch_page_ = new BatchPage(central_root_);
+    // ── Content column: banner + page stack ───────────────────────────
+    content_column_ = new QWidget(central_root_);
+    auto *column = new QVBoxLayout(content_column_);
+    column->setContentsMargins(0, 0, 0, 0);
+    column->setSpacing(0);
 
-    content_stack_ = new QStackedWidget(central_root_);
-    content_stack_->addWidget(translate_page_);   // index 0
-    content_stack_->addWidget(wordselect_page_);  // index 1
-    content_stack_->addWidget(batch_page_);       // index 2
-    content_stack_->addWidget(model_page_);       // index 3
-    shell->addWidget(content_stack_, 1);
+    model_banner_ = new ModelUnavailableBanner(content_column_);
+    column->addWidget(model_banner_);
+
+    translate_page_ = new TranslatePage(content_column_);
+    model_page_ = new ModelPage(content_column_);
+    model_page_->setSettings(paths_, settings_);
+    batch_page_ = new BatchPage(content_column_);
+
+    // Preferences owns its settings controls directly; Word Select is a
+    // section inside it, not a hosted page.
+    preferences_page_ = new PreferencesPage(content_column_);
+
+    content_stack_ = new QStackedWidget(content_column_);
+    content_stack_->addWidget(translate_page_);    // PageId::Translate
+    content_stack_->addWidget(batch_page_);        // PageId::Documents
+    content_stack_->addWidget(model_page_);        // PageId::Models
+    content_stack_->addWidget(preferences_page_);  // PageId::Preferences
+    column->addWidget(content_stack_, 1);
+
+    shell->addWidget(content_column_, 1);
+    root->addLayout(shell, 1);
+
+    // ── Full-width operational band, below the shell row ──────────────
+    // The status bar spans the complete window width — including under the
+    // sidebar — so it reads as the workbench's bottom edge, not a piece of
+    // the content column.
+    status_bar_ = new ShellStatusBar(central_root_);
+    root->addWidget(status_bar_);
 
     setCentralWidget(central_root_);
     AppTheme::apply(this);
 
     modal_ = new ModalOverlay(central_root_);
-    switchPage(0);
+    switchPage(PageId::Translate);
 
     connect(sidebar_, &SidebarWidget::pageSelected, this, &MainWindow::onPageSelected);
+
+    // ── Unavailable-model banner (nonmodal, shell-controlled) ─────────
+    connect(model_banner_, &ModelUnavailableBanner::downloadRequested,
+            this, &MainWindow::startDownloadAndLoad);
+    connect(model_banner_, &ModelUnavailableBanner::loadRequested,
+            this, &MainWindow::startLoadModel);
+    connect(model_banner_, &ModelUnavailableBanner::modelsRequested,
+            this, [this]() { switchPage(PageId::Models); });
+    connect(model_banner_, &ModelUnavailableBanner::dismissed,
+            this, [this]() {
+                // Dismissal is scoped to this configured model + availability
+                // episode (file missing vs present), so a later, different
+                // need for the same or another model still surfaces.
+                dismissed_banner_model_id_ = qtrans::app::from_utf8(settings_.model_id);
+                dismissed_banner_file_missing_ =
+                    !download_file_exists(settings_.effectiveModelPath(paths_));
+                model_banner_->hide();
+            });
+
     connect(model_page_, &ModelPage::loadModelRequested, this, [this](const QString &model_id) {
         settings_.setSelectedModelId(qtrans::app::to_utf8(model_id));
         applySettingsFromPage();
         onLoadModelFromPage();
     });
+    connect(model_page_, &ModelPage::downloadModelRequested,
+            this, &MainWindow::onDownloadModelFromPage);
     connect(model_page_, &ModelPage::unloadModelRequested, this, [this](const QString &model_id) {
         if (model_id == loaded_model_id_ || model_id.isEmpty()) {
             onUnloadModelFromPage();
@@ -110,6 +156,15 @@ MainWindow::MainWindow(
     });
     connect(model_page_, &ModelPage::deleteModelRequested, this, [this](const QString &model_id) {
         onDeleteModelForId(model_id);
+    });
+    connect(model_page_, &ModelPage::cancelDownloadRequested, this, [this]() {
+        // Cancelling is only ever offered for the single correlated active
+        // download; stale ids cannot reach this slot.
+        if (active_download_id_.is_valid()) {
+            awaiting_download_load_ = false;
+            hideModal();
+            download_service_->cancel(active_download_id_);
+        }
     });
     connect(model_page_, &ModelPage::modelEdited, this, &MainWindow::applySettingsFromPage);
     connect(translate_page_, &TranslatePage::translateRequested, this, &MainWindow::onTranslateRequested);
@@ -129,41 +184,41 @@ MainWindow::MainWindow(
     // ── Batch page wiring (batch controller lives on worker thread;
     //     use queued invocations for UI→worker calls) ─────────────────────
     connect(batch_page_, &BatchPage::addFilesRequested,
-            this, &MainWindow::onBatchShowLanguagePicker);
-    connect(batch_page_, &BatchPage::removeSelectedRequested,
+            this, &MainWindow::onBatchAddFiles);
+    connect(batch_page_, &BatchPage::removeRequested,
             this, &MainWindow::onBatchRemoveEntry);
+    connect(batch_page_, &BatchPage::retryRequested,
+            this, &MainWindow::onBatchRetry);
     connect(batch_page_, &BatchPage::startRequested,
             this, &MainWindow::onBatchStart);
     connect(batch_page_, &BatchPage::pauseRequested,
             this, &MainWindow::onBatchPause);
     connect(batch_page_, &BatchPage::resumeRequested,
             this, &MainWindow::onBatchResume);
-    connect(batch_page_, &BatchPage::saveRequested,
-            this, &MainWindow::onBatchSaveEntry);
 
     // BatchController signals (emitted from worker thread) → page updates
-    // on UI thread. Auto-connection becomes queued cross-thread.
-    connect(batch_controller_, &BatchController::entryAdded,
-            this, &MainWindow::onBatchEntryAdded);
-    connect(batch_controller_, &BatchController::entryRemoved,
-            this, &MainWindow::onBatchEntryRemoved);
-    connect(batch_controller_, &BatchController::entrySaved,
-            this, [this](const QString &entry_id, const QString &path) {
-                batch_page_->setCardSaved(entry_id, path);
+    // on UI thread. Auto-connection becomes queued cross-thread. The table
+    // is driven exclusively by the complete queue snapshot — no per-entry
+    // blocking round trips on the UI thread.
+    connect(batch_controller_, &BatchController::queueSnapshot,
+            this, [this](const QVariantList &entries) {
+                batch_page_->setEntries(entries);
             });
-    connect(batch_controller_, &BatchController::entryStateChanged,
-            this, &MainWindow::onBatchEntryStateChanged);
-    connect(batch_controller_, &BatchController::segmentProgress,
-            this, &MainWindow::onBatchSegmentProgress);
     connect(batch_controller_, &BatchController::batchStateChanged,
             this, [this](bool running, bool paused) {
+                batch_running_ = running;
+                batch_paused_ = paused;
                 batch_page_->setRunning(running);
                 batch_page_->setPaused(paused);
+                projectShellState();
             });
     connect(batch_controller_, &BatchController::batchFinished,
             this, [this]() {
+                batch_running_ = false;
+                batch_paused_ = false;
                 batch_page_->setRunning(false);
                 batch_page_->setStatusText(QStringLiteral("Batch finished"));
+                projectShellState();
             });
     connect(batch_controller_, &BatchController::errorOccurred,
             this, &MainWindow::onBatchError);
@@ -178,28 +233,34 @@ MainWindow::MainWindow(
 
     session_controller_ = new SessionController(
         hotkey_manager_, inference_service_, popup_window_, this);
+    // Note: the popup's retryRequested is connected once, inside
+    // SessionController's constructor — the session is the sole owner of
+    // the retry flow.
     session_controller_->initialize();
-    const QString hotkeyStr = qtrans::app::from_utf8(settings_.hotkey);
-    if (!hotkeyStr.isEmpty()) {
-        session_controller_->setHotkey(hotkeyStr);
-    }
+    // Word-select source is always Auto (runtime auto-detects the selected
+    // text's language); the target comes from the persisted word-select
+    // target, and the popup honors the persisted auto-close interval.
     session_controller_->setTranslateLanguages(
-        qtrans::app::from_utf8(settings_.wordselect_source_language),
-        QStringLiteral("Auto"));
+        QStringLiteral("Auto"),
+        qtrans::app::from_utf8(settings_.wordselect_target_language));
+    popup_window_->setAutoCloseMs(settings_.auto_close_ms);
     session_controller_->setEnabled(settings_.wordselect_enabled);
 
     translate_page_->setSourceLanguage(qtrans::app::from_utf8(settings_.source_language));
     translate_page_->setTargetLanguage(qtrans::app::from_utf8(settings_.target_language));
     syncLanguagesToSettings();
+    batch_page_->setDefaultLanguages(translate_page_->sourceLanguageName(),
+                                     translate_page_->targetLanguageName());
 
-    wordselect_page_->setEnabled(settings_.wordselect_enabled);
-    wordselect_page_->setCloseToTray(settings_.close_to_tray);
-    wordselect_page_->setTargetLanguage(qtrans::app::from_utf8(settings_.wordselect_target_language));
-    wordselect_page_->setHotkey(hotkeyStr);
-    wordselect_page_->setAutoCloseMs(settings_.auto_close_ms);
-    wordselect_page_->setApiEnabled(settings_.api_enabled);
-    wordselect_page_->setApiPort(settings_.api_port);
-    connect(wordselect_page_, &WordSelectPage::settingsChanged,
+    preferences_page_->setEnabled(settings_.wordselect_enabled);
+    preferences_page_->setCloseToTray(settings_.close_to_tray);
+    preferences_page_->setTargetLanguage(qtrans::app::from_utf8(settings_.wordselect_target_language));
+    preferences_page_->setAutoCloseMs(settings_.auto_close_ms);
+    preferences_page_->setApiEnabled(settings_.api_enabled);
+    preferences_page_->setApiPort(settings_.api_port);
+    preferences_page_->setDataDirectory(
+        qtrans::app::from_utf8(paths_.data_root.string()));
+    connect(preferences_page_, &PreferencesPage::settingsChanged,
             this, &MainWindow::onWordSelectSettingsChanged);
 
     system_tray_ = new SystemTray(this);
@@ -207,6 +268,32 @@ MainWindow::MainWindow(
     connect(system_tray_, &SystemTray::toggleTranslation,
             session_controller_, &SessionController::setEnabled);
     connect(system_tray_, &SystemTray::quitApp, qApp, &QCoreApplication::quit);
+
+    // Apply the persisted shortcut last, once the preferences page and the
+    // tray can surface a registration failure. A shortcut that cannot be
+    // registered is never persisted; the page rolls back to what actually
+    // works.
+    const QString persisted_hotkey = qtrans::app::from_utf8(settings_.hotkey);
+    if (!persisted_hotkey.isEmpty() &&
+        !session_controller_->setHotkey(persisted_hotkey)) {
+        const QString active_hotkey = session_controller_->hotkey();
+        settings_.hotkey = qtrans::app::to_utf8(active_hotkey);
+        settings_.save(paths_);
+        preferences_page_->setHotkey(active_hotkey);
+        preferences_page_->setFeedback(
+            QStringLiteral("Could not register the saved shortcut \u201C%1\u201D \u2014 "
+                           "it may already be in use. Reverted to %2.")
+                .arg(persisted_hotkey, active_hotkey),
+            true);
+        system_tray_->showMessage(
+            QStringLiteral("QTrans"),
+            QStringLiteral("Shortcut \u201C%1\u201D could not be registered.").arg(persisted_hotkey),
+            QSystemTrayIcon::Warning, 4000);
+    } else {
+        preferences_page_->setHotkey(persisted_hotkey);
+    }
+
+    projectShellState();
 
     // Enable the persisted local API service once the UI is fully wired.
     syncApiService();
@@ -244,15 +331,21 @@ void MainWindow::showEvent(QShowEvent *event) {
     }
 }
 
-void MainWindow::onPageSelected(int index) {
-    switchPage(index);
+void MainWindow::onPageSelected(PageId page) {
+    switchPage(page);
 }
 
-void MainWindow::switchPage(int index) {
+void MainWindow::switchPage(PageId page) {
+    const int index = stackIndexOfPage(page);
+    if (index < 0) {
+        // Invalid/Count page id: fail safe by keeping the current page
+        // (stackIndexOfPage asserts in debug builds).
+        return;
+    }
     content_stack_->setCurrentIndex(index);
-    sidebar_->setCurrentPage(index);
+    sidebar_->setCurrentPage(page);
 
-    if (index == 3) {
+    if (page == PageId::Models) {
         refreshModelPage();
     }
 }
@@ -262,6 +355,12 @@ void MainWindow::refreshModelPage() {
     model_page_->setSettings(paths_, settings_);
     model_page_->setModelLoaded(model_loaded_);
     model_page_->setLoadedModelId(loaded_model_id_);
+    model_page_->setLoadingModelId(loading_model_id_);
+    model_page_->setUnloading(unloading_);
+    model_page_->setDownloadingModelId(active_download_model_id_);
+    if (active_download_id_.is_valid()) {
+        model_page_->setDownloadProgress(last_download_done_, last_download_total_);
+    }
 }
 
 void MainWindow::initializeInferenceBackend() {
@@ -300,10 +399,11 @@ void MainWindow::syncApiService() {
     QString error;
     const bool started = local_api_service_->start(static_cast<quint16>(port), &error);
     if (!started) {
-        translate_page_->setStatus(
-            QStringLiteral("Local API failed to start on port %1: %2")
-                .arg(settings_.api_port)
-                .arg(error.isEmpty() ? QStringLiteral("unknown error") : error));
+        // The Translate page owns no local status surface; the failure is
+        // kept in the app log instead.
+        qtrans::log::get(qtrans::log::Component::App)
+            ->error("local API failed to start on port {}: {}", settings_.api_port,
+                    qtrans::app::to_utf8(error));
     }
 }
 
@@ -316,18 +416,48 @@ void MainWindow::syncLanguagesToSettings() {
 }
 
 void MainWindow::onWordSelectSettingsChanged() {
-    const bool enabled = wordselect_page_->isEnabled();
-    const bool close_to_tray = wordselect_page_->isCloseToTray();
-    const QString target = wordselect_page_->targetLanguage();
-    const QString hotkey = wordselect_page_->hotkey();
-    const int auto_close = wordselect_page_->autoCloseMs();
-    const bool api_enabled = wordselect_page_->isApiEnabled();
-    const int api_port = wordselect_page_->apiPort();
+    const bool enabled = preferences_page_->isEnabled();
+    const bool close_to_tray = preferences_page_->isCloseToTray();
+    const QString target = preferences_page_->targetLanguage();
+    const QString hotkey = preferences_page_->hotkey();
+    const int auto_close = preferences_page_->autoCloseMs();
+    const bool api_enabled = preferences_page_->isApiEnabled();
+    const int api_port = preferences_page_->apiPort();
+
+    // Validate the shortcut before touching any live or persisted state: a
+    // shortcut that cannot be registered must not be saved and must not
+    // displace the one that is currently working. SessionController rolls
+    // the registration back internally and reports the binding that is
+    // actually active; here the UI and settings follow that report.
+    QString effective_hotkey = hotkey;
+    if (hotkey.isEmpty()) {
+        // The preferences page pre-validates shape, but stay defensive.
+        preferences_page_->setFeedback(
+            QStringLiteral("A shortcut with a modifier key is required, e.g. Ctrl+`."),
+            true);
+        effective_hotkey = session_controller_->hotkey();
+        preferences_page_->setHotkey(effective_hotkey);
+    } else if (!session_controller_->setHotkey(hotkey)) {
+        effective_hotkey = session_controller_->hotkey();
+        preferences_page_->setHotkey(effective_hotkey);
+        preferences_page_->setFeedback(
+            QStringLiteral("Could not register shortcut \u201C%1\u201D \u2014 "
+                           "it may already be in use. Reverted to %2.")
+                .arg(hotkey, effective_hotkey),
+            true);
+        system_tray_->showMessage(
+            QStringLiteral("QTrans"),
+            QStringLiteral("Shortcut \u201C%1\u201D could not be registered.")
+                .arg(hotkey),
+            QSystemTrayIcon::Warning, 4000);
+    } else {
+        preferences_page_->setFeedback(QString{}, false);
+    }
 
     settings_.wordselect_enabled = enabled;
     settings_.close_to_tray = close_to_tray;
     settings_.wordselect_target_language = qtrans::app::to_utf8(target);
-    settings_.hotkey = qtrans::app::to_utf8(hotkey);
+    settings_.hotkey = qtrans::app::to_utf8(effective_hotkey);
     settings_.auto_close_ms = auto_close;
     settings_.api_enabled = api_enabled;
     settings_.api_port = api_port;
@@ -335,9 +465,7 @@ void MainWindow::onWordSelectSettingsChanged() {
 
     session_controller_->setEnabled(enabled);
     session_controller_->setTranslateLanguages(QStringLiteral("Auto"), target);
-    if (!hotkey.isEmpty()) {
-        session_controller_->setHotkey(hotkey);
-    }
+    popup_window_->setAutoCloseMs(auto_close);
     syncApiService();
 }
 
@@ -345,7 +473,8 @@ void MainWindow::saveSettings() {
     try {
         settings_.save(paths_);
     } catch (const std::exception &ex) {
-        translate_page_->setStatus(qtrans::app::from_utf8(ex.what()));
+        qtrans::log::get(qtrans::log::Component::App)
+            ->error("failed to save settings: {}", ex.what());
     }
 }
 
@@ -355,7 +484,7 @@ void MainWindow::onSaveModelSettings() {
     saveSettings();
     syncSettingsToServices();
     refreshModelPage();
-    translate_page_->setStatus(QStringLiteral("Model settings saved"));
+    projectShellState();
 }
 
 void MainWindow::onLoadModelFromPage() {
@@ -364,20 +493,34 @@ void MainWindow::onLoadModelFromPage() {
     saveSettings();
     syncSettingsToServices();
     refreshModelPage();
+    projectShellState();
+
+    // The user explicitly asked to load this model: any earlier dismissal
+    // for it no longer applies, so a missing file reopens the download path.
+    dismissed_banner_model_id_.clear();
 
     if (download_file_exists(settings_.effectiveModelPath(paths_))) {
         startLoadModel();
         return;
     }
 
-    showModelMissingDialog();
+    // The file is missing: surface the nonmodal banner instead of blocking
+    // the whole window; the user can download or pick another model.
+    refreshModelAvailability();
 }
 
 void MainWindow::onUnloadModelFromPage() {
     if (!model_loaded_) {
         return;
     }
+    // Belt and braces behind the page-level gating: an unload must never
+    // start while a live interactive or batch job owns the model.
+    if (own_translation_active_ || batch_running_) {
+        return;
+    }
 
+    unloading_ = true;
+    model_page_->setUnloading(true);
     inference_service_->unloadModel();
 }
 
@@ -414,17 +557,19 @@ void MainWindow::onDeleteModelForId(const QString &model_id) {
         return;
     }
 
-    translate_page_->setStatus(QStringLiteral("Model file deleted."));
     refreshModelPage();
+    refreshModelAvailability();
 }
 
 void MainWindow::setUiBusy(bool busy) {
     busy_ = busy;
-    sidebar_->setNavigationEnabled(!busy);
+    // Lifecycle work must not prevent page navigation, so the sidebar stays
+    // enabled. Conflicting actions are still guarded at the page level:
+    // translate controls disable themselves while busy, and the model page
+    // gates every row action from the granular lifecycle state pushed by
+    // this window (loading id / unloading / correlated download).
     translate_page_->setBusy(busy);
     translate_page_->setModelLoaded(model_loaded_);
-    model_page_->setBusy(busy);
-    model_page_->setModelLoaded(model_loaded_);
 }
 
 void MainWindow::performStartupCheck() {
@@ -433,25 +578,16 @@ void MainWindow::performStartupCheck() {
         return;
     }
 
-    showModelMissingDialog();
+    // Model file missing: show the nonmodal banner instead of blocking the
+    // window at startup. The banner keeps an actionable path to download or
+    // to the Models page, and all pages stay reachable.
+    refreshModelAvailability();
 }
 
 void MainWindow::hideModal() {
+    // Whatever modal is up, it is no longer the model-flow download panel.
+    model_flow_modal_active_ = false;
     modal_->hideModal();
-}
-
-void MainWindow::showModelMissingDialog() {
-    auto *panel = new ModelMissingPanel(
-        qtrans::app::from_utf8(paths_.modeLabel()),
-        currentModelPath());
-    connect(panel, &ModelMissingPanel::dismissed, this, [this]() {
-        hideModal();
-        translate_page_->setStatus(QStringLiteral("Model not loaded. Open Model to download or load."));
-    });
-    connect(panel, &ModelMissingPanel::downloadRequested, this, &MainWindow::startDownloadAndLoad);
-
-    modal_->setContent(panel, QSize(500, 260));
-    modal_->showModal();
 }
 
 void MainWindow::showDownloadDialog() {
@@ -463,6 +599,10 @@ void MainWindow::showDownloadDialog() {
             download_service_->cancel(active_download_id_);
         }
     });
+    // Remember that the visible modal belongs to the model flow so a load
+    // result only ever closes/downloads for this dialog, never an unrelated
+    // modal (alert, batch language picker, ...).
+    model_flow_modal_active_ = true;
     modal_->setContent(download_panel_, QSize(460, 260));
     modal_->showModal();
 }
@@ -478,13 +618,55 @@ void MainWindow::showAlertDialog(const QString &title, const QString &message) {
 void MainWindow::startDownloadAndLoad() {
     awaiting_download_load_ = true;
     showDownloadDialog();
-    translate_page_->setStatus(QStringLiteral("Downloading model"));
-    active_download_id_ = download_service_->startDownload();
+    const DownloadId id = download_service_->startDownload();
+    // The reserved id (accepted or promptly-rejected) is bound to the model
+    // whose file this request writes before this slot returns, so the
+    // download is active from reservation time and no second request can
+    // race the queued downloadStarted event.
+    if (id.is_valid()) {
+        bindActiveDownload(id, qtrans::app::from_utf8(settings_.model_id));
+    }
+}
+
+void MainWindow::bindActiveDownload(DownloadId id, const QString &model_id) {
+    active_download_id_ = id;
+    active_download_model_id_ = model_id;
+    download_active_ = true;
+    model_page_->setDownloadingModelId(model_id);
+    refreshModelAvailability();
+    projectShellState();
 }
 
 void MainWindow::startLoadModel() {
     syncSettingsToServices();
+    loading_model_id_ = qtrans::app::from_utf8(settings_.model_id);
+    model_page_->setLoadingModelId(loading_model_id_);
     inference_service_->loadModel();
+}
+
+void MainWindow::onDownloadModelFromPage(const QString &model_id) {
+    // Explicit download request from the model library: configure the model,
+    // persist, and start the single download with inline row progress (no
+    // modal — ordinary progress stays in the page). Only one download can
+    // ever be accepted; the synchronous binding below makes the window
+    // between reservation and downloadStarted impossible to race.
+    if (download_active_) {
+        return;
+    }
+    settings_.setSelectedModelId(qtrans::app::to_utf8(model_id));
+    applySettingsFromPage();
+    settings_.ensureStorage(paths_);
+    saveSettings();
+    syncSettingsToServices();
+    refreshModelPage();
+    projectShellState();
+    dismissed_banner_model_id_.clear();
+
+    awaiting_download_load_ = true;
+    const DownloadId id = download_service_->startDownload();
+    if (id.is_valid()) {
+        bindActiveDownload(id, model_id);
+    }
 }
 
 void MainWindow::onTranslateRequested(
@@ -504,6 +686,7 @@ void MainWindow::onTranslateRequested(
     active_translate_job_id_ = inference_service_->translateNative(request);
 
     translate_page_->setTranslating(true);
+    projectShellState();
 }
 
 void MainWindow::onTranslationStarted(TranslationJobId job_id) {
@@ -528,6 +711,10 @@ void MainWindow::onCancelRequested() {
 
 void MainWindow::onLanguageChanged() {
     syncLanguagesToSettings();
+    // New batch enqueues follow the Translate page defaults; queued entries
+    // keep the language snapshot they were added with.
+    batch_page_->setDefaultLanguages(translate_page_->sourceLanguageName(),
+                                     translate_page_->targetLanguageName());
 }
 
 bool MainWindow::isActiveTranslateJob(TranslationJobId job_id) const {
@@ -548,11 +735,26 @@ void MainWindow::onTranslationFinished(const TranslationJobResult &result) {
     active_translate_job_id_ = TranslationJobId{};
     own_translation_active_ = false;
     translate_page_->setTranslating(false);
+
+    // Surface the terminal outcome in the result pane: completed,
+    // cancelled/preempted, or failed (with the error text kept for Retry).
+    QString error_text;
+    if (result.state == TranslationState::Failed) {
+        error_text = QString::fromStdString(result.error_message).trimmed();
+        if (error_text.startsWith(QStringLiteral("Error:"))) {
+            error_text = error_text.mid(6).trimmed();
+        }
+    }
+    translate_page_->setTranslationResult(result.state, error_text);
+    projectShellState();
 }
 
 void MainWindow::onStatusChanged(const QString &message, bool busy) {
-    translate_page_->setStatus(busy ? message + QStringLiteral(" ...") : message);
+    // The message feeds the shell activity projection; the Translate page
+    // owns no local status surface to receive it.
+    current_status_message_ = message;
     setUiBusy(busy);
+    projectShellState();
 }
 
 void MainWindow::onTranslationReset(TranslationJobId job_id, TranslationChannel channel) {
@@ -588,21 +790,34 @@ void MainWindow::onModelLoadFinished(
     const QString &backend_label) {
     model_loaded_ = success;
     loaded_model_id_ = success ? qtrans::app::from_utf8(settings_.model_id) : QString{};
+    load_failed_ = !success;
+    loading_model_id_.clear();
+    // The backend usage is projected by the bottom status bar (single
+    // truthful source: the load result); the Translate page never shows it.
+    backend_label_ = success ? backend_label : QString{};
     translate_page_->setModelLoaded(success);
     model_page_->setModelLoaded(success);
     model_page_->setLoadedModelId(loaded_model_id_);
-    setUiBusy(busy_);
+    model_page_->setLoadingModelId({});
+    refreshModelAvailability();
+    projectShellState();
 
     if (success) {
-        if (!backend_label.isEmpty()) {
-            translate_page_->setStatus(backend_label);
-        }
-        if (modal_->isVisible()) {
+        // Close only the modal this window opened for the model flow (the
+        // download progress panel). An unrelated modal — alert, batch
+        // language picker — must stay up, and the user's current page is
+        // preserved: no navigation is forced here.
+        if (model_flow_modal_active_) {
             hideModal();
-            switchPage(0);
         }
         return;
     }
+
+    // The load the user asked for failed: a previously dismissed banner for
+    // this model no longer applies, so the banner reopens the appropriate
+    // action (download or load) on top of the error alert.
+    dismissed_banner_model_id_.clear();
+    refreshModelAvailability();
 
     QString message = error_message.trimmed();
     if (message.isEmpty()) {
@@ -611,19 +826,44 @@ void MainWindow::onModelLoadFinished(
     showAlertDialog(QStringLiteral("Failed to Load Model"), message);
 }
 
-void MainWindow::onModelUnloadFinished() {
-    model_loaded_ = false;
-    loaded_model_id_.clear();
-    translate_page_->setModelLoaded(false);
-    model_page_->setModelLoaded(false);
-    model_page_->setLoadedModelId({});
-    setUiBusy(busy_);
+void MainWindow::onModelUnloadFinished(bool success, const QString &error_message) {
+    // The unload result is terminal in both directions: the lifecycle busy
+    // state must always be cleared so the model page and shell never stay
+    // locked after a failed unload.
+    if (success) {
+        model_loaded_ = false;
+        loaded_model_id_.clear();
+        load_failed_ = false;
+        backend_label_.clear();
+        translate_page_->setModelLoaded(false);
+        model_page_->setModelLoaded(false);
+        model_page_->setLoadedModelId({});
+    }
+    unloading_ = false;
+    model_page_->setUnloading(false);
+    projectShellState();
+    refreshModelAvailability();
+
+    if (!success) {
+        const QString message = error_message.trimmed().isEmpty()
+                                    ? QStringLiteral("Failed to unload the model.")
+                                    : QStringLiteral("Failed to unload the model: %1")
+                                          .arg(error_message.trimmed());
+        qtrans::log::get(qtrans::log::Component::App)
+            ->error("model unload failed: {}", qtrans::app::to_utf8(message));
+    }
 }
 
 void MainWindow::onDownloadStarted(DownloadId id) {
-    // The active id is normally already set from startDownload()'s return
-    // value; keep it in sync and ignore stale started events.
-    active_download_id_ = id;
+    // The reserved id was bound synchronously when the request was made
+    // (bindActiveDownload), so this event only confirms it. A mismatched id
+    // belongs to a stale or superseded lifecycle and must never displace the
+    // correlated model binding.
+    if (!active_download_id_.is_valid() || id != active_download_id_) {
+        return;
+    }
+    refreshModelAvailability();
+    projectShellState();
 }
 
 void MainWindow::onDownloadProgress(
@@ -635,6 +875,10 @@ void MainWindow::onDownloadProgress(
     if (!active_download_id_.is_valid() || id != active_download_id_) {
         return;
     }
+    last_download_done_ = downloaded;
+    last_download_total_ = total;
+    model_page_->setDownloadProgress(downloaded, total);
+    status_bar_->setDownloadProgress(downloaded, total, speed_bps, eta_seconds);
     if (download_panel_ != nullptr) {
         download_panel_->setProgress(downloaded, total, speed_bps, eta_seconds);
     }
@@ -645,12 +889,21 @@ void MainWindow::onDownloadFinished(const DownloadResult &result) {
     if (!active_download_id_.is_valid() || result.id != active_download_id_) {
         return;
     }
+    download_active_ = false;
+    active_download_id_ = DownloadId{};
+    active_download_model_id_.clear();
+    last_download_done_ = 0;
+    last_download_total_ = 0;
+    model_page_->setDownloadingModelId({});
+    model_page_->setDownloadProgress(0, 0);
+    status_bar_->setDownloadProgress(-1, -1, 0.0, 0.0);
     if (result.state != DownloadState::Completed) {
         awaiting_download_load_ = false;
-        translate_page_->setStatus(QStringLiteral("Ready"));
         if (download_panel_ != nullptr) {
             download_panel_->setFailure();
         }
+        refreshModelAvailability();
+        projectShellState();
         return;
     }
 
@@ -661,23 +914,107 @@ void MainWindow::onDownloadFinished(const DownloadResult &result) {
         }
         startLoadModel();
     }
+    refreshModelAvailability();
+    projectShellState();
+}
+
+// ── Shell state projection ────────────────────────────────────────────────
+// The top bar and banner are derived projections of state MainWindow
+// already tracks from service signals. No page infers these itself.
+
+QString MainWindow::configuredModelDisplayName() const {
+    const ModelCatalogEntry *model = settings_.selectedModel();
+    if (model == nullptr) {
+        return {};
+    }
+    return qtrans::app::from_utf8(model->display_name);
+}
+
+QString MainWindow::loadedModelDisplayName() const {
+    if (!model_loaded_ || loaded_model_id_.isEmpty()) {
+        return {};
+    }
+    const ModelCatalogEntry *entry = find_model_by_id(qtrans::app::to_utf8(loaded_model_id_));
+    if (entry == nullptr) {
+        return loaded_model_id_;
+    }
+    return qtrans::app::from_utf8(entry->display_name);
+}
+
+void MainWindow::projectShellState() {
+    status_bar_->setLoadedModel(loadedModelDisplayName());
+    status_bar_->setBackend(backend_label_);
+
+    // Lifecycle actions gate while any inference runs so a load/unload can
+    // never displace the model under a live interactive or batch job.
+    model_page_->setInferenceActive(own_translation_active_ || batch_running_);
+
+    ShellStatusBar::Activity activity = ShellStatusBar::Activity::Idle;
+    QString text = QStringLiteral("No model loaded");
+
+    if (download_active_) {
+        activity = ShellStatusBar::Activity::Downloading;
+        text = QStringLiteral("Downloading model");
+    } else if (busy_) {
+        activity = ShellStatusBar::Activity::Loading;
+        text = current_status_message_.isEmpty() ? QStringLiteral("Working")
+                                                 : current_status_message_;
+    } else if (own_translation_active_) {
+        activity = ShellStatusBar::Activity::Translating;
+        text = QStringLiteral("Translating");
+    } else if (batch_running_ && batch_paused_) {
+        // Paused is preserved independently of running so the chip can
+        // project a distinct paused status instead of "translating".
+        activity = ShellStatusBar::Activity::Paused;
+        text = QStringLiteral("Batch paused");
+    } else if (batch_running_) {
+        activity = ShellStatusBar::Activity::Translating;
+        text = QStringLiteral("Batch translating");
+    } else if (load_failed_) {
+        activity = ShellStatusBar::Activity::Failed;
+        text = QStringLiteral("Model load failed");
+    } else if (model_loaded_) {
+        activity = ShellStatusBar::Activity::Ready;
+        text = QStringLiteral("Ready");
+    }
+    status_bar_->setActivity(activity, text);
+}
+
+void MainWindow::refreshModelAvailability() {
+    const QString configured_id = qtrans::app::from_utf8(settings_.model_id);
+    const QString configured_name = configuredModelDisplayName();
+    if (configured_id.isEmpty() || configured_name.isEmpty()) {
+        model_banner_->hide();
+        return;
+    }
+    const bool file_exists = download_file_exists(settings_.effectiveModelPath(paths_));
+    // Relevant whenever the configured model is not the loaded one — even
+    // if a different model happens to be loaded, the banner must keep an
+    // actionable load/download path for the configured model.
+    const bool configured_is_loaded =
+        model_loaded_ && !loaded_model_id_.isEmpty() && loaded_model_id_ == configured_id;
+    // Dismissal covers one configured model + one availability episode
+    // (file missing vs present); any other model or changed episode still
+    // surfaces the banner.
+    const bool dismissed_this_episode =
+        dismissed_banner_model_id_ == configured_id &&
+        dismissed_banner_file_missing_ == !file_exists;
+    if (busy_ || download_active_ || configured_is_loaded || dismissed_this_episode) {
+        model_banner_->hide();
+        return;
+    }
+    model_banner_->setState(!file_exists, configured_name);
+    model_banner_->show();
 }
 
 // ── Batch UI slots ───────────────────────────────────────────────────────────
 // All UI→worker calls use QueuedConnection since BatchController lives on the
 // worker thread alongside InferenceService and DownloadService.
 
-void MainWindow::onBatchAddFiles(const QString &source_lang,
+void MainWindow::onBatchAddFiles(const QStringList &paths,
+                                 const QString &source_lang,
                                  const QString &target_lang) {
-    hideModal();
-    const QStringList file_paths = QFileDialog::getOpenFileNames(
-        this,
-        QStringLiteral("Select file(s) for batch translation"),
-        QString(),
-        QStringLiteral("Text files (*.txt *.md *.srt);;All files (*)"));
-    if (file_paths.isEmpty()) return;
-
-    for (const QString &path : file_paths) {
+    for (const QString &path : paths) {
         QMetaObject::invokeMethod(
             batch_controller_, "addFile",
             Qt::QueuedConnection,
@@ -685,23 +1022,6 @@ void MainWindow::onBatchAddFiles(const QString &source_lang,
             Q_ARG(QString, source_lang),
             Q_ARG(QString, target_lang));
     }
-}
-
-void MainWindow::onBatchShowLanguagePicker() {
-    batch_lang_panel_ = new BatchLangPanel();
-    batch_lang_panel_->setDefaultLanguages(
-        translate_page_->sourceLanguageName(),
-        translate_page_->targetLanguageName());
-    connect(batch_lang_panel_, &BatchLangPanel::confirmed,
-            this, &MainWindow::onBatchAddFiles);
-    connect(batch_lang_panel_, &BatchLangPanel::cancelled,
-            this, &MainWindow::onBatchLanguagePickerCancelled);
-    modal_->setContent(batch_lang_panel_, QSize(460, 260));
-    modal_->showModal();
-}
-
-void MainWindow::onBatchLanguagePickerCancelled() {
-    hideModal();
 }
 
 void MainWindow::onBatchRemoveEntry(const QStringList &entry_ids) {
@@ -713,79 +1033,45 @@ void MainWindow::onBatchRemoveEntry(const QStringList &entry_ids) {
     }
 }
 
+void MainWindow::onBatchRetry(const QStringList &entry_ids) {
+    for (const QString &id : entry_ids) {
+        QMetaObject::invokeMethod(
+            batch_controller_, "retryEntry",
+            Qt::QueuedConnection,
+            Q_ARG(QString, id));
+    }
+}
+
 void MainWindow::onBatchStart() {
+    batch_running_ = true;
+    batch_paused_ = false;
     batch_page_->setRunning(true);
     batch_page_->setStatusText(QStringLiteral("Batch running..."));
+    projectShellState();
     QMetaObject::invokeMethod(batch_controller_, "start", Qt::QueuedConnection);
 }
 
 void MainWindow::onBatchPause() {
+    batch_running_ = true;
+    batch_paused_ = true;
     batch_page_->setPaused(true);
     batch_page_->setStatusText(QStringLiteral("Batch paused"));
+    projectShellState();
     QMetaObject::invokeMethod(batch_controller_, "pause", Qt::QueuedConnection);
 }
 
 void MainWindow::onBatchResume() {
+    batch_paused_ = false;
     batch_page_->setPaused(false);
     batch_page_->setStatusText(QStringLiteral("Batch running..."));
+    projectShellState();
     QMetaObject::invokeMethod(batch_controller_, "resume", Qt::QueuedConnection);
 }
 
-void MainWindow::onBatchEntryAdded(const QString &entry_id,
-                                   const QString &source_language,
-                                   const QString &target_language) {
-    QString file_name;
-    QMetaObject::invokeMethod(
-        batch_controller_, "entryFileName",
-        Qt::BlockingQueuedConnection,
-        Q_RETURN_ARG(QString, file_name),
-        Q_ARG(QString, entry_id));
-    batch_page_->addCard(entry_id, file_name, source_language, target_language);
-
-    // Check if already saved (e.g. restored from persisted queue).
-    QVariantMap meta;
-    QMetaObject::invokeMethod(
-        batch_controller_, "entryMetadata",
-        Qt::BlockingQueuedConnection,
-        Q_RETURN_ARG(QVariantMap, meta),
-        Q_ARG(QString, entry_id));
-    if (meta.value(QStringLiteral("saved")).toBool()) {
-        batch_page_->setCardSaved(entry_id,
-                                  meta.value(QStringLiteral("save_path")).toString());
-    }
-}
-
-void MainWindow::onBatchEntryRemoved(const QString &entry_id) {
-    batch_page_->removeCard(entry_id);
-}
-
-void MainWindow::onBatchEntryStateChanged(const QString &entry_id, int state) {
-    batch_page_->setCardState(entry_id, state);
-}
-
-void MainWindow::onBatchSegmentProgress(const QString &entry_id, int completed, int total) {
-    batch_page_->setCardProgress(entry_id, completed, total);
-}
-
-void MainWindow::onBatchSaveEntry(const QStringList &entry_ids) {
-    if (entry_ids.isEmpty()) return;
-
-    const QString dest_dir = QFileDialog::getExistingDirectory(
-        this,
-        QStringLiteral("Select destination for translated files"),
-        QString());
-    if (dest_dir.isEmpty()) return;
-
-    QMetaObject::invokeMethod(
-        batch_controller_, "saveEntriesToDirectory",
-        Qt::QueuedConnection,
-        Q_ARG(QStringList, entry_ids),
-        Q_ARG(QString, dest_dir));
-    batch_page_->setStatusText(
-        QStringLiteral("Saving %1 file(s)...").arg(entry_ids.size()));
-}
-
 void MainWindow::onBatchError(const QString &message) {
+    batch_running_ = false;
+    batch_paused_ = false;
     batch_page_->setStatusText(QStringLiteral("Error: ") + message);
+    projectShellState();
     qtrans::log::get(qtrans::log::Component::App)->error("batch error: {}", qtrans::app::to_utf8(message));
 }

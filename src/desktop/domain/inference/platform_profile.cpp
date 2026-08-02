@@ -30,7 +30,7 @@ std::string default_model_id_for_platform() {
 
 const char *preferred_default_model_id(PlatformProfile profile) {
     (void)profile;
-    return "hymt2-q4";
+    return "hymt2-1.8b-q4";
 }
 
 const ModelCatalogEntry *default_available_model(

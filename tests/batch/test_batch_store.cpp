@@ -353,3 +353,145 @@ TEST_F(BatchStoreTest, FailedFlushDuringAppendPreservesQueue) {
     expect_entries_eq(store.load(), {make_entry("a")});
     EXPECT_FALSE(std::filesystem::exists(tmp_path()));
 }
+
+// ── Reset-for-retry ──────────────────────────────────────────────────────────
+
+TEST_F(BatchStoreTest, ResetForRetryTransitionsFailedEntryBackToQueued) {
+    BatchStore store(queue_);
+    BatchEntry entry = make_entry("a");
+    entry.state = BatchEntryState::Failed;
+    entry.file.segments[1].state = BatchSegmentState::Failed;
+    store.append(entry);
+
+    EXPECT_TRUE(store.reset_for_retry("a"));
+
+    const auto loaded = store.load();
+    ASSERT_EQ(loaded.size(), 1u);
+    EXPECT_EQ(loaded[0].state, BatchEntryState::Queued);
+    ASSERT_EQ(loaded[0].file.segments.size(), 2u);
+    // Completed segments keep their translated text and state; the failed
+    // segment returns to Pending so the batch re-attempts it.
+    EXPECT_EQ(loaded[0].file.segments[0].state, BatchSegmentState::Completed);
+    EXPECT_EQ(loaded[0].file.segments[0].translated_text, "你好，世界");
+    EXPECT_EQ(loaded[0].file.segments[1].state, BatchSegmentState::Pending);
+    EXPECT_GT(loaded[0].updated_at, entry.updated_at);
+}
+
+TEST_F(BatchStoreTest, ResetForRetryIsNoOpForNonFailedEntries) {
+    BatchStore store(queue_);
+    BatchEntry queued = make_entry("q");
+    queued.state = BatchEntryState::Queued;
+    BatchEntry completed = make_entry("c");
+    completed.state = BatchEntryState::Completed;
+    store.save({queued, completed});
+
+    EXPECT_FALSE(store.reset_for_retry("q"));
+    EXPECT_FALSE(store.reset_for_retry("c"));
+
+    auto loaded = store.load();
+    ASSERT_EQ(loaded.size(), 2u);
+    EXPECT_EQ(loaded[0].state, BatchEntryState::Queued);
+    EXPECT_EQ(loaded[1].state, BatchEntryState::Completed);
+}
+
+TEST_F(BatchStoreTest, ResetForRetryUnknownIdIsNoOp) {
+    BatchStore store(queue_);
+    BatchEntry entry = make_entry("a");
+    entry.state = BatchEntryState::Failed;
+    store.append(entry);
+
+    EXPECT_FALSE(store.reset_for_retry("missing"));
+    const auto loaded = store.load();
+    ASSERT_EQ(loaded.size(), 1u);
+    EXPECT_EQ(loaded[0].state, BatchEntryState::Failed);
+}
+
+// ── Startup recovery: abandoned Processing entries ───────────────────────────
+
+TEST_F(BatchStoreTest, RecoverAbandonedProcessingNormalizesToQueued) {
+    BatchStore store(queue_);
+    BatchEntry processing = make_entry("interrupted");
+    processing.state = BatchEntryState::Processing;
+    store.append(processing);
+
+    EXPECT_EQ(store.recover_abandoned_processing(), 1u);
+
+    const auto loaded = store.load();
+    ASSERT_EQ(loaded.size(), 1u);
+    EXPECT_EQ(loaded[0].state, BatchEntryState::Queued);
+    // Completed segment checkpoints (and translated text) survive the reset.
+    ASSERT_EQ(loaded[0].file.segments.size(), 2u);
+    EXPECT_EQ(loaded[0].file.segments[0].state, BatchSegmentState::Completed);
+    EXPECT_EQ(loaded[0].file.segments[0].translated_text, "你好，世界");
+    EXPECT_EQ(loaded[0].file.segments[1].state, BatchSegmentState::Pending);
+}
+
+TEST_F(BatchStoreTest, RecoverAbandonedProcessingLeavesOtherStatesAlone) {
+    BatchStore store(queue_);
+    BatchEntry queued = make_entry("q");
+    queued.state = BatchEntryState::Queued;
+    BatchEntry completed = make_entry("c");
+    completed.state = BatchEntryState::Completed;
+    BatchEntry failed = make_entry("f");
+    failed.state = BatchEntryState::Failed;
+    store.save({queued, completed, failed});
+
+    EXPECT_EQ(store.recover_abandoned_processing(), 0u);
+
+    const auto loaded = store.load();
+    ASSERT_EQ(loaded.size(), 3u);
+    EXPECT_EQ(loaded[0].state, BatchEntryState::Queued);
+    EXPECT_EQ(loaded[1].state, BatchEntryState::Completed);
+    EXPECT_EQ(loaded[2].state, BatchEntryState::Failed);
+}
+
+// ── Startup recovery: duplicate entry ids ────────────────────────────────────
+
+TEST_F(BatchStoreTest, RepairDuplicateIdsRewritesLaterOccurrences) {
+    BatchStore store(queue_);
+    BatchEntry first = make_entry("dup");
+    BatchEntry second = make_entry("dup");
+    second.file.path = std::filesystem::path("docs") / "other.txt";
+    BatchEntry third = make_entry("dup");
+    third.file.path = std::filesystem::path("docs") / "third.txt";
+    store.save({first, second, third});
+
+    EXPECT_EQ(store.repair_duplicate_ids(), 2u);
+
+    const auto loaded = store.load();
+    ASSERT_EQ(loaded.size(), 3u);
+    // The first occurrence keeps its stable id; later ones become unique.
+    EXPECT_EQ(loaded[0].id, "dup");
+    EXPECT_NE(loaded[1].id, "dup");
+    EXPECT_NE(loaded[2].id, "dup");
+    EXPECT_NE(loaded[1].id, loaded[2].id);
+    // Queue order is preserved.
+    EXPECT_EQ(loaded[0].file.path, first.file.path);
+    EXPECT_EQ(loaded[1].file.path, second.file.path);
+    EXPECT_EQ(loaded[2].file.path, third.file.path);
+}
+
+TEST_F(BatchStoreTest, RepairDuplicateIdsIsNoOpForUniqueQueues) {
+    BatchStore store(queue_);
+    store.save({make_entry("a"), make_entry("b")});
+
+    EXPECT_EQ(store.repair_duplicate_ids(), 0u);
+
+    const auto loaded = store.load();
+    ASSERT_EQ(loaded.size(), 2u);
+    EXPECT_EQ(loaded[0].id, "a");
+    EXPECT_EQ(loaded[1].id, "b");
+}
+
+TEST_F(BatchStoreTest, RepairDuplicateIdsIsIdempotent) {
+    BatchStore store(queue_);
+    store.save({make_entry("dup"), make_entry("dup")});
+
+    EXPECT_EQ(store.repair_duplicate_ids(), 1u);
+    // A second pass finds nothing left to repair.
+    EXPECT_EQ(store.repair_duplicate_ids(), 0u);
+
+    const auto loaded = store.load();
+    ASSERT_EQ(loaded.size(), 2u);
+    EXPECT_NE(loaded[0].id, loaded[1].id);
+}

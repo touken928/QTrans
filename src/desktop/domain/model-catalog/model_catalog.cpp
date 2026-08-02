@@ -6,7 +6,7 @@ namespace {
 
 const ModelCatalogEntry k_models[] = {
     {
-        "hymt2-q4",
+        "hymt2-1.8b-q4",
         "Hy-MT2-1.8B (Q4)",
         "Hy-MT2-1.8B-Q4_K_M.gguf",
         "tencent/Hy-MT2-1.8B-GGUF/Hy-MT2-1.8B-Q4_K_M.gguf",

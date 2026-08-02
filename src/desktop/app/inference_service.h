@@ -106,7 +106,9 @@ signals:
     void statusChanged(const QString &message, bool busy);
     void modelLoadFinished(bool success, const QString &error_message,
                            const QString &backend_label);
-    void modelUnloadFinished();
+    // Terminal for both success and failure: consumers must never remain in
+    // a lifecycle busy state after an unload attempt.
+    void modelUnloadFinished(bool success, const QString &error_message);
     void translationStarted(TranslationJobId id);
     void translationReset(TranslationJobId id, TranslationChannel channel);
     void translationDelta(TranslationJobId id, TranslationChannel channel,

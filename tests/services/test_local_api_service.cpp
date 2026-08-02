@@ -169,7 +169,7 @@ protected:
         argc_ = 1;
         application_ = std::make_unique<QCoreApplication>(argc_, argv_);
         // Hooks keep the core from probing a real backend while still
-        // allowing official models (hymt2-q4 / hymt2-7b-q4) to be loaded for
+        // allowing official models (hymt2-1.8b-q4 / hymt2-7b-q4) to be loaded for
         // the ready-state tests.
         hooks_ = std::make_unique<qtrans::core::test::ScopedModelHostHooks>(
             qtrans::core::test::ModelHostHooks{});
@@ -328,7 +328,7 @@ TEST_F(LocalApiServiceTest, UnloadedStateShortCircuitsBeforeFieldValidation) {
 }
 
 TEST_F(LocalApiServiceTest, LoadedStateValidatesStreamAndModelOrdering) {
-    ASSERT_TRUE(loadModel(QStringLiteral("hymt2-q4")));
+    ASSERT_TRUE(loadModel(QStringLiteral("hymt2-1.8b-q4")));
     ASSERT_TRUE(api_->start(0));
 
     // The loaded 1.8B model is now listed by /v1/models.
@@ -341,13 +341,13 @@ TEST_F(LocalApiServiceTest, LoadedStateValidatesStreamAndModelOrdering) {
     const QJsonArray data = list_doc.object().value(QStringLiteral("data")).toArray();
     ASSERT_EQ(data.size(), 1);
     EXPECT_EQ(data.at(0).toObject().value(QStringLiteral("id")).toString(),
-              QStringLiteral("hymt2-q4"));
+              QStringLiteral("hymt2-1.8b-q4"));
 
     // stream=true is validated only once the model is ready: 400, not 503.
     const HttpResponse streamed = send_request(
         *application_, api_->port(),
         make_request("POST", "/v1/chat/completions", "application/json",
-                     chat_body("hymt2-q4", /*stream=*/true)));
+                     chat_body("hymt2-1.8b-q4", /*stream=*/true)));
     EXPECT_EQ(streamed.status, 400);
 
     // Wrong model is validated after readiness: 404, not 503.
@@ -359,13 +359,13 @@ TEST_F(LocalApiServiceTest, LoadedStateValidatesStreamAndModelOrdering) {
 }
 
 TEST_F(LocalApiServiceTest, ChatCompletionsSucceedWhenModelLoaded) {
-    ASSERT_TRUE(loadModel(QStringLiteral("hymt2-q4")));
+    ASSERT_TRUE(loadModel(QStringLiteral("hymt2-1.8b-q4")));
     ASSERT_TRUE(api_->start(0));
 
     const HttpResponse response = send_request(
         *application_, api_->port(),
         make_request("POST", "/v1/chat/completions", "application/json",
-                     chat_body("hymt2-q4")));
+                     chat_body("hymt2-1.8b-q4")));
     ASSERT_EQ(response.status, 200);
 
     QJsonParseError parse_error;
@@ -375,7 +375,7 @@ TEST_F(LocalApiServiceTest, ChatCompletionsSucceedWhenModelLoaded) {
     const QJsonObject root = doc.object();
     EXPECT_EQ(root.value(QStringLiteral("object")).toString(),
               QStringLiteral("chat.completion"));
-    EXPECT_EQ(root.value(QStringLiteral("model")).toString(), QStringLiteral("hymt2-q4"));
+    EXPECT_EQ(root.value(QStringLiteral("model")).toString(), QStringLiteral("hymt2-1.8b-q4"));
     const QJsonArray choices = root.value(QStringLiteral("choices")).toArray();
     ASSERT_EQ(choices.size(), 1);
     EXPECT_EQ(choices.at(0).toObject().value(QStringLiteral("finish_reason")).toString(),

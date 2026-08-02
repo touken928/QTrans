@@ -9,12 +9,20 @@
 
 namespace {
 
-// Valid local API port range. Mirrors the WordSelectPage spinbox range
+// Valid local API port range. Mirrors the preferences page spinbox range
 // (1024..65535) so a persisted value can never produce an out-of-range or
 // signed-to-quint16-wrapped listen port.
 constexpr int kMinApiPort = 1024;
 constexpr int kMaxApiPort = 65535;
 constexpr int kDefaultApiPort = 8000;
+
+// Valid popup auto-close range. Mirrors the preferences page spinbox range
+// (1000..30000) so a persisted value can never produce a negative or
+// zero/overflowed timer interval; the popup timer is started with the raw
+// int, so anything outside the range must be rejected at load time.
+constexpr int kMinAutoCloseMs = 1000;
+constexpr int kMaxAutoCloseMs = 30000;
+constexpr int kDefaultAutoCloseMs = 5000;
 
 std::string trim(const std::string &value) {
     const auto start = value.find_first_not_of(" \t\r\n");
@@ -99,7 +107,19 @@ void AppSettings::load(const AppPaths &paths) {
         } else if (key == "hotkey") {
             hotkey = value;
         } else if (key == "auto_close_ms") {
-            auto_close_ms = std::stoi(value);
+            // Defensive parse: a corrupted or hand-edited value must never
+            // crash startup (std::stoi throws) nor produce a timer interval
+            // outside the preferences spinbox range (1000..30000).
+            try {
+                std::size_t parsed_chars = 0;
+                const int parsed = std::stoi(value, &parsed_chars);
+                auto_close_ms = (parsed_chars == value.size() && parsed >= kMinAutoCloseMs &&
+                                 parsed <= kMaxAutoCloseMs)
+                                    ? parsed
+                                    : kDefaultAutoCloseMs;
+            } catch (const std::exception &) {
+                auto_close_ms = kDefaultAutoCloseMs;
+            }
         } else if (key == "source_language") {
             source_language = value;
         } else if (key == "target_language") {

@@ -8,6 +8,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <system_error>
+#include <unordered_set>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -380,6 +381,75 @@ void BatchStore::update_segment_translated(const std::string &entry_id,
         }
     }
     atomic_write(queue_file_, serialize(entries));
+}
+
+bool BatchStore::reset_for_retry(const std::string &entry_id) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto entries = load_unlocked();
+    for (auto &e : entries) {
+        if (e.id != entry_id) continue;
+        // Only a Failed entry may transition back to Queued; everything else
+        // (queued, processing, completed, cancelled) is left untouched.
+        if (e.state != BatchEntryState::Failed) return false;
+        for (auto &seg : e.file.segments) {
+            if (seg.state == BatchSegmentState::Failed) {
+                seg.state = BatchSegmentState::Pending;
+            }
+        }
+        e.state = BatchEntryState::Queued;
+        e.updated_at =
+            std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::system_clock::now().time_since_epoch())
+                .count();
+        atomic_write(queue_file_, serialize(entries));
+        return true;
+    }
+    return false;
+}
+
+std::size_t BatchStore::recover_abandoned_processing() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto entries = load_unlocked();
+    std::size_t normalized = 0;
+    for (auto &e : entries) {
+        if (e.state != BatchEntryState::Processing) continue;
+        // The run that owned this entry died; completed segments keep their
+        // checkpoints (and translated text), everything else re-runs.
+        e.state = BatchEntryState::Queued;
+        e.updated_at =
+            std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::system_clock::now().time_since_epoch())
+                .count();
+        ++normalized;
+    }
+    if (normalized > 0) {
+        atomic_write(queue_file_, serialize(entries));
+    }
+    return normalized;
+}
+
+std::size_t BatchStore::repair_duplicate_ids() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto entries = load_unlocked();
+    std::unordered_set<std::string> seen;
+    std::size_t repaired = 0;
+    for (auto &e : entries) {
+        if (seen.insert(e.id).second) continue;
+        // Second (or later) occurrence of an id: keep the first entry as the
+        // stable identity and rewrite the duplicate deterministically.
+        std::string candidate = e.id + "_dup";
+        int suffix = 2;
+        while (seen.count(candidate) > 0) {
+            candidate = e.id + "_dup" + std::to_string(suffix++);
+        }
+        e.id = candidate;
+        seen.insert(candidate);
+        ++repaired;
+    }
+    if (repaired > 0) {
+        atomic_write(queue_file_, serialize(entries));
+    }
+    return repaired;
 }
 
 // ── Private helpers ─────────────────────────────────────────────────────────

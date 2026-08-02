@@ -37,6 +37,26 @@ public:
     void update_segment_translated(const std::string &entry_id, int segment_index,
                                    const std::string &translated_text);
 
+    // Convenience: load, reset one failed entry for a retry. Every Failed
+    // segment becomes Pending again and the entry state returns to Queued so
+    // a later batch run re-attempts it. Returns true when the entry was found
+    // in the Failed state and was reset; any other entry (or an unknown id)
+    // is left untouched and false is returned.
+    bool reset_for_retry(const std::string &entry_id);
+
+    // Startup recovery: entries abandoned in the Processing state by an
+    // interrupted run return to Queued so a restart picks them up again.
+    // Completed segment checkpoints (and translated text) are preserved.
+    // Persists only when something changed; returns the number of entries
+    // that were normalized.
+    std::size_t recover_abandoned_processing();
+
+    // Startup recovery: duplicate entry ids (e.g. from a pre-collision-era
+    // queue) are rewritten to unique ids so no UI projection ever collapses
+    // two entries onto one row. Queue order is preserved; returns the number
+    // of entries whose id changed.
+    std::size_t repair_duplicate_ids();
+
 private:
     std::filesystem::path queue_file_;
     mutable std::mutex mutex_;
