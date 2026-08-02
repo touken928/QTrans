@@ -528,6 +528,17 @@ QString popupFrameQss() {
                "  border: 1px solid %2;"
                "  border-radius: %3px;"
                "}"
+               // ── Header: glyph + title + pin + close, hairline bottom ──
+               "QWidget#popupHeader {"
+               "  background: transparent;"
+               "  border-bottom: 1px solid %9;"
+               "}"
+               "QLabel#popupTitleGlyph {"
+               "  color: %12;"
+               "  font-size: %5px;"
+               "  font-weight: bold;"
+               "  background: transparent;"
+               "}"
                "QLabel#popupTitle {"
                "  color: %4;"
                "  font-size: %5px;"
@@ -565,7 +576,25 @@ QString popupFrameQss() {
                "QPlainTextEdit#popupResult:focus {"
                "  border-color: %12;"
                "}"
-               // ── Status row (state tinted) ──
+               // ── Status footer (state tinted, hairline top) ──
+               // While streaming, the indeterminate progress bar fills the
+               // row beside the phase dot/text; on completion it hides and
+               // the row collapses to dot + phase.
+               "QWidget#popupStatusRow {"
+               "  background: transparent;"
+               "  border-top: 1px solid %9;"
+               "}"
+               "QProgressBar#popupProgress {"
+               "  min-height: 3px;"
+               "  max-height: 3px;"
+               "  background-color: %18;"
+               "  border: none;"
+               "  border-radius: 2px;"
+               "}"
+               "QProgressBar#popupProgress::chunk {"
+               "  background-color: %12;"
+               "  border-radius: 2px;"
+               "}"
                "QLabel#popupStatusDot {"
                "  background-color: %6;"
                "  border-radius: %13px;"
@@ -592,6 +621,23 @@ QString popupFrameQss() {
                "}"
                "QWidget#popupStatusRow[popupState=\"error\"] QLabel#popupStatus {"
                "  color: %15;"
+               "}"
+               // ── Error banner (replaces the status footer on failure) ──
+               "QFrame#popupErrorBox {"
+               "  background-color: %17;"
+               "  border-radius: %10px;"
+               "}"
+               "QLabel#popupErrorIcon {"
+               "  background-color: %15;"
+               "  color: %1;"
+               "  font-size: %5px;"
+               "  font-weight: bold;"
+               "  border-radius: %13px;"
+               "}"
+               "QLabel#popupErrorText {"
+               "  color: %4;"
+               "  font-size: %19px;"
+               "  background: transparent;"
                "}"
                // ── Compact text buttons ──
                "QPushButton#popupCopyBtn {"
@@ -657,7 +703,10 @@ QString popupFrameQss() {
         .arg(Theme::Radius::xs)  // %13 dot radius
         .arg(C::success)         // %14
         .arg(C::error)           // %15
-        .arg(C::primaryHover);   // %16
+        .arg(C::primaryHover)    // %16
+        .arg(C::errorSoft)       // %17 error banner tint
+        .arg(C::progressTrack)   // %18
+        .arg(Theme::Font::sm);   // %19
 }
 // -- Modal dialog panel -----------------------------------------------------
 

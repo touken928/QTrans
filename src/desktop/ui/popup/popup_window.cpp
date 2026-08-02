@@ -11,6 +11,7 @@
 #include <QLabel>
 #include <QMetaObject>
 #include <QPlainTextEdit>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QScreen>
 #include <QShowEvent>
@@ -24,6 +25,9 @@
 #endif
 
 #ifdef Q_OS_MACOS
+#include "domain/platform/mac/platform_utils.h"
+#include "domain/platform/mac/popup_platform.h"
+
 #include <ApplicationServices/ApplicationServices.h>
 #include <Carbon/Carbon.h>
 #endif
@@ -125,6 +129,17 @@ PopupWindow::PopupWindow(QWidget *parent)
     // Windows both treat as a transient, non-focus-stealing surface).
     setAttribute(Qt::WA_ShowWithoutActivating, true);
     setAttribute(Qt::WA_DeleteOnClose, false);
+    // Transparent backing so the popupFrame's rounded corners actually show:
+    // without it the opaque window paints a rectangle over the frame's radius.
+    setAttribute(Qt::WA_TranslucentBackground, true);
+
+#ifdef Q_OS_MACOS
+    // Create the native window up-front so the popup's NSWindow exists before
+    // the first show and the non-activating/active-Space configuration can be
+    // applied ahead of time (Qt creates it lazily on first show otherwise).
+    createWinId();
+    macConfigurePopupWindow(reinterpret_cast<void *>(winId()));
+#endif
 
     setMinimumWidth(MIN_WIDTH);
     setMaximumWidth(MAX_WIDTH);
@@ -142,20 +157,29 @@ void PopupWindow::setupUI() {
     m_frame->setObjectName(QStringLiteral("popupFrame"));
 
     auto *layout = new QVBoxLayout(m_frame);
-    layout->setContentsMargins(14, 10, 14, 8);
+    layout->setContentsMargins(14, 10, 14, 10);
     layout->setSpacing(8);
 
-    // ── Header: title + pin + close ──────────────────────────────────
-    auto *headerRow = new QHBoxLayout();
-    headerRow->setContentsMargins(0, 0, 0, 0);
-    headerRow->setSpacing(4);
+    // ── Header: brand glyph + title + pin + close ───────────────────
+    // The header bar is its own widget so its hairline bottom border
+    // separates the chrome row from the content sections.
+    m_headerBar = new QWidget(m_frame);
+    m_headerBar->setObjectName(QStringLiteral("popupHeader"));
+    auto *headerRow = new QHBoxLayout(m_headerBar);
+    headerRow->setContentsMargins(0, 0, 0, 6);
+    headerRow->setSpacing(6);
 
-    auto *titleLabel = new QLabel(QStringLiteral("Translation"), m_frame);
+    auto *titleGlyph = new QLabel(QString::fromUtf8(Theme::NavIcon::translate), m_headerBar);
+    titleGlyph->setObjectName(QStringLiteral("popupTitleGlyph"));
+    titleGlyph->setAccessibleName(QStringLiteral("Translate"));
+    headerRow->addWidget(titleGlyph);
+
+    auto *titleLabel = new QLabel(QStringLiteral("Translation"), m_headerBar);
     titleLabel->setObjectName(QStringLiteral("popupTitle"));
     headerRow->addWidget(titleLabel);
     headerRow->addStretch(1);
 
-    m_pinBtn = new QPushButton(QStringLiteral("Pin"), m_frame);
+    m_pinBtn = new QPushButton(QStringLiteral("Pin"), m_headerBar);
     m_pinBtn->setObjectName(QStringLiteral("popupPinBtn"));
     m_pinBtn->setCheckable(true);
     m_pinBtn->setCursor(Qt::PointingHandCursor);
@@ -163,7 +187,7 @@ void PopupWindow::setupUI() {
     m_pinBtn->setAccessibleName(QStringLiteral("Pin popup"));
     headerRow->addWidget(m_pinBtn);
 
-    m_closeBtn = new QPushButton(QStringLiteral("\u2715"), m_frame);
+    m_closeBtn = new QPushButton(QStringLiteral("\u2715"), m_headerBar);
     m_closeBtn->setObjectName(QStringLiteral("popupCloseBtn"));
     m_closeBtn->setFixedSize(22, 22);
     m_closeBtn->setCursor(Qt::PointingHandCursor);
@@ -171,7 +195,7 @@ void PopupWindow::setupUI() {
     m_closeBtn->setAccessibleName(QStringLiteral("Close popup"));
     headerRow->addWidget(m_closeBtn);
 
-    layout->addLayout(headerRow);
+    layout->addWidget(m_headerBar);
 
     // ── Bounded source preview ───────────────────────────────────────
     auto *sourceBox = new QFrame(m_frame);
@@ -196,23 +220,28 @@ void PopupWindow::setupUI() {
     m_sourceBox = sourceBox;
 
     // ── Scrollable translation output ─────────────────────────────────
-    auto *resultHeader = new QHBoxLayout();
+    // The result header is its own widget so the whole section (caption +
+    // Copy) collapses together when an error leaves no partial result.
+    m_resultHeader = new QWidget(m_frame);
+    m_resultHeader->setObjectName(QStringLiteral("popupResultHeader"));
+    auto *resultHeader = new QHBoxLayout(m_resultHeader);
     resultHeader->setContentsMargins(0, 0, 0, 0);
     resultHeader->setSpacing(4);
 
-    auto *resultCaption = new QLabel(QStringLiteral("RESULT"), m_frame);
+    auto *resultCaption = new QLabel(QStringLiteral("RESULT"), m_resultHeader);
     resultCaption->setObjectName(QStringLiteral("popupSectionLabel"));
     resultHeader->addWidget(resultCaption);
     resultHeader->addStretch(1);
 
-    m_copyBtn = new QPushButton(QStringLiteral("Copy"), m_frame);
+    m_copyBtn = new QPushButton(QStringLiteral("Copy"), m_resultHeader);
     m_copyBtn->setObjectName(QStringLiteral("popupCopyBtn"));
     m_copyBtn->setCursor(Qt::PointingHandCursor);
     m_copyBtn->setToolTip(QStringLiteral("Copy the translation"));
+    m_copyBtn->setAccessibleName(QStringLiteral("Copy translation"));
     m_copyBtn->setVisible(false);
     resultHeader->addWidget(m_copyBtn);
 
-    layout->addLayout(resultHeader);
+    layout->addWidget(m_resultHeader);
 
     m_resultEdit = new QPlainTextEdit(m_frame);
     m_resultEdit->setObjectName(QStringLiteral("popupResult"));
@@ -222,12 +251,20 @@ void PopupWindow::setupUI() {
     m_resultEdit->setPlaceholderText(QStringLiteral("Translation appears here\u2026"));
     layout->addWidget(m_resultEdit);
 
-    // ── Status row: dot + text + retry ───────────────────────────────
+    // ── Status footer: stream indicator + dot + text ─────────────────
+    // A hairline top border anchors the footer under the content; the
+    // indeterminate progress bar fills the row while text streams in.
     m_statusRow = new QWidget(m_frame);
     m_statusRow->setObjectName(QStringLiteral("popupStatusRow"));
     auto *statusLayout = new QHBoxLayout(m_statusRow);
-    statusLayout->setContentsMargins(0, 0, 0, 0);
+    statusLayout->setContentsMargins(0, 6, 0, 0);
     statusLayout->setSpacing(6);
+
+    m_progressBar = new QProgressBar(m_statusRow);
+    m_progressBar->setObjectName(QStringLiteral("popupProgress"));
+    m_progressBar->setRange(0, 0);  // indeterminate while streaming
+    m_progressBar->setTextVisible(false);
+    statusLayout->addWidget(m_progressBar, 1);
 
     m_statusDot = new QLabel(m_statusRow);
     m_statusDot->setObjectName(QStringLiteral("popupStatusDot"));
@@ -236,16 +273,53 @@ void PopupWindow::setupUI() {
 
     m_statusLabel = new QLabel(m_statusRow);
     m_statusLabel->setObjectName(QStringLiteral("popupStatus"));
-    statusLayout->addWidget(m_statusLabel, 1);
+    statusLayout->addWidget(m_statusLabel);
 
-    m_retryBtn = new QPushButton(QStringLiteral("Retry"), m_statusRow);
+    layout->addWidget(m_statusRow);
+
+    // ── Error banner: alert chip + message + retry ───────────────────
+    // Replaces the status footer while a job fails; any partial result
+    // stays visible above it.
+    m_errorBox = new QFrame(m_frame);
+    m_errorBox->setObjectName(QStringLiteral("popupErrorBox"));
+    auto *errorLayout = new QVBoxLayout(m_errorBox);
+    errorLayout->setContentsMargins(10, 8, 10, 10);
+    errorLayout->setSpacing(8);
+
+    auto *errorRow = new QHBoxLayout();
+    errorRow->setContentsMargins(0, 0, 0, 0);
+    errorRow->setSpacing(8);
+
+    m_errorIcon = new QLabel(QStringLiteral("!"), m_errorBox);
+    m_errorIcon->setObjectName(QStringLiteral("popupErrorIcon"));
+    m_errorIcon->setFixedSize(16, 16);
+    m_errorIcon->setAlignment(Qt::AlignCenter);
+    errorRow->addWidget(m_errorIcon);
+
+    m_errorLabel = new QLabel(m_errorBox);
+    m_errorLabel->setObjectName(QStringLiteral("popupErrorText"));
+    m_errorLabel->setWordWrap(true);
+    m_errorLabel->setTextFormat(Qt::PlainText);
+    m_errorLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    m_errorLabel->setMaximumHeight(84);  // ~4 wrapped lines
+    m_errorLabel->setAccessibleName(QStringLiteral("Error message"));
+    errorRow->addWidget(m_errorLabel, 1);
+    errorLayout->addLayout(errorRow);
+
+    auto *retryRow = new QHBoxLayout();
+    retryRow->setContentsMargins(0, 0, 0, 0);
+    retryRow->addStretch(1);
+
+    m_retryBtn = new QPushButton(QStringLiteral("Retry"), m_errorBox);
     m_retryBtn->setObjectName(QStringLiteral("popupRetryBtn"));
     m_retryBtn->setCursor(Qt::PointingHandCursor);
     m_retryBtn->setToolTip(QStringLiteral("Retry the failed translation"));
-    m_retryBtn->setVisible(false);
-    statusLayout->addWidget(m_retryBtn);
+    m_retryBtn->setAccessibleName(QStringLiteral("Retry translation"));
+    retryRow->addWidget(m_retryBtn);
+    errorLayout->addLayout(retryRow);
 
-    layout->addWidget(m_statusRow);
+    m_errorBox->setVisible(false);
+    layout->addWidget(m_errorBox);
 
     auto *outerLayout = new QVBoxLayout(this);
     outerLayout->setContentsMargins(0, 0, 0, 0);
@@ -274,7 +348,14 @@ void PopupWindow::showLoading(const QString &sourceText) {
     m_sourceBox->setVisible(!sourceText.trimmed().isEmpty());
 
     m_resultEdit->clear();
+    m_resultEdit->setVisible(true);
+    m_resultHeader->setVisible(true);
+    m_errorBox->setVisible(false);
     m_retryBtn->setVisible(false);
+    m_progressBar->setVisible(true);
+    m_statusRow->setVisible(true);
+    m_resultEdit->setPlaceholderText(QStringLiteral("Translation is streaming in\u2026"));
+    resetCopyButton();
     updateCopyButton();
     setStatusState(QStringLiteral("translating"));
     m_statusLabel->setText(QStringLiteral("Translating\u2026"));
@@ -298,6 +379,8 @@ void PopupWindow::finishStreaming() {
     if (!m_isStreaming) return;
 
     m_isStreaming = false;
+    m_progressBar->setVisible(false);
+    m_resultEdit->setPlaceholderText(QStringLiteral("Translation appears here\u2026"));
     setStatusState(QStringLiteral("done"));
     m_statusLabel->setText(QStringLiteral("Done"));
     updateCopyButton();
@@ -310,10 +393,24 @@ void PopupWindow::showError(const QString &message) {
     m_closeTimer->stop();
     m_isStreaming = false;
 
-    setStatusState(QStringLiteral("error"));
-    m_statusLabel->setText(message);
+    // The error banner replaces the status footer; the alert chip, wrapped
+    // message and Retry carry the failure state by themselves.
+    m_errorLabel->setText(message);
+    m_errorBox->setVisible(true);
     m_retryBtn->setVisible(true);
+    m_progressBar->setVisible(false);
+    m_statusRow->setVisible(false);
+
+    // Keep any partial result visible; without one, collapse the result
+    // section so the error itself leads the popup.
+    const bool hasResult = !m_resultEdit->toPlainText().isEmpty();
+    m_resultEdit->setVisible(hasResult);
+    m_resultHeader->setVisible(hasResult);
+    m_sourceBox->setVisible(!m_sourceLabel->text().trimmed().isEmpty());
+
+    resetCopyButton();
     updateCopyButton();
+    setStatusState(QStringLiteral("error"));
 
     positionNearCursor();
     show();
@@ -343,6 +440,15 @@ void PopupWindow::onCloseClicked() {
 
 void PopupWindow::onCopyClicked() {
     QApplication::clipboard()->setText(m_resultEdit->toPlainText());
+    // Brief confirmation on the button itself; every presentation and the
+    // hide path reset the label, so a stale "Copied" never leaks across
+    // sessions.
+    m_copyBtn->setText(QStringLiteral("Copied"));
+    QTimer::singleShot(1400, this, [this]() { resetCopyButton(); });
+}
+
+void PopupWindow::resetCopyButton() {
+    m_copyBtn->setText(QStringLiteral("Copy"));
 }
 
 void PopupWindow::onRetryClicked() {
@@ -391,6 +497,16 @@ bool PopupWindow::eventFilter(QObject *watched, QEvent *event) {
 }
 
 void PopupWindow::showEvent(QShowEvent *event) {
+#ifdef Q_OS_MACOS
+    // Re-apply the window configuration on every show, and keep the user's
+    // front app active across a short window: presenting the popup can
+    // activate QTrans at deferred points (notably when QTrans is minimized to
+    // the Dock), which would otherwise pull the Space over under Stage Manager.
+    macConfigurePopupWindow(reinterpret_cast<void *>(winId()));
+    for (int delay : {0, 60, 150, 300, 600}) {
+        QTimer::singleShot(delay, this, []() { macReassertFrontApp(); });
+    }
+#endif
     installEscapeMonitors();
     QWidget::showEvent(event);
 }
@@ -398,6 +514,7 @@ void PopupWindow::showEvent(QShowEvent *event) {
 void PopupWindow::hideEvent(QHideEvent *event) {
     m_isStreaming = false;
     m_closeTimer->stop();
+    resetCopyButton();
     uninstallEscapeMonitors();
     emit dismissed();
     QWidget::hideEvent(event);
@@ -508,6 +625,13 @@ void PopupWindow::positionNearCursor() {
     if (!screen) return;
 
     const QRect geom = screen->availableGeometry();
+    // Responsive constrained sizing: the popup never exceeds the screen's
+    // usable area, even on small displays — the result pane then scrolls
+    // instead of overflowing the edges.
+    const int usableW = geom.width() - 2 * EDGE_MARGIN;
+    const int usableH = geom.height() - 2 * EDGE_MARGIN;
+    setMaximumWidth(qMax(MIN_WIDTH, qMin(MAX_WIDTH, usableW)));
+    setMaximumHeight(qMax(160, qMin(MAX_HEIGHT, usableH)));
     adjustSize();
 
     const int w = width();
