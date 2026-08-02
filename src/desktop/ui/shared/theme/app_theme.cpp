@@ -360,6 +360,10 @@ QString navButtonQss() {
                "  border-radius: %1px;"
                "  background-color: transparent;"
                "  icon-size: %2px;"
+               "  color: %8;"
+               "  font-size: %9px;"
+               "  padding-left: %10px;"
+               "  padding-right: %10px;"
                "}"
                // On the tinted rail the hover lifts to the white surface so
                // the affordance reads against the rail tone. Placeholders
@@ -367,12 +371,14 @@ QString navButtonQss() {
                // not call order, so a gap would shift every later value.
                "QToolButton#navButton:hover {"
                "  background-color: %3;"
+               "  color: %5;"
                "}"
                "QToolButton#navButton:pressed {"
                "  background-color: %4;"
                "}"
                "QToolButton#navButton:checked {"
                "  background-color: %5;"
+               "  color: %11;"
                "}"
                "QToolButton#navButton:focus {"
                "  border: 2px solid %6;"
@@ -382,6 +388,7 @@ QString navButtonQss() {
                "}"
                "QToolButton#navButton:disabled {"
                "  background-color: transparent;"
+               "  color: %12;"
                "}")
         .arg(Theme::Radius::md)
         .arg(Theme::Size::navRailIcon)
@@ -389,7 +396,12 @@ QString navButtonQss() {
         .arg(C::pressed)
         .arg(C::primary)
         .arg(C::focus)
-        .arg(C::surface);
+        .arg(C::surface)
+        .arg(C::text)           // %8 resting label colour
+        .arg(Theme::Font::sm)   // %9 label font size
+        .arg(Theme::Space::sm)  // %10 side padding
+        .arg(C::surface)        // %11 checked label (teal pill → white text)
+        .arg(C::textDisabled);  // %12 disabled label
 }
 
 // -- Bottom operational status bar (shell status projection) ---------------

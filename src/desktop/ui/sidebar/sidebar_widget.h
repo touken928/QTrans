@@ -8,11 +8,12 @@
 class QLabel;
 class QToolButton;
 
-// 72px icon navigation rail. Translate / Documents / Models sit at the
-// top; Preferences is pinned to the bottom. Every item is an icon-only
-// checkable tool button inside an exclusive group: keyboard arrow
-// navigation, tooltips, and accessible names are wired for each entry.
-// The rail emits typed PageId values — no numeric stack indexes.
+// Icon + label navigation rail. Translate / Documents / Models sit at the
+// top; Preferences is pinned to the bottom. Every item is a checkable
+// tool button with its glyph and caption shown side by side inside an
+// exclusive group: keyboard arrow navigation, tooltips, and accessible
+// names are wired for each entry. The rail emits typed PageId values —
+// no numeric stack indexes.
 class SidebarWidget : public QWidget {
     Q_OBJECT
 

@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>An LLM translator for local and remote models with built-in model downloads, GPU inference for local backends (Vulkan on Windows x64, Metal on macOS ARM64), word selection translation, and batch file translation.</strong>
+  <strong>An LLM translator for local models with built-in model downloads, GPU inference (Vulkan on Windows x64, Metal on macOS ARM64), word selection translation, batch file translation, and a local OpenAI-compatible API.</strong>
 </p>
 
 <p align="center">
@@ -20,8 +20,9 @@
 
 - Translate and back-translate
 - Built-in model download and management
-- Word selection translation (hover or clipboard capture)
+- Word selection translation: select text in any app, press a global hotkey, and read the translation in a popup
 - Batch file translation for `.txt`, `.md`, and `.srt` with queueing, pause/resume, and saved outputs
+- Local OpenAI-compatible API (`/v1/models`, `/v1/chat/completions`) to serve the loaded model to other tools
 
 ## Screenshot
 
