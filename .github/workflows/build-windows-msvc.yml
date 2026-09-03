@@ -1,0 +1,100 @@
+name: Build / Windows MSVC
+
+on:
+  workflow_call:
+    inputs:
+      package:
+        description: Verify imports and upload the release package
+        required: false
+        type: boolean
+        default: false
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-windows-msvc-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ inputs.package && 'MSVC x64 release' || 'MSVC build and tests' }}
+    runs-on: windows-latest
+    timeout-minutes: 180
+    env:
+      CMAKE_PRESET: x64-msvc-static-release
+      BUILD_DIR: ${{ github.workspace }}\build\x64-msvc-static-release
+      DIST_SUFFIX: windows-x64
+      VCPKG_ROOT: C:\vcpkg
+      VCPKG_TARGET_TRIPLET: x64-windows-static
+      VCPKG_INSTALL_ROOT: ${{ github.workspace }}\build\x64-msvc-static-release\vcpkg_installed
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\.vcpkg-cache
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install vcpkg dependencies
+        uses: ./.github/actions/setup-vcpkg
+        with:
+          vcpkg-root: ${{ env.VCPKG_ROOT }}
+          target-triplet: ${{ env.VCPKG_TARGET_TRIPLET }}
+          install-root: ${{ env.VCPKG_INSTALL_ROOT }}
+          binary-cache-path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+
+      - name: Configure tests
+        if: ${{ !inputs.package }}
+        shell: pwsh
+        run: cmake --preset $env:CMAKE_PRESET -DQTRANS_BUILD_TESTS=ON -DVCPKG_INSTALLED_DIR=$env:VCPKG_INSTALL_ROOT -DVCPKG_APPLOCAL_DEPS=OFF
+
+      - name: Configure release
+        if: ${{ inputs.package }}
+        shell: pwsh
+        run: cmake --preset $env:CMAKE_PRESET -DQTRANS_BUILD_TESTS=OFF -DVCPKG_INSTALLED_DIR=$env:VCPKG_INSTALL_ROOT -DVCPKG_APPLOCAL_DEPS=OFF
+
+      - name: Build
+        run: cmake --build --preset $env:CMAKE_PRESET --parallel $env:NUMBER_OF_PROCESSORS
+
+      - name: Run tests
+        if: ${{ !inputs.package }}
+        run: ctest --test-dir $env:BUILD_DIR --output-on-failure
+
+      - name: Verify imports and package
+        if: ${{ inputs.package }}
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          $binary = "$env:BUILD_DIR/src/desktop/QTrans.exe"
+          $stage = "dist/QTrans-$version-$env:DIST_SUFFIX"
+          $zip = "$stage.zip"
+          $imports = (dumpbin /dependents $binary) |
+            Select-String -Pattern '\.dll' |
+            ForEach-Object { $_.Line.Trim() }
+          $forbidden = $imports | Where-Object {
+            $_ -match '(?i)(qt6|ggml|llama|curl|ssl|crypto|icu|spdlog|vcomp|msvcp|vcruntime|libomp)'
+          }
+          if ($forbidden) {
+            $forbidden | ForEach-Object { Write-Host "::error::Unexpected bundled-runtime dependency: $_" }
+            exit 1
+          }
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item $binary "$stage/QTrans.exe"
+          Compress-Archive -Path "$stage/*" -DestinationPath $zip
+
+      - name: Upload release artifact
+        if: ${{ inputs.package }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: qtrans-windows-x64
+          path: dist/QTrans-*-windows-x64.zip
+          if-no-files-found: error

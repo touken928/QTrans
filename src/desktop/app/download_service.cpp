@@ -168,7 +168,10 @@ bool DownloadService::cancel(DownloadId id) {
 DownloadState DownloadService::downloadState(DownloadId id) const {
     std::lock_guard lock(mutex_);
     const auto it = downloads_.find(id.value);
-    return it == downloads_.end() ? DownloadState::Failed : it->second.state;
+    if (it != downloads_.end()) return it->second.state;
+    const auto terminal = terminal_downloads_.find(id.value);
+    return terminal == terminal_downloads_.end() ? DownloadState::Failed
+                                                 : terminal->second;
 }
 
 void DownloadService::completeDownload(DownloadId id, std::uint64_t worker_generation,
@@ -177,12 +180,13 @@ void DownloadService::completeDownload(DownloadId id, std::uint64_t worker_gener
     {
         std::lock_guard lock(mutex_);
         const auto it = downloads_.find(id.value);
-        if (it != downloads_.end()) it->second.state = state;
         if (worker_generation != generation_) {
             // Completion from a superseded lifecycle (the worker was shut down
             // and possibly replaced by a later one). Record the outcome so
             // downloadState() stays accurate, but never join the current
             // worker thread or clear the active flag.
+            if (it != downloads_.end()) downloads_.erase(it);
+            rememberTerminalDownload(id, state);
             return;
         }
         // The worker posts this completion as its last action, so joining here
@@ -190,6 +194,8 @@ void DownloadService::completeDownload(DownloadId id, std::uint64_t worker_gener
         // live download.
         if (download_thread_.joinable()) download_thread_.join();
         active_ = false;
+        if (it != downloads_.end()) downloads_.erase(it);
+        rememberTerminalDownload(id, state);
     }
     DownloadResult typed;
     typed.id = id;
@@ -202,13 +208,26 @@ void DownloadService::rejectDownload(DownloadId id, std::string message) {
     {
         std::lock_guard lock(mutex_);
         const auto it = downloads_.find(id.value);
-        if (it != downloads_.end()) it->second.state = DownloadState::Failed;
+        if (it != downloads_.end()) downloads_.erase(it);
+        rememberTerminalDownload(id, DownloadState::Failed);
     }
     DownloadResult typed;
     typed.id = id;
     typed.state = DownloadState::Failed;
     typed.error_message = std::move(message);
     emit downloadFinished(typed);
+}
+
+void DownloadService::rememberTerminalDownload(DownloadId id,
+                                               DownloadState state) {
+    // mutex_ is held by the caller. Terminal tombstones contain neither the
+    // request URL/path nor cancellation objects and remain bounded.
+    terminal_downloads_[id.value] = state;
+    terminal_download_order_.push_back(id.value);
+    while (terminal_download_order_.size() > kTerminalHistoryLimit) {
+        terminal_downloads_.erase(terminal_download_order_.front());
+        terminal_download_order_.pop_front();
+    }
 }
 
 void DownloadService::shutdown() {

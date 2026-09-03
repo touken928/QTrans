@@ -73,11 +73,6 @@ private:
     void replyError(QTcpSocket *socket, int status, const QString &message,
                     const QString &type = QStringLiteral("invalid_request_error"));
 
-    static int statusForFailure(const qtrans::core::Failure &failure);
-    static QByteArray completionJson(const QString &model, const QString &id,
-                                     const QString &content, const QString &finish_reason,
-                                     const qtrans::core::TokenUsage &usage);
-
     InferenceService *inference_service_ = nullptr;
     QTcpServer *server_ = nullptr;
     QSet<QTcpSocket *> clients_;

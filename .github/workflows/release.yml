@@ -6,17 +6,23 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   macos:
-    uses: ./.github/workflows/release-macos.yml
+    uses: ./.github/workflows/build-macos.yml
+    with:
+      package: true
 
   windows:
-    uses: ./.github/workflows/release-windows.yml
+    uses: ./.github/workflows/build-windows-msvc.yml
+    with:
+      package: true
 
   release:
     name: Publish GitHub Release
+    permissions:
+      contents: write
     needs:
       - macos
       - windows

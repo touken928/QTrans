@@ -1,0 +1,93 @@
+name: Build / macOS
+
+on:
+  workflow_call:
+    inputs:
+      package:
+        description: Package and upload the release artifact
+        required: false
+        type: boolean
+        default: false
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-macos-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ inputs.package && 'macOS arm64 release' || 'Unit tests' }}
+    runs-on: macos-14
+    timeout-minutes: 180
+    env:
+      CMAKE_PRESET: arm64-osx-release
+      BUILD_DIR: ${{ github.workspace }}/build/arm64-osx-release
+      DIST_SUFFIX: macos-arm64
+      VCPKG_ROOT: /Users/runner/vcpkg
+      VCPKG_TARGET_TRIPLET: arm64-osx-release
+      VCPKG_INSTALL_ROOT: ${{ github.workspace }}/build/arm64-osx-release/vcpkg_installed
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: brew install ninja pkg-config autoconf autoconf-archive automake libtool
+
+      - name: Install vcpkg dependencies
+        uses: ./.github/actions/setup-vcpkg
+        with:
+          vcpkg-root: ${{ env.VCPKG_ROOT }}
+          target-triplet: ${{ env.VCPKG_TARGET_TRIPLET }}
+          install-root: ${{ env.VCPKG_INSTALL_ROOT }}
+          binary-cache-path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+
+      - name: Configure tests
+        if: ${{ !inputs.package }}
+        run: cmake --preset "${CMAKE_PRESET}" -DQTRANS_BUILD_TESTS=ON
+
+      - name: Configure release
+        if: ${{ inputs.package }}
+        run: cmake --preset "${CMAKE_PRESET}" -DQTRANS_BUILD_TESTS=OFF
+
+      - name: Build
+        run: cmake --build --preset "${CMAKE_PRESET}" --parallel "$(sysctl -n hw.ncpu)"
+
+      - name: Run tests
+        if: ${{ !inputs.package }}
+        run: ctest --test-dir "${BUILD_DIR}" --output-on-failure
+
+      - name: Verify imports and package
+        if: ${{ inputs.package }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          binary="${BUILD_DIR}/src/desktop/QTrans"
+          output="dist/QTrans-${version}-${DIST_SUFFIX}"
+
+          mkdir -p dist
+          cp "${binary}" "${output}"
+          chmod +x "${output}"
+
+          if otool -L "${output}" | grep -E '@rpath|/vcpkg/'; then
+            echo "Unexpected dynamic third-party libraries in static macOS build"
+            otool -L "${output}"
+            exit 1
+          fi
+
+      - name: Upload release artifact
+        if: ${{ inputs.package }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: qtrans-macos-arm64
+          path: dist/QTrans-*-macos-arm64
+          if-no-files-found: error

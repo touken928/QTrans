@@ -13,6 +13,7 @@
 
 struct ParseResult {
     std::vector<BatchSegment> segments;
+    std::string trailing_text;
     std::string error_message;
     bool success = true;
 };
@@ -41,7 +42,7 @@ public:
     // Assemble completed segments back into a single output string in the
     // target format (e.g. joining paragraphs for text, reconstructing SRT
     // blocks with timing lines).
-    virtual std::string assembleOutput(const std::vector<BatchSegment> &segments) const = 0;
+    virtual std::string assembleOutput(const BatchFile &file) const = 0;
 
 protected:
     BatchFileHandler() = default;
@@ -63,3 +64,10 @@ ParseResult parse_batch_file(const std::filesystem::path &path, BatchFileType ty
 // representation instead of a lossy narrow string on MinGW.
 std::filesystem::path output_path_for(const std::filesystem::path &input_path,
                                       const std::filesystem::path &output_dir);
+
+// Allocate a collision-free output path, considering both existing files and
+// paths already reserved by durable queue entries.
+std::filesystem::path allocate_output_path(
+    const std::filesystem::path &input_path,
+    const std::filesystem::path &output_dir,
+    const std::vector<std::filesystem::path> &reserved_paths);

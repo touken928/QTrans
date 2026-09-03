@@ -15,6 +15,7 @@
 | → **Branch naming** | 在 ADD checks 搜索框添加 |
 | → **Code formatting** | 同上 |
 | → **Unit tests** | 同上 |
+| → **MSVC build and tests** | 同上 |
 | **Block force pushes** | 禁止对 `main` force push |
 | **Restrict deletions** | 禁止删除 `main` |
 | **Do not require status checks on creation** | 建议开，避免新建分支被误拦 |
@@ -41,7 +42,7 @@
 
 ## ADD checks 为空时
 
-1. 确认 [Actions](https://github.com/touken928/QTrans/actions) 中 **Branch naming** / **Code formatting** / **Unit tests** 至少成功运行过一次  
+1. 确认 [Actions](https://github.com/touken928/QTrans/actions) 中 **Branch naming** / **Code formatting** / **Unit tests** / **MSVC build and tests** 至少成功运行过一次
 2. 在 ADD checks **搜索框** 输入 Job 名，不要等待空列表自动填充  
 3. 确认 workflow 在 `.github/workflows/` 根目录（见 [ci.md](ci.md)）
 

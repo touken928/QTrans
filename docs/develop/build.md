@@ -13,7 +13,7 @@
 | 平台 | 依赖 |
 |------|------|
 | macOS | `brew install ninja pkg-config autoconf autoconf-archive automake libtool` |
-| Windows | [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) 等 MinGW 工具链，并加入 `PATH` |
+| Windows | Visual Studio 2022 C++ 构建工具；从 Developer PowerShell/Command Prompt 执行 |
 
 ## CMake Preset
 
@@ -22,6 +22,7 @@
 | Preset | 用途 |
 |--------|------|
 | `arm64-osx-release` | macOS ARM64 Release（Metal GPU） |
+| `x64-msvc-static-release` | Windows MSVC x64 Release（Vulkan、静态 CRT/依赖） |
 | `x64-mingw-static-release` | Windows MinGW x64 Release（Vulkan GPU 静态编入） |
 
 构建目录：`build/<preset 名>/`。
@@ -34,11 +35,11 @@ cmake --preset arm64-osx-release
 cmake --build --preset arm64-osx-release
 # 产物：build/arm64-osx-release/src/desktop/QTrans
 
-# Windows MinGW x64 Release
-cmake --preset x64-mingw-static-release
-cmake --build --preset x64-mingw-static-release
-# 产物：build/x64-mingw-static-release/src/desktop/QTrans.exe
-# Release 包：QTrans.exe（Vulkan 后端静态链入）+ libomp.dll（OpenMP 运行时）
+# Windows MSVC x64 Release
+cmake --preset x64-msvc-static-release
+cmake --build --preset x64-msvc-static-release
+# 产物：build/x64-msvc-static-release/src/desktop/QTrans.exe
+# Release 包：仅 QTrans.exe；第三方库与 CRT 静态链接，系统 DLL 除外
 
 ```
 

@@ -28,15 +28,15 @@ git push origin v0.2.1
 | 平台 | 文件名示例 |
 |------|------------|
 | macOS ARM64 | `QTrans-<version>-macos-arm64`（可执行文件） |
-| Windows x64 | `QTrans-<version>-mingw-x64.zip`（`QTrans.exe` + `libomp.dll`） |
+| Windows x64 | `QTrans-<version>-windows-x64.zip`（MSVC 静态版 `QTrans.exe`） |
 
 ## Workflow 结构
 
 | 文件 | 作用 |
 |------|------|
 | `release.yml` | tag 触发，编排 macOS / Windows 构建并创建 GitHub Release |
-| `release-macos.yml` | 可复用：macOS arm64 构建 |
-| `release-windows.yml` | 可复用：MinGW x64 构建与打包 |
+| `build-macos.yml` | PR/main 执行 macOS 构建测试；发版时复用并执行依赖审计与打包 |
+| `build-windows-msvc.yml` | PR/main 执行 MSVC 构建测试；发版时复用并执行 DLL 导入审计与打包 |
 
 ## 注意事项
 

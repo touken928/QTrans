@@ -171,6 +171,31 @@ MainWindow::MainWindow(
     connect(translate_page_, &TranslatePage::cancelRequested, this, &MainWindow::onCancelRequested);
     connect(translate_page_, &TranslatePage::languageChanged, this, &MainWindow::onLanguageChanged);
     connect(inference_service_, &InferenceService::statusChanged, this, &MainWindow::onStatusChanged);
+    connect(inference_service_, &InferenceService::runtimeSnapshotChanged, this,
+            [this](const RuntimeSnapshot &snapshot) {
+                const bool ready =
+                    snapshot.lifecycle == RuntimeLifecycleState::Ready;
+                model_loaded_ = ready;
+                if (ready) {
+                    loaded_model_id_ =
+                        qtrans::app::from_utf8(snapshot.loaded_model_id);
+                } else if (snapshot.lifecycle ==
+                               RuntimeLifecycleState::Unloaded ||
+                           snapshot.lifecycle == RuntimeLifecycleState::Stopped) {
+                    loaded_model_id_.clear();
+                }
+                backend_label_ =
+                    qtrans::app::from_utf8(snapshot.backend_label);
+                unloading_ = snapshot.lifecycle ==
+                             RuntimeLifecycleState::Unloading;
+                busy_ = snapshot.lifecycle == RuntimeLifecycleState::Loading ||
+                        snapshot.lifecycle ==
+                            RuntimeLifecycleState::Unloading ||
+                        snapshot.lifecycle ==
+                            RuntimeLifecycleState::ShuttingDown;
+                refreshModelPage();
+                projectShellState();
+            });
     connect(inference_service_, &InferenceService::modelLoadFinished, this, &MainWindow::onModelLoadFinished);
     connect(inference_service_, &InferenceService::modelUnloadFinished, this, &MainWindow::onModelUnloadFinished);
     connect(inference_service_, &InferenceService::translationStarted, this, &MainWindow::onTranslationStarted);
@@ -402,6 +427,7 @@ void MainWindow::syncSettingsToServices() {
     request.local_path = qtrans::app::to_utf8(currentModelPath());
     request.remote_spec = model->remote_spec;
     request.modelscope_remote_spec = model->modelscope_remote_spec;
+    request.expected_sha256 = model->sha256;
     request.download_hub = model->download_hub;
     download_service_->setDownloadRequest(request);
 }

@@ -38,3 +38,8 @@ public:
         const DownloadCancelToken *cancel_token,
         DownloadProgressHandler on_progress) override;
 };
+
+// Exposed for deterministic integrity contract tests without network access.
+bool download_file_matches_sha256(const std::string &path,
+                                  const std::string &expected_sha256,
+                                  std::string *actual_sha256 = nullptr);

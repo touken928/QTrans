@@ -11,7 +11,11 @@ target_link_libraries(qtrans_tests_core
         GTest::gtest
         GTest::gtest_main
 )
-target_compile_options(qtrans_tests_core PRIVATE -Wall -Wextra -Wpedantic)
+if(MSVC)
+    target_compile_options(qtrans_tests_core PRIVATE /W4)
+else()
+    target_compile_options(qtrans_tests_core PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 target_include_directories(qtrans_tests_core PRIVATE ${PROJECT_SOURCE_DIR}/src/core/internal/host)
 gtest_discover_tests(qtrans_tests_core
     PROPERTIES
@@ -27,7 +31,11 @@ target_link_libraries(qtrans_tests_core_internal
         GTest::gtest
         GTest::gtest_main
 )
-target_compile_options(qtrans_tests_core_internal PRIVATE -Wall -Wextra -Wpedantic)
+if(MSVC)
+    target_compile_options(qtrans_tests_core_internal PRIVATE /W4)
+else()
+    target_compile_options(qtrans_tests_core_internal PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 target_include_directories(qtrans_tests_core_internal PRIVATE ${PROJECT_SOURCE_DIR}/src/core/internal)
 gtest_discover_tests(qtrans_tests_core_internal
     PROPERTIES
@@ -100,7 +108,11 @@ target_link_libraries(
         GTest::gtest
         GTest::gtest_main
 )
-target_compile_options(qtrans_tests_batchmodel PRIVATE -Wall -Wextra -Wpedantic)
+if(MSVC)
+    target_compile_options(qtrans_tests_batchmodel PRIVATE /W4)
+else()
+    target_compile_options(qtrans_tests_batchmodel PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 target_include_directories(qtrans_tests_batchmodel PRIVATE ${PROJECT_SOURCE_DIR}/src/desktop)
 gtest_discover_tests(qtrans_tests_batchmodel
     PROPERTIES

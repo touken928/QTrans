@@ -1,6 +1,8 @@
 #include "app/local_api_service.h"
 
 #include "app/inference_service.h"
+#include "app/api/http_request_parser.h"
+#include "app/api/openai_protocol.h"
 #include "domain/logging/component.h"
 #include "domain/logging/logger.h"
 #include "shared/string_bridge.h"
@@ -66,43 +68,6 @@ QByteArray statusPhrase(int status) {
         default:
             return "Error";
     }
-}
-
-enum class HeadParseResult {
-    Ok,
-    Malformed,
-    DuplicateContentLength,
-};
-
-HeadParseResult parseRequestHead(const QByteArray &head, QString *method, QString *path,
-                                 QHash<QByteArray, QByteArray> *headers) {
-    const int line_end = head.indexOf("\r\n");
-    if (line_end < 0) return HeadParseResult::Malformed;
-    const QList<QByteArray> parts = head.left(line_end).split(' ');
-    if (parts.size() < 3) return HeadParseResult::Malformed;
-    *method = QString::fromLatin1(parts.at(0));
-    *path = QString::fromLatin1(parts.at(1));
-
-    int pos = line_end + 2;
-    while (pos < head.size()) {
-        const int next = head.indexOf("\r\n", pos);
-        const int end = (next < 0) ? head.size() : next;
-        const QByteArray line = head.mid(pos, end - pos);
-        if (!line.isEmpty()) {
-            const int colon = line.indexOf(':');
-            if (colon > 0) {
-                const QByteArray name = line.left(colon).trimmed().toLower();
-                const QByteArray value = line.mid(colon + 1).trimmed();
-                if (name == "content-length" && headers->contains(name)) {
-                    return HeadParseResult::DuplicateContentLength;
-                }
-                headers->insert(name, value);
-            }
-        }
-        if (next < 0) break;
-        pos = next + 2;
-    }
-    return HeadParseResult::Ok;
 }
 
 }  // namespace
@@ -222,78 +187,33 @@ void LocalApiService::handleReadyRead(QTcpSocket *socket) {
         return;
     }
 
-    const int header_end = buffer.indexOf("\r\n\r\n");
-    if (header_end < 0) {
-        if (buffer.size() > kMaxHeaderBytes) {
-            replyError(socket, 431, QStringLiteral("request header fields too large"));
-        }
+    const auto parsed = qtrans::app::http::parse_request(
+        buffer, {kMaxHeaderBytes, kMaxBodyBytes});
+    if (parsed.state == qtrans::app::http::ParseState::Incomplete) return;
+    if (parsed.state == qtrans::app::http::ParseState::Error) {
+        replyError(socket, parsed.error_status, parsed.error_message);
         return;
     }
 
-    const QByteArray head = buffer.left(header_end);
-    if (head.size() > kMaxHeaderBytes) {
-        replyError(socket, 431, QStringLiteral("request header fields too large"));
-        return;
-    }
-    const QByteArray trailing = buffer.mid(header_end + 4);
+    const auto &request = parsed.request;
+    const bool is_post = request.method.compare(QStringLiteral("POST"),
+                                                Qt::CaseInsensitive) == 0;
+    const int query = request.path.indexOf('?');
+    const QString route = query >= 0 ? request.path.left(query) : request.path;
 
-    QString method;
-    QString path;
-    QHash<QByteArray, QByteArray> headers;
-    const HeadParseResult parse_result =
-        parseRequestHead(head, &method, &path, &headers);
-    if (parse_result == HeadParseResult::DuplicateContentLength) {
-        replyError(socket, 400, QStringLiteral("duplicate Content-Length header"));
-        return;
-    }
-    if (parse_result != HeadParseResult::Ok) {
-        replyError(socket, 400, QStringLiteral("malformed HTTP request"));
-        return;
-    }
-
-    const bool is_post = method.compare("POST", Qt::CaseInsensitive) == 0;
-    const auto content_length_it = headers.find("content-length");
-    const bool has_content_length = content_length_it != headers.end();
-
-    qint64 content_length = 0;
-    if (has_content_length) {
-        bool ok = false;
-        content_length = content_length_it.value().toLongLong(&ok);
-        if (!ok || content_length < 0) {
-            replyError(socket, 400, QStringLiteral("invalid Content-Length"));
-            return;
-        }
-        if (content_length > kMaxBodyBytes) {
-            replyError(socket, 413, QStringLiteral("request body too large"));
-            return;
-        }
-    }
-
-    QByteArray body;
-    if (is_post) {
-        if (!has_content_length) {
-            replyError(socket, 411, QStringLiteral("Content-Length is required"));
-            return;
-        }
-        if (trailing.size() < content_length) return;  // wait for the full body
-        body = trailing.left(static_cast<int>(content_length));
-    }
-
-    const int query = path.indexOf('?');
-    const QString route = query >= 0 ? path.left(query) : path;
-
-    if (method.compare("GET", Qt::CaseInsensitive) == 0 && route == QStringLiteral("/v1/models")) {
+    if (request.method.compare(QStringLiteral("GET"), Qt::CaseInsensitive) == 0 &&
+        route == QStringLiteral("/v1/models")) {
         handleListModels(socket);
         return;
     }
     if (is_post && route == QStringLiteral("/v1/chat/completions")) {
-        const auto content_type = headers.find("content-type");
-        if (content_type == headers.end() ||
+        const auto content_type = request.headers.find("content-type");
+        if (content_type == request.headers.end() ||
             !content_type.value().toLower().contains("application/json")) {
             replyError(socket, 400, QStringLiteral("Content-Type must be application/json"));
             return;
         }
-        handleChatCompletions(socket, body);
+        handleChatCompletions(socket, request.body);
         return;
     }
 
@@ -603,7 +523,7 @@ void LocalApiService::onApiChatFinished(QTcpSocket *socket, const QString &model
     if (failure != nullptr) {
         QString message = QString::fromStdString(failure->message);
         if (message.trimmed().isEmpty()) message = QStringLiteral("model request failed");
-        int status = statusForFailure(*failure);
+        int status = qtrans::app::openai::status_for_failure(*failure);
         if (reply.result.finish_reason == qtrans::core::FinishReason::Preempted ||
             failure->code == qtrans::core::FailureCode::Backpressure) {
             status = 429;
@@ -623,8 +543,9 @@ void LocalApiService::onApiChatFinished(QTcpSocket *socket, const QString &model
     const QString id =
         QStringLiteral("chatcmpl-%1").arg(static_cast<qulonglong>(reply.result.id.value));
     const QByteArray json =
-        completionJson(model, id, qtrans::app::from_utf8(reply.result.output), finish_reason,
-                       reply.result.usage);
+        qtrans::app::openai::completion_json(
+            model, id, qtrans::app::from_utf8(reply.result.output), finish_reason,
+            reply.result.usage);
     replyJson(socket, 200, json);
 }
 
@@ -664,69 +585,5 @@ void LocalApiService::replyJson(QTcpSocket *socket, int status, const QByteArray
 
 void LocalApiService::replyError(QTcpSocket *socket, int status, const QString &message,
                                  const QString &type) {
-    QJsonObject error_object;
-    error_object.insert(QStringLiteral("message"), message);
-    error_object.insert(QStringLiteral("type"), type);
-    error_object.insert(QStringLiteral("param"), QJsonValue(QJsonValue::Null));
-    error_object.insert(QStringLiteral("code"), QJsonValue(QJsonValue::Null));
-    QJsonObject root;
-    root.insert(QStringLiteral("error"), error_object);
-    replyJson(socket, status, QJsonDocument(root).toJson(QJsonDocument::Compact));
-}
-
-int LocalApiService::statusForFailure(const qtrans::core::Failure &failure) {
-    switch (failure.code) {
-        case qtrans::core::FailureCode::NotLoaded:
-        case qtrans::core::FailureCode::LifecycleTransition:
-        case qtrans::core::FailureCode::Shutdown:
-            return 503;
-        case qtrans::core::FailureCode::Deadline:
-            return 504;
-        case qtrans::core::FailureCode::Backpressure:
-            return 429;
-        case qtrans::core::FailureCode::ContextLimit:
-        case qtrans::core::FailureCode::InvalidRequest:
-        case qtrans::core::FailureCode::UnsupportedModel:
-        case qtrans::core::FailureCode::UnsupportedCapability:
-        case qtrans::core::FailureCode::Cancelled:
-            return 400;
-        case qtrans::core::FailureCode::Runtime:
-        case qtrans::core::FailureCode::Observer:
-        case qtrans::core::FailureCode::AlreadyExists:
-        case qtrans::core::FailureCode::None:
-            return 500;
-    }
-    return 500;
-}
-
-QByteArray LocalApiService::completionJson(const QString &model, const QString &id,
-                                           const QString &content, const QString &finish_reason,
-                                           const qtrans::core::TokenUsage &usage) {
-    QJsonObject message;
-    message.insert(QStringLiteral("role"), QStringLiteral("assistant"));
-    message.insert(QStringLiteral("content"), content);
-
-    QJsonObject choice;
-    choice.insert(QStringLiteral("index"), 0);
-    choice.insert(QStringLiteral("message"), message);
-    choice.insert(QStringLiteral("finish_reason"), finish_reason);
-
-    QJsonObject usage_object;
-    usage_object.insert(QStringLiteral("prompt_tokens"), static_cast<qint64>(usage.input_tokens));
-    usage_object.insert(QStringLiteral("completion_tokens"),
-                        static_cast<qint64>(usage.output_tokens));
-    usage_object.insert(QStringLiteral("total_tokens"), static_cast<qint64>(usage.total_tokens));
-
-    QJsonArray choices;
-    choices.append(choice);
-
-    QJsonObject root;
-    root.insert(QStringLiteral("id"), id);
-    root.insert(QStringLiteral("object"), QStringLiteral("chat.completion"));
-    root.insert(QStringLiteral("created"), static_cast<qint64>(QDateTime::currentSecsSinceEpoch()));
-    root.insert(QStringLiteral("model"), model);
-    root.insert(QStringLiteral("choices"), choices);
-    root.insert(QStringLiteral("usage"), usage_object);
-
-    return QJsonDocument(root).toJson(QJsonDocument::Compact);
+    replyJson(socket, status, qtrans::app::openai::error_json(message, type));
 }

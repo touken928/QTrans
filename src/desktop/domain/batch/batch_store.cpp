@@ -221,7 +221,9 @@ std::error_code sync_file_to_disk(const std::filesystem::path &path) {
 // The blank line separates entries. No trailing blank line at EOF.
 
 constexpr const char *kFieldId = "id";
+constexpr const char *kFieldFormat = "qtrans_batch";
 constexpr const char *kFieldPath = "path";
+constexpr const char *kFieldOutputPath = "output_path";
 constexpr const char *kFieldFileType = "file_type";
 constexpr const char *kFieldSourceLang = "source_language";
 constexpr const char *kFieldTargetLang = "target_language";
@@ -229,9 +231,14 @@ constexpr const char *kFieldEntryState = "entry_state";
 constexpr const char *kFieldCreated = "created_at";
 constexpr const char *kFieldUpdated = "updated_at";
 constexpr const char *kFieldSegments = "_segments";
+constexpr const char *kFieldTrailing = "trailing";
 constexpr const char *kFieldSeg = "s";
 constexpr const char *kFieldSegSource = "ss";
 constexpr const char *kFieldSegText = "st";
+constexpr const char *kFieldSegLiteral = "sl";
+constexpr int kCurrentFormatVersion = 2;
+constexpr int kMaxPersistedEntries = 10000;
+constexpr int kMaxSegmentsPerEntry = 100000;
 
 }  // namespace
 
@@ -452,6 +459,24 @@ std::size_t BatchStore::repair_duplicate_ids() {
     return repaired;
 }
 
+std::filesystem::path BatchStore::quarantine_corrupt() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::error_code error;
+    if (!std::filesystem::exists(queue_file_, error)) return {};
+    auto quarantined = queue_file_;
+    quarantined += ".corrupt." + std::to_string(
+                                     std::chrono::duration_cast<std::chrono::seconds>(
+                                         std::chrono::system_clock::now()
+                                             .time_since_epoch())
+                                         .count());
+    std::filesystem::rename(queue_file_, quarantined, error);
+    if (error) {
+        throw std::runtime_error("failed to quarantine corrupt batch queue: " +
+                                 error.message());
+    }
+    return quarantined;
+}
+
 // ── Private helpers ─────────────────────────────────────────────────────────
 
 std::vector<BatchEntry> BatchStore::load_unlocked() {
@@ -540,10 +565,15 @@ void BatchStore::atomic_write(const std::filesystem::path &path,
 
 std::string BatchStore::serialize(const std::vector<BatchEntry> &entries) {
     std::ostringstream out;
+    out << make_kv(kFieldFormat, kCurrentFormatVersion) << kDelim;
     for (std::size_t ei = 0; ei < entries.size(); ++ei) {
+        if (ei == 0) out << kDelim;
         const auto &e = entries[ei];
         out << make_kv(kFieldId, e.id) << kDelim;
         out << make_kv(kFieldPath, e.file.path.u8string()) << kDelim;
+        if (!e.output_path.empty()) {
+            out << make_kv(kFieldOutputPath, e.output_path.u8string()) << kDelim;
+        }
         out << make_kv(kFieldFileType, static_cast<int>(e.file.file_type))
             << kDelim;
         out << make_kv(kFieldSourceLang, e.source_language) << kDelim;
@@ -554,6 +584,9 @@ std::string BatchStore::serialize(const std::vector<BatchEntry> &entries) {
         out << make_kv(kFieldSegments,
                        static_cast<int>(e.file.segments.size()))
             << kDelim;
+        if (!e.file.trailing_text.empty()) {
+            out << make_kv(kFieldTrailing, e.file.trailing_text) << kDelim;
+        }
         for (const auto &seg : e.file.segments) {
             out << kFieldSeg << kSep << seg.index << ':' << seg.start_line
                 << ':' << seg.end_line << ':' << static_cast<int>(seg.state)
@@ -563,6 +596,9 @@ std::string BatchStore::serialize(const std::vector<BatchEntry> &entries) {
             }
             if (!seg.translated_text.empty()) {
                 out << make_kv(kFieldSegText, seg.translated_text) << kDelim;
+            }
+            if (!seg.literal_prefix.empty()) {
+                out << make_kv(kFieldSegLiteral, seg.literal_prefix) << kDelim;
             }
         }
         // Trailing blank line between entries (but not after last)
@@ -580,16 +616,24 @@ std::vector<BatchEntry> BatchStore::deserialize(const std::string &content) {
 
     BatchEntry current;
     bool in_entry = false;
-    int expected_segments = 0;
+    int expected_segments = -1;
     int segments_read = 0;
 
     auto flush_entry = [&] {
         if (in_entry && !current.id.empty()) {
+            if (expected_segments < 0 ||
+                static_cast<int>(current.file.segments.size()) !=
+                    expected_segments) {
+                throw std::runtime_error("invalid batch queue segment count");
+            }
+            if (entries.size() >= kMaxPersistedEntries) {
+                throw std::runtime_error("batch queue entry limit exceeded");
+            }
             entries.push_back(std::move(current));
         }
         current = BatchEntry{};
         in_entry = false;
-        expected_segments = 0;
+        expected_segments = -1;
         segments_read = 0;
     };
 
@@ -606,12 +650,19 @@ std::vector<BatchEntry> BatchStore::deserialize(const std::string &content) {
         const std::string &key = kv->key;
         const std::string &value = kv->value;
 
-        if (key == kFieldId) {
+        if (key == kFieldFormat && !in_entry) {
+            const int version = std::stoi(value);
+            if (version < 1 || version > kCurrentFormatVersion) {
+                throw std::runtime_error("unsupported batch queue format version");
+            }
+        } else if (key == kFieldId) {
             flush_entry();
             current.id = value;
             in_entry = true;
         } else if (key == kFieldPath && in_entry) {
             current.file.path = std::filesystem::u8path(value);
+        } else if (key == kFieldOutputPath && in_entry) {
+            current.output_path = std::filesystem::u8path(value);
         } else if (key == kFieldFileType && in_entry) {
             current.file.file_type = static_cast<BatchFileType>(std::stoi(value));
         } else if (key == kFieldSourceLang && in_entry) {
@@ -626,8 +677,14 @@ std::vector<BatchEntry> BatchStore::deserialize(const std::string &content) {
             current.updated_at = std::stoll(value);
         } else if (key == kFieldSegments && in_entry) {
             expected_segments = std::stoi(value);
+            if (expected_segments < 0 ||
+                expected_segments > kMaxSegmentsPerEntry) {
+                throw std::runtime_error("invalid batch queue segment count");
+            }
             current.file.segments.reserve(
                 static_cast<std::size_t>(expected_segments));
+        } else if (key == kFieldTrailing && in_entry) {
+            current.file.trailing_text = value;
         } else if (key == kFieldSeg && in_entry) {
             // Format: index:start:end:state
             std::istringstream seg_in(value);
@@ -658,6 +715,9 @@ std::vector<BatchEntry> BatchStore::deserialize(const std::string &content) {
         } else if (key == kFieldSegText && in_entry && !current.file.segments.empty()) {
             // Translated text for the most recently added segment.
             current.file.segments.back().translated_text = value;
+        } else if (key == kFieldSegLiteral && in_entry &&
+                   !current.file.segments.empty()) {
+            current.file.segments.back().literal_prefix = value;
         }
     }
     flush_entry();

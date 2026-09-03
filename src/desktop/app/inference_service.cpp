@@ -33,7 +33,42 @@ constexpr auto kApiGenerationDeadline = std::chrono::seconds(120);
 // accurate while API invocations are in flight.
 std::atomic<int> g_api_trace_guard{0};
 
+RuntimeLifecycleState map_lifecycle_state(
+    qtrans::core::LifecycleState state) {
+    switch (state) {
+        case qtrans::core::LifecycleState::Unloaded:
+            return RuntimeLifecycleState::Unloaded;
+        case qtrans::core::LifecycleState::Loading:
+            return RuntimeLifecycleState::Loading;
+        case qtrans::core::LifecycleState::Ready:
+            return RuntimeLifecycleState::Ready;
+        case qtrans::core::LifecycleState::Unloading:
+            return RuntimeLifecycleState::Unloading;
+        case qtrans::core::LifecycleState::Draining:
+            return RuntimeLifecycleState::Draining;
+        case qtrans::core::LifecycleState::ShuttingDown:
+            return RuntimeLifecycleState::ShuttingDown;
+        case qtrans::core::LifecycleState::Stopped:
+            return RuntimeLifecycleState::Stopped;
+    }
+    return RuntimeLifecycleState::Stopped;
+}
+
+#if defined(QTRANS_BUILD_TESTS)
+std::function<void(TranslationJobId)> g_before_core_submit_hook;
+#endif
+
 }  // namespace
+
+#if defined(QTRANS_BUILD_TESTS)
+namespace inference_service_test {
+
+void set_before_core_submit_hook(std::function<void(TranslationJobId)> hook) {
+    g_before_core_submit_hook = std::move(hook);
+}
+
+}  // namespace inference_service_test
+#endif
 
 InferenceService::InferenceService(QObject *parent)
     : QObject(parent), host_({}) {
@@ -41,6 +76,7 @@ InferenceService::InferenceService(QObject *parent)
     qRegisterMetaType<TranslationState>("TranslationState");
     qRegisterMetaType<TranslationChannel>("TranslationChannel");
     qRegisterMetaType<TranslationJobResult>("TranslationJobResult");
+    qRegisterMetaType<RuntimeSnapshot>("RuntimeSnapshot");
 }
 
 InferenceService::~InferenceService() {
@@ -54,7 +90,13 @@ void InferenceService::setModelConfig(const QString &model_id, const QString &mo
 }
 
 TranslationJobId InferenceService::translateNative(const NativeTranslationRequest &request) {
+    return submitNative(request).id;
+}
+
+TranslationJobTicket InferenceService::submitNative(
+    const NativeTranslationRequest &request) {
     TranslationJobId id;
+    auto cancellation = std::make_shared<TranslationCancellation>();
     {
         std::lock_guard lock(mutex_);
         id = TranslationJobId{next_job_id_++};
@@ -62,22 +104,30 @@ TranslationJobId InferenceService::translateNative(const NativeTranslationReques
         record.id = id;
         record.request = request;
         record.back_translate = request.back_translate;
+        record.cancellation = cancellation;
         jobs_.emplace(id.value, std::move(record));
     }
+    publishRuntimeSnapshot();
     if (QThread::currentThread() != thread()) {
         QMetaObject::invokeMethod(this, [this, id, request] { submitJob(id, request, TranslationChannel::Target, false); }, Qt::QueuedConnection);
     } else {
         submitJob(id, request, TranslationChannel::Target, false);
     }
-    return id;
+    return {id, std::move(cancellation)};
 }
 
 TranslationJobId InferenceService::translateBatch(const BatchTranslationRequest &request) {
+    return submitBatch(request).id;
+}
+
+TranslationJobTicket InferenceService::submitBatch(
+    const BatchTranslationRequest &request) {
     NativeTranslationRequest native;
     native.source = request.source;
     native.target_language = request.target_language;
     native.source_language = request.source_language;
     TranslationJobId id;
+    auto cancellation = std::make_shared<TranslationCancellation>();
     {
         std::lock_guard lock(mutex_);
         id = TranslationJobId{next_job_id_++};
@@ -85,14 +135,16 @@ TranslationJobId InferenceService::translateBatch(const BatchTranslationRequest 
         record.id = id;
         record.request = native;
         record.batch = true;
+        record.cancellation = cancellation;
         jobs_.emplace(id.value, std::move(record));
     }
+    publishRuntimeSnapshot();
     if (QThread::currentThread() != thread()) {
         QMetaObject::invokeMethod(this, [this, id, native] { submitJob(id, native, TranslationChannel::Target, true); }, Qt::QueuedConnection);
     } else {
         submitJob(id, native, TranslationChannel::Target, true);
     }
-    return id;
+    return {id, std::move(cancellation)};
 }
 
 void InferenceService::submitJob(TranslationJobId id, const NativeTranslationRequest &request,
@@ -101,7 +153,7 @@ void InferenceService::submitJob(TranslationJobId id, const NativeTranslationReq
     {
         std::lock_guard lock(mutex_);
         auto &job = jobs_[id.value];
-        if (job.cancel_requested) {
+        if (job.cancellation->requested()) {
             cancelled = true;
         } else {
             job.state = TranslationState::Running;
@@ -128,6 +180,9 @@ void InferenceService::submitJob(TranslationJobId id, const NativeTranslationReq
     core.input = input;
     core.work_class = batch ? qtrans::core::WorkClass::Batch
                             : qtrans::core::WorkClass::NativeInteractive;
+#if defined(QTRANS_BUILD_TESTS)
+    if (g_before_core_submit_hook) g_before_core_submit_hook(id);
+#endif
     const auto submitted = host_.submit(core, [this, id](const qtrans::core::InvocationEvent &event) {
         QMetaObject::invokeMethod(this, [this, id, event] { handleCoreEvent(id, event); }, Qt::QueuedConnection);
     });
@@ -136,8 +191,17 @@ void InferenceService::submitJob(TranslationJobId id, const NativeTranslationReq
                   qtrans::app::from_utf8(submitted.failure.message));
         return;
     }
-    std::lock_guard lock(mutex_);
-    jobs_[id.value].handle = submitted.handle;
+    // Install the core cancellation callback into the ticket. install()
+    // atomically replays a cancellation requested during submission.
+    std::shared_ptr<TranslationCancellation> cancellation;
+    {
+        std::lock_guard lock(mutex_);
+        const auto it = jobs_.find(id.value);
+        if (it == jobs_.end()) return;
+        it->second.handle = submitted.handle;
+        cancellation = it->second.cancellation;
+    }
+    cancellation->install([handle = submitted.handle] { handle.cancel(); });
 }
 
 void InferenceService::handleCoreEvent(TranslationJobId id,
@@ -166,9 +230,11 @@ void InferenceService::handleCoreEvent(TranslationJobId id,
         NativeTranslationRequest back_request;
         {
             std::lock_guard lock(mutex_);
-            auto &job = jobs_[id.value];
+            const auto found = jobs_.find(id.value);
+            if (found == jobs_.end()) return;
+            auto &job = found->second;
             job.running = false;
-            if (job.cancel_requested) {
+            if (job.cancellation->requested()) {
                 start_back = false;
             } else if (job.back_translate && !job.back_started &&
                        state == TranslationState::Completed) {
@@ -187,7 +253,9 @@ void InferenceService::handleCoreEvent(TranslationJobId id,
             bool cancelled = false;
             {
                 std::lock_guard lock(mutex_);
-                cancelled = jobs_[id.value].cancel_requested;
+                const auto found = jobs_.find(id.value);
+                cancelled = found != jobs_.end() &&
+                            found->second.cancellation->requested();
             }
             if (cancelled) {
                 finishJob(id, TranslationState::Cancelled);
@@ -202,31 +270,41 @@ void InferenceService::finishJob(TranslationJobId id, TranslationState state,
                                  const QString &error) {
     {
         std::lock_guard lock(mutex_);
-        auto &job = jobs_[id.value];
-        job.state = state;
-        job.running = false;
+        const auto found = jobs_.find(id.value);
+        if (found == jobs_.end()) return;
+        found->second.cancellation->complete();
+        jobs_.erase(found);
+        rememberTerminalJob(id, state);
     }
     TranslationJobResult result;
     result.id = id;
     result.state = state;
     result.error_message = qtrans::app::to_utf8(error);
     emit translationFinished(result);
+    publishRuntimeSnapshot();
+}
+
+void InferenceService::rememberTerminalJob(TranslationJobId id,
+                                           TranslationState state) {
+    // mutex_ is held by the caller. Terminal history intentionally contains no
+    // request text or core handles and is bounded for long-running sessions.
+    terminal_jobs_[id.value] = state;
+    terminal_job_order_.push_back(id.value);
+    while (terminal_job_order_.size() > kTerminalHistoryLimit) {
+        terminal_jobs_.erase(terminal_job_order_.front());
+        terminal_job_order_.pop_front();
+    }
 }
 
 bool InferenceService::cancel(TranslationJobId id) {
-    qtrans::core::InvocationHandle handle;
+    std::shared_ptr<TranslationCancellation> cancellation;
     {
         std::lock_guard lock(mutex_);
         const auto it = jobs_.find(id.value);
         if (it == jobs_.end()) return false;
-        it->second.cancel_requested = true;
-        if (it->second.running && it->second.handle) {
-            handle = it->second.handle;
-        } else {
-            return true;
-        }
+        cancellation = it->second.cancellation;
     }
-    return static_cast<bool>(handle.cancel());
+    return cancellation->request();
 }
 
 bool InferenceService::preemptBatch() {
@@ -248,7 +326,41 @@ bool InferenceService::preemptBatch() {
 TranslationState InferenceService::jobState(TranslationJobId id) const {
     std::lock_guard lock(mutex_);
     const auto it = jobs_.find(id.value);
-    return it == jobs_.end() ? TranslationState::Failed : it->second.state;
+    if (it != jobs_.end()) return it->second.state;
+    const auto terminal = terminal_jobs_.find(id.value);
+    return terminal == terminal_jobs_.end() ? TranslationState::Failed
+                                            : terminal->second;
+}
+
+RuntimeSnapshot InferenceService::runtimeSnapshot() const {
+    const auto host_snapshot = host_.snapshot();
+    RuntimeSnapshot snapshot;
+    snapshot.lifecycle = map_lifecycle_state(host_snapshot.state);
+    if (host_snapshot.model) snapshot.loaded_model_id = host_snapshot.model->value;
+    snapshot.backend_label = qtrans::core::backend_state().label;
+    snapshot.supports_conversation = host_snapshot.supports_conversation;
+    {
+        std::lock_guard lock(mutex_);
+        snapshot.active_translation_jobs = jobs_.size();
+        snapshot.active_api_jobs = api_chats_.size();
+    }
+    return snapshot;
+}
+
+void InferenceService::publishRuntimeSnapshot(
+    std::optional<RuntimeLifecycleState> lifecycle_override) {
+    if (QThread::currentThread() != thread()) {
+        QMetaObject::invokeMethod(
+            this,
+            [this, lifecycle_override] {
+                publishRuntimeSnapshot(lifecycle_override);
+            },
+            Qt::QueuedConnection);
+        return;
+    }
+    auto snapshot = runtimeSnapshot();
+    if (lifecycle_override) snapshot.lifecycle = *lifecycle_override;
+    emit runtimeSnapshotChanged(snapshot);
 }
 
 bool InferenceService::isModelLoaded() const {
@@ -280,6 +392,7 @@ std::uint64_t InferenceService::submitApiChat(const ApiChatRequest &request,
         record.callback = std::move(callback);
         api_chats_.emplace(request_id, std::move(record));
     }
+    publishRuntimeSnapshot();
     if (QThread::currentThread() != thread()) {
         QMetaObject::invokeMethod(this, [this, request_id, request] { doSubmitApiChat(request_id, request); }, Qt::QueuedConnection);
     } else {
@@ -385,6 +498,7 @@ void InferenceService::finishApiChat(std::uint64_t request_id,
         callback = std::move(it->second.callback);
         api_chats_.erase(it);
     }
+    publishRuntimeSnapshot();
     if (callback) callback(ApiChatReply{true, result.failure.value_or(qtrans::core::Failure{}), result});
 }
 
@@ -420,12 +534,14 @@ void InferenceService::loadModel() {
         model_path = model_path_;
     }
     emit statusChanged(QStringLiteral("Loading model into memory"), true);
+    publishRuntimeSnapshot(RuntimeLifecycleState::Loading);
     const auto result = host_.load({{model_id}, std::filesystem::u8path(model_path)});
     // Terminal nonbusy status for both success and failure so consumers can
     // never remain in a busy/disabled state after the lifecycle command.
     emit statusChanged(QStringLiteral("Ready"), false);
     emit modelLoadFinished(static_cast<bool>(result),
                            qtrans::app::from_utf8(result.failure.message), backendLabel());
+    publishRuntimeSnapshot();
 }
 
 void InferenceService::unloadModel() {
@@ -434,6 +550,7 @@ void InferenceService::unloadModel() {
         return;
     }
     emit statusChanged(QStringLiteral("Unloading model"), true);
+    publishRuntimeSnapshot(RuntimeLifecycleState::Unloading);
     const auto result = host_.unload();
     // Terminal nonbusy status and a terminal result for both success and
     // failure so consumers can never remain in a lifecycle busy state after
@@ -441,6 +558,7 @@ void InferenceService::unloadModel() {
     emit statusChanged(QStringLiteral("Ready"), false);
     emit modelUnloadFinished(static_cast<bool>(result),
                              qtrans::app::from_utf8(result.failure.message));
+    publishRuntimeSnapshot();
 }
 
 void InferenceService::shutdown() {
@@ -449,7 +567,9 @@ void InferenceService::shutdown() {
                                   Qt::BlockingQueuedConnection);
         return;
     }
+    publishRuntimeSnapshot(RuntimeLifecycleState::ShuttingDown);
     if (host_.snapshot().state != qtrans::core::LifecycleState::Stopped) host_.shutdown();
+    publishRuntimeSnapshot();
 }
 
 void InferenceService::initializeBackend() {
