@@ -25,6 +25,7 @@ runs:
         key: vcpkg-binary-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target-triplet }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/**', 'CMakePresets.json', 'cmake/toolchains/**') }}
         restore-keys: |
           vcpkg-binary-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target-triplet }}-
+        save-always: true
 
     - name: Checkout and bootstrap vcpkg
       if: runner.os != 'Windows'
