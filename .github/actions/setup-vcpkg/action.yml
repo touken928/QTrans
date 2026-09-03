@@ -101,3 +101,10 @@ runs:
           --x-install-root=$env:INSTALL_ROOT `
           --clean-after-build
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    - name: Save vcpkg binary cache
+      if: ${{ success() }}
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ inputs.binary-cache-path }}
+        key: vcpkg-binary-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target-triplet }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/**', 'CMakePresets.json', 'cmake/toolchains/**') }}
