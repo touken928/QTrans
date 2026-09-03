@@ -163,16 +163,22 @@ TEST_F(AppSettingsTest, EffectiveModelsDirRelativeResolvedAgainstDataRoot) {
 
 TEST_F(AppSettingsTest, EffectiveModelsDirAbsoluteUsedAsIs) {
     AppSettings s;
-    s.models_dir = "/absolute/path/models";
-    EXPECT_EQ(s.effectiveModelsDir(paths_), "/absolute/path/models");
+    const auto absolute_models =
+        std::filesystem::temp_directory_path() / "qtrans_absolute_models";
+    s.models_dir = absolute_models.string();
+    EXPECT_EQ(s.effectiveModelsDir(paths_), absolute_models.string());
 }
 
 TEST_F(AppSettingsTest, EffectiveModelPathJoinsSelectedModelFilename) {
     AppSettings s;
-    s.models_dir = "/abs/models";
+    const auto absolute_models =
+        std::filesystem::temp_directory_path() / "qtrans_absolute_models";
+    s.models_dir = absolute_models.string();
     s.model_id = "hymt2-1.8b-q4";
     const std::string path = s.effectiveModelPath(paths_);
-    EXPECT_EQ(path, std::string("/abs/models/") + find_model_by_id("hymt2-1.8b-q4")->filename);
+    EXPECT_EQ(path,
+              (absolute_models / find_model_by_id("hymt2-1.8b-q4")->filename)
+                  .string());
 }
 
 TEST_F(AppSettingsTest, SetEffectiveModelsDirClearsWhenMatchingDefault) {

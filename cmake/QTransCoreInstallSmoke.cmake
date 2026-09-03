@@ -46,6 +46,7 @@ string(JOIN ";" prefix_path_argument ${prefix_path})
 execute_process(
     COMMAND "${CMAKE_COMMAND}" -S "${smoke_root}/consumer" -B "${smoke_root}/build"
             "-DCMAKE_PREFIX_PATH=${prefix_path_argument}"
+            -DCMAKE_BUILD_TYPE=Release
     RESULT_VARIABLE configure_result
 )
 if(NOT configure_result EQUAL 0)
@@ -53,7 +54,7 @@ if(NOT configure_result EQUAL 0)
 endif()
 
 execute_process(
-    COMMAND "${CMAKE_COMMAND}" --build "${smoke_root}/build"
+    COMMAND "${CMAKE_COMMAND}" --build "${smoke_root}/build" --config Release
     RESULT_VARIABLE build_result
 )
 if(NOT build_result EQUAL 0)
@@ -63,6 +64,12 @@ endif()
 set(smoke_binary "${smoke_root}/build/consumer")
 if(WIN32)
     set(smoke_binary "${smoke_binary}.exe")
+endif()
+if(NOT EXISTS "${smoke_binary}")
+    set(smoke_binary "${smoke_root}/build/Release/consumer")
+    if(WIN32)
+        set(smoke_binary "${smoke_binary}.exe")
+    endif()
 endif()
 
 execute_process(

@@ -85,7 +85,10 @@ TEST(BatchOutputWriter, FailureDoesNotReplaceExistingOutput) {
 
     const auto result = write_batch_output_atomic(entry, output);
     EXPECT_FALSE(result.success);
-    std::ifstream existing(output);
-    EXPECT_EQ(std::string(std::istreambuf_iterator<char>(existing), {}), "original");
+    {
+        std::ifstream existing(output);
+        EXPECT_EQ(std::string(std::istreambuf_iterator<char>(existing), {}),
+                  "original");
+    }
     std::filesystem::remove_all(root);
 }
