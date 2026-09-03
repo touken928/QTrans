@@ -18,6 +18,11 @@ file(WRITE "${smoke_root}/consumer/CMakeLists.txt" [=[
 cmake_minimum_required(VERSION 3.21)
 project(QTransCoreConsumer LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
+if(MSVC)
+    # The installed core is validated against the x64-windows-static triplet,
+    # whose libraries use the static MSVC runtime.
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
+endif()
 find_package(QTransCore CONFIG REQUIRED)
 add_executable(consumer main.cpp)
 target_link_libraries(consumer PRIVATE QTrans::Core)
