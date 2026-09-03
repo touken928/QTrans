@@ -91,6 +91,22 @@ jobs:
           Write-Host 'QTrans link command'
           & ninja -C $env:BUILD_DIR -t commands |
             Select-String -Pattern 'QTrans\.exe'
+          $response = Join-Path $env:BUILD_DIR 'src/desktop/CMakeFiles/QTrans.rsp'
+          Write-Host "QTrans response file: $response"
+          Get-Content $response | Select-String -Pattern '(?i)icu|qt6|qtrans|\.lib'
+          foreach ($library in @(
+              (Join-Path $env:BUILD_DIR 'src/core/qtrans_core.lib'),
+              (Join-Path $env:BUILD_DIR 'src/desktop/qtrans_desktop.lib'),
+              (Join-Path $env:VCPKG_INSTALL_ROOT 'x64-windows-static/lib/Qt6Core.lib'),
+              (Join-Path $env:VCPKG_INSTALL_ROOT 'x64-windows-static/lib/icuuc.lib')
+            )) {
+            if (Test-Path $library) {
+              Write-Host "Symbols referencing ICU in $library"
+              & dumpbin /symbols $library 2>$null |
+                Select-String -Pattern '(?i)icuuc|__imp_' |
+                Select-Object -First 20
+            }
+          }
 
       - name: Run tests
         if: ${{ !inputs.package }}
