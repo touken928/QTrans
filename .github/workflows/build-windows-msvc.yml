@@ -61,19 +61,19 @@ jobs:
       - name: Configure tests
         if: ${{ !inputs.package }}
         shell: pwsh
-        run: cmake --preset $env:CMAKE_PRESET -DQTRANS_BUILD_TESTS=ON -DVCPKG_INSTALLED_DIR=$env:VCPKG_INSTALL_ROOT -DVCPKG_APPLOCAL_DEPS=OFF
+        run: cmake --preset ${env:CMAKE_PRESET} -DQTRANS_BUILD_TESTS=ON -DVCPKG_INSTALLED_DIR="${env:VCPKG_INSTALL_ROOT}" -DVCPKG_APPLOCAL_DEPS=OFF
 
       - name: Configure release
         if: ${{ inputs.package }}
         shell: pwsh
-        run: cmake --preset $env:CMAKE_PRESET -DQTRANS_BUILD_TESTS=OFF -DVCPKG_INSTALLED_DIR=$env:VCPKG_INSTALL_ROOT -DVCPKG_APPLOCAL_DEPS=OFF
+        run: cmake --preset ${env:CMAKE_PRESET} -DQTRANS_BUILD_TESTS=OFF -DVCPKG_INSTALLED_DIR="${env:VCPKG_INSTALL_ROOT}" -DVCPKG_APPLOCAL_DEPS=OFF
 
       - name: Build
-        run: cmake --build --preset $env:CMAKE_PRESET --parallel $env:NUMBER_OF_PROCESSORS
+        run: cmake --build --preset ${env:CMAKE_PRESET} --parallel ${env:NUMBER_OF_PROCESSORS}
 
       - name: Run tests
         if: ${{ !inputs.package }}
-        run: ctest --test-dir $env:BUILD_DIR --output-on-failure
+        run: ctest --test-dir ${env:BUILD_DIR} --output-on-failure
 
       - name: Verify imports and package
         if: ${{ inputs.package }}
