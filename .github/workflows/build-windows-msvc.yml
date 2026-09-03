@@ -15,6 +15,12 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      package:
+        description: Verify imports and upload the release package
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -70,6 +76,21 @@ jobs:
 
       - name: Build
         run: cmake --build --preset ${env:CMAKE_PRESET} --parallel ${env:NUMBER_OF_PROCESSORS}
+
+      - name: Diagnose release linkage
+        if: ${{ inputs.package }}
+        shell: pwsh
+        run: |
+          $icuLibDir = Join-Path $env:VCPKG_INSTALL_ROOT "x64-windows-static/lib"
+          Write-Host "ICU libraries in $icuLibDir"
+          Get-ChildItem $icuLibDir -Filter '*icu*.lib' | ForEach-Object {
+            Write-Host "--- $($_.Name)"
+            & dumpbin /headers $_.FullName |
+              Select-String -Pattern 'FILE HEADER VALUES|SECTION HEADER|\.idata|\.text|machine|DLL'
+          }
+          Write-Host 'QTrans link command'
+          & ninja -C $env:BUILD_DIR -t commands |
+            Select-String -Pattern 'QTrans\.exe'
 
       - name: Run tests
         if: ${{ !inputs.package }}
