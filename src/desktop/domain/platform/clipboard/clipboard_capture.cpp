@@ -1,12 +1,15 @@
 #include "domain/platform/clipboard/clipboard_capture.h"
 
-#include "shared/string_bridge.h"
 #include "domain/logging/component.h"
 #include "domain/logging/logger.h"
 
 #include <QApplication>
 #include <QClipboard>
+#include <QMimeData>
 #include <QTimer>
+#include <memory>
+#include <utility>
+#include <vector>
 #include <chrono>
 #include <thread>
 
@@ -18,6 +21,41 @@ auto clipboard_logger() {
     return qtrans::log::get(qtrans::log::Component::Clipboard);
 }
 
+struct MimeSnapshot {
+    std::vector<std::pair<QString, QByteArray>> formats;
+};
+
+MimeSnapshot snapshot_mime(const QMimeData *mime) {
+    MimeSnapshot snapshot;
+    if (!mime) return snapshot;
+    for (const QString &format : mime->formats()) {
+        snapshot.formats.emplace_back(format, mime->data(format));
+    }
+    return snapshot;
+}
+
+bool mime_matches(const QMimeData *mime, const MimeSnapshot &snapshot) {
+    if (!mime || mime->formats().size() != static_cast<int>(snapshot.formats.size())) {
+        return snapshot.formats.empty() && (!mime || mime->formats().empty());
+    }
+    for (const auto &[format, data] : snapshot.formats) {
+        if (!mime->hasFormat(format) || mime->data(format) != data) return false;
+    }
+    return true;
+}
+
+void restore_mime(QClipboard *clipboard, const MimeSnapshot &snapshot) {
+    if (snapshot.formats.empty()) {
+        clipboard->clear();
+        return;
+    }
+    auto *mime = new QMimeData;
+    for (const auto &[format, data] : snapshot.formats) {
+        mime->setData(format, data);
+    }
+    clipboard->setMimeData(mime);
+}
+
 }  // namespace
 
 QString captureSelectedText(int timeoutMs) {
@@ -26,11 +64,9 @@ QString captureSelectedText(int timeoutMs) {
         return {};
     }
 
-    const QString oldText = clipboard->text();
-    clipboard_logger()->trace(
-        "oldText '{}' (empty={})",
-        qtrans::app::to_utf8(oldText),
-        oldText.isEmpty());
+    const MimeSnapshot original = snapshot_mime(clipboard->mimeData());
+    clipboard_logger()->trace("captured {} original clipboard MIME formats",
+                              original.formats.size());
 
     clipboard->clear();
     clipboard_logger()->debug("clipboard cleared, simulating pasteboard copy");
@@ -50,10 +86,8 @@ QString captureSelectedText(int timeoutMs) {
         captured = clipboard->text();
         ++pollCount;
         if (!captured.isEmpty()) {
-            clipboard_logger()->trace(
-                "captured after {} polls: '{}'",
-                pollCount,
-                qtrans::app::to_utf8(captured));
+            clipboard_logger()->trace("captured selected text after {} polls ({} characters)",
+                                      pollCount, captured.size());
             break;
         }
     }
@@ -62,15 +96,18 @@ QString captureSelectedText(int timeoutMs) {
         clipboard_logger()->warn("timeout after {} polls, no text captured", pollCount);
     }
 
-    QTimer::singleShot(200, qApp, [oldText]() {
+    const MimeSnapshot copied = snapshot_mime(clipboard->mimeData());
+    QTimer::singleShot(200, qApp, [original, copied]() {
         QClipboard *cb = QApplication::clipboard();
-        if (cb && !oldText.isEmpty()) {
-            cb->setText(oldText);
+        // Restore only if the clipboard still contains the synthetic copy.
+        // A real copy made by the user during the delay always wins.
+        if (cb && mime_matches(cb->mimeData(), copied)) {
+            restore_mime(cb, original);
         }
     });
 
-    if (!oldText.isEmpty() && captured.isEmpty()) {
-        clipboard->setText(oldText);
+    if (captured.isEmpty() && mime_matches(clipboard->mimeData(), copied)) {
+        restore_mime(clipboard, original);
     }
 
     return captured.trimmed();

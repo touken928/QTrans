@@ -2,6 +2,7 @@ add_library(qtrans_desktop STATIC
     domain/storage/app_paths.cpp
     domain/settings/settings.cpp
     domain/inference/inference_resolver.cpp
+    domain/inference/inference_types.cpp
     domain/model-catalog/model_catalog.cpp
     domain/model-catalog/language_list.cpp
     domain/inference/platform_profile.cpp
@@ -16,8 +17,13 @@ add_library(qtrans_desktop STATIC
     domain/logging/console_progress.cpp
     domain/batch/batch_store.cpp
     domain/batch/batch_file_handler.cpp
+    domain/batch/batch_output_writer.cpp
     app/inference_service.cpp
     app/inference_service.h
+    app/api/http_request_parser.cpp
+    app/api/http_request_parser.h
+    app/api/openai_protocol.cpp
+    app/api/openai_protocol.h
     app/local_api_service.cpp
     app/local_api_service.h
     app/download_service.cpp
@@ -129,12 +135,17 @@ target_link_libraries(QTrans PRIVATE qtrans_desktop Qt6::Widgets)
 
 if(WIN32)
     target_sources(QTrans PRIVATE ${_QT_SOURCES_WIN} domain/platform/single_instance/win/single_instance_activate.cpp)
+    set_target_properties(QTrans PROPERTIES WIN32_EXECUTABLE TRUE)
+    qt_import_plugins(QTrans
+        INCLUDE_BY_TYPE platforms Qt6::QWindowsIntegrationPlugin
+        INCLUDE_BY_TYPE styles Qt6::QWindowsVistaStylePlugin
+    )
 elseif(APPLE)
     target_sources(QTrans PRIVATE ${_QT_SOURCES_MAC} domain/platform/single_instance/mac/single_instance.mm)
     target_link_libraries(QTrans PRIVATE "-framework AppKit" "-framework ApplicationServices" "-framework Carbon" "-framework CoreGraphics")
     qt_import_plugins(QTrans
-        INCLUDE BY_TYPE platforms Qt6::QCocoaIntegrationPlugin
-        INCLUDE BY_TYPE platformthemes Qt6::QMacStylePlugin
+        INCLUDE_BY_TYPE platforms Qt6::QCocoaIntegrationPlugin
+        INCLUDE_BY_TYPE styles Qt6::QMacStylePlugin
     )
 endif()
 

@@ -1,4 +1,4 @@
-name: Branch policy
+name: Check / Branch Policy
 
 on:
   push:
@@ -12,10 +12,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   branch-name:
     name: Branch naming
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     if: github.actor != 'dependabot[bot]'
     steps:
       - name: Validate branch name

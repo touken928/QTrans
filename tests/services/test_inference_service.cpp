@@ -5,6 +5,10 @@
 
 #include <gtest/gtest.h>
 
+namespace inference_service_test {
+void set_before_core_submit_hook(std::function<void(TranslationJobId)> hook);
+}
+
 #include <QCoreApplication>
 #include <QThread>
 
@@ -99,11 +103,16 @@ TEST(InferenceService, MapsLoadAndTranslationThroughModelHost) {
     service.loadModel();
     process_until(application, [&] { return loaded; });
     ASSERT_TRUE(loaded);
-    const TranslationJobId id = service.translateNative(native_request());
+    const TranslationJobTicket ticket = service.submitNative(native_request());
+    const TranslationJobId id = ticket.id;
     EXPECT_TRUE(id.is_valid());
     process_until(application, [&] { return translated; });
     EXPECT_TRUE(translated);
     EXPECT_EQ(service.jobState(id), TranslationState::Completed);
+    const RuntimeSnapshot snapshot = service.runtimeSnapshot();
+    EXPECT_EQ(snapshot.lifecycle, RuntimeLifecycleState::Ready);
+    EXPECT_EQ(snapshot.loaded_model_id, "demo");
+    EXPECT_EQ(snapshot.active_translation_jobs, 0U);
     service.shutdown();
 }
 
@@ -156,6 +165,47 @@ TEST(InferenceService, CancellationAndBatchPreemptionPreserveStates) {
     EXPECT_TRUE(service.preemptBatch());
     process_until(application, [&] { return preempted; });
     EXPECT_TRUE(preempted);
+    service.shutdown();
+}
+
+TEST(InferenceService, CancellationRacingCoreHandleInstallationIsReplayed) {
+    int argc = 1;
+    char name[] = "inference-service-submit-cancel-race-test";
+    char *argv[] = {name, nullptr};
+    QCoreApplication application(argc, argv);
+    std::atomic<int> generation_calls{0};
+    qtrans::core::test::ModelHostHooks hooks;
+    hooks.generate = [&generation_calls](std::string_view,
+                                         const qtrans::core::SamplingOptions &,
+                                         const std::function<void(std::string_view)> &,
+                                         const std::function<bool()> &) {
+        ++generation_calls;
+        return qtrans::core::test::TestGeneration{"unexpected", 1, 1, false, {}};
+    };
+    qtrans::core::test::ScopedModelHostHooks scoped_hooks(hooks);
+    InferenceService service;
+    service.setModelConfig(QStringLiteral("demo"), QString());
+    bool loaded = false;
+    QObject::connect(&service, &InferenceService::modelLoadFinished, &application,
+                     [&](bool success, const QString &, const QString &) { loaded = success; });
+    service.loadModel();
+    process_until(application, [&] { return loaded; });
+    ASSERT_TRUE(loaded);
+
+    inference_service_test::set_before_core_submit_hook(
+        [&](TranslationJobId id) { EXPECT_TRUE(service.cancel(id)); });
+    bool cancelled = false;
+    QObject::connect(&service, &InferenceService::translationFinished, &application,
+                     [&](const TranslationJobResult &result) {
+                         cancelled = result.state == TranslationState::Cancelled;
+                     });
+    const TranslationJobId id = service.translateNative(native_request());
+    inference_service_test::set_before_core_submit_hook({});
+
+    process_until(application, [&] { return cancelled; });
+    EXPECT_TRUE(cancelled);
+    EXPECT_EQ(service.jobState(id), TranslationState::Cancelled);
+    EXPECT_EQ(generation_calls.load(), 0);
     service.shutdown();
 }
 
@@ -717,7 +767,7 @@ TEST(InferenceService, RemovingActiveBatchEntryWhilePausedResumesQueue) {
     std::filesystem::remove_all(dir, ec);
 }
 
-TEST(InferenceService, StoreExceptionsAreContainedAtQtBoundaries) {
+TEST(InferenceService, CorruptStoreIsQuarantinedAtStartup) {
     int argc = 1;
     char name[] = "batch-store-exception-test";
     char *argv[] = {name, nullptr};
@@ -773,11 +823,19 @@ TEST(InferenceService, StoreExceptionsAreContainedAtQtBoundaries) {
     QMetaObject::invokeMethod(batch, "loadPersistedEntries", Qt::QueuedConnection);
     process_until(application, [&] { return errors >= 1; });
 
-    // start() must surface the failure and stop cleanly instead of letting
-    // the exception escape through the worker event loop.
+    EXPECT_FALSE(std::filesystem::exists(dir / "queue.bq"));
+    bool found_quarantine = false;
+    for (const auto &item : std::filesystem::directory_iterator(dir)) {
+        if (item.path().filename().string().find("queue.bq.corrupt.") == 0) {
+            found_quarantine = true;
+        }
+    }
+    EXPECT_TRUE(found_quarantine);
+
+    // The quarantined queue is no longer allowed to poison later runs.
     QMetaObject::invokeMethod(batch, "start", Qt::QueuedConnection);
-    process_until(application, [&] { return errors >= 2; });
-    EXPECT_FALSE(last_running);
+    process_until(application, [&] { return !last_running; });
+    EXPECT_EQ(errors, 1);
 
     QMetaObject::invokeMethod(service, &InferenceService::shutdown, Qt::BlockingQueuedConnection);
     QMetaObject::invokeMethod(context, [&] {
@@ -896,6 +954,61 @@ TEST(InferenceService, FailedSegmentNeverCompletesEntryOrWritesOutput) {
     worker.wait();
     delete context;
     std::filesystem::remove_all(dir, ec);
+}
+
+TEST(InferenceService, OutputFailureNeverPublishesCompletedOrSaved) {
+    int argc = 1;
+    char name[] = "batch-output-failure-test";
+    char *argv[] = {name, nullptr};
+    QCoreApplication application(argc, argv);
+    qtrans::core::test::ScopedModelHostHooks scoped_hooks(
+        qtrans::core::test::ModelHostHooks{});
+    const auto dir = std::filesystem::temp_directory_path() /
+                     "qtrans-batch-output-failure";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    const auto input = dir / "input.txt";
+    const auto output_blocker = dir / "not-a-directory";
+    {
+        std::ofstream file(input);
+        file << "hello";
+    }
+    {
+        std::ofstream file(output_blocker);
+        file << "block";
+    }
+
+    InferenceService service;
+    service.setModelConfig(QStringLiteral("demo"), QString());
+    BatchController batch(&service, dir / "queue.bq", output_blocker);
+    bool loaded = false;
+    int saved = 0;
+    int errors = 0;
+    QObject::connect(&service, &InferenceService::modelLoadFinished, &application,
+                     [&](bool success, const QString &, const QString &) {
+                         loaded = success;
+                     });
+    QObject::connect(&batch, &BatchController::entrySaved, &application,
+                     [&](const QString &, const QString &) { ++saved; });
+    QObject::connect(&batch, &BatchController::errorOccurred, &application,
+                     [&](const QString &) { ++errors; });
+    service.loadModel();
+    process_until(application, [&] { return loaded; });
+    ASSERT_TRUE(loaded);
+
+    batch.addFile(QString::fromStdString(input.u8string()), QStringLiteral("Auto"),
+                  QStringLiteral("Chinese"));
+    const QString id = batch.entryIds().value(0);
+    ASSERT_FALSE(id.isEmpty());
+    batch.start();
+    process_until(application, [&] {
+        return batch.entryState(id) == static_cast<int>(BatchEntryState::Failed);
+    });
+    EXPECT_EQ(batch.entryState(id), static_cast<int>(BatchEntryState::Failed));
+    EXPECT_EQ(saved, 0);
+    EXPECT_GE(errors, 1);
+    service.shutdown();
+    std::filesystem::remove_all(dir);
 }
 
 TEST(InferenceService, ConcurrentPopupMainAndBatchJobsCorrelateIndependently) {

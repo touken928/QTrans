@@ -1,6 +1,6 @@
 #pragma once
 
-#include "domain/batch/batch_types.h"
+#include "domain/batch/queue_repository.h"
 
 #include <filesystem>
 #include <mutex>
@@ -9,40 +9,41 @@
 
 // Durable batch queue store with atomic persistence semantics.
 // Thread-safe: all public methods acquire an internal mutex.
-class BatchStore {
+class BatchStore final : public QueueRepository {
 public:
     explicit BatchStore(std::filesystem::path queue_file);
 
     // Load all entries from the queue file. Returns empty vector if file does
     // not exist or is unreadable.
-    std::vector<BatchEntry> load() const;
+    std::vector<BatchEntry> load() const override;
 
     // Replace the entire queue with the given entries (atomic write).
-    void save(const std::vector<BatchEntry> &entries);
+    void save(const std::vector<BatchEntry> &entries) override;
 
     // Convenience: load, append one entry, save.
-    void append(const BatchEntry &entry);
+    void append(const BatchEntry &entry) override;
 
     // Convenience: load, remove entry by id, save.
-    void remove(const std::string &entry_id);
+    void remove(const std::string &entry_id) override;
 
     // Convenience: load, update entry state, save.
-    void update_entry_state(const std::string &entry_id, BatchEntryState state);
+    void update_entry_state(const std::string &entry_id,
+                            BatchEntryState state) override;
 
     // Convenience: load, update a single segment's state within an entry, save.
     void update_segment_state(const std::string &entry_id, int segment_index,
-                              BatchSegmentState state);
+                              BatchSegmentState state) override;
 
     // Convenience: load, update a single segment's translated text, save.
     void update_segment_translated(const std::string &entry_id, int segment_index,
-                                   const std::string &translated_text);
+                                   const std::string &translated_text) override;
 
     // Convenience: load, reset one failed entry for a retry. Every Failed
     // segment becomes Pending again and the entry state returns to Queued so
     // a later batch run re-attempts it. Returns true when the entry was found
     // in the Failed state and was reset; any other entry (or an unknown id)
     // is left untouched and false is returned.
-    bool reset_for_retry(const std::string &entry_id);
+    bool reset_for_retry(const std::string &entry_id) override;
 
     // Startup recovery: entries abandoned in the Processing state by an
     // interrupted run return to Queued so a restart picks them up again.
@@ -56,6 +57,10 @@ public:
     // two entries onto one row. Queue order is preserved; returns the number
     // of entries whose id changed.
     std::size_t repair_duplicate_ids();
+
+    // Moves an unreadable queue aside for diagnosis and starts with no active
+    // queue. The returned path is empty when no queue existed.
+    std::filesystem::path quarantine_corrupt();
 
 private:
     std::filesystem::path queue_file_;

@@ -55,6 +55,7 @@ BatchEntry make_entry(const std::string &id) {
     seg0.end_line = 5;
     seg0.source_text = "Hello world";
     seg0.translated_text = "你好，世界";
+    seg0.literal_prefix = "1\r\n00:00:00 --> 00:00:01\r\n";
     seg0.state = BatchSegmentState::Completed;
 
     BatchSegment seg1;
@@ -65,6 +66,9 @@ BatchEntry make_entry(const std::string &id) {
     seg1.state = BatchSegmentState::Pending;
 
     entry.file.segments = {seg0, seg1};
+    entry.file.trailing_text = "\r\n";
+    entry.output_path = std::filesystem::path("batch/output") /
+                        (id + "_translated.txt");
     return entry;
 }
 
@@ -89,9 +93,13 @@ void expect_entry_eq(const BatchEntry &actual, const BatchEntry &expected) {
                   expected.file.segments[i].source_text);
         EXPECT_EQ(actual.file.segments[i].translated_text,
                   expected.file.segments[i].translated_text);
+        EXPECT_EQ(actual.file.segments[i].literal_prefix,
+                  expected.file.segments[i].literal_prefix);
         EXPECT_EQ(actual.file.segments[i].state,
                   expected.file.segments[i].state);
     }
+    EXPECT_EQ(actual.file.trailing_text, expected.file.trailing_text);
+    EXPECT_EQ(actual.output_path, expected.output_path);
 }
 
 void expect_entries_eq(const std::vector<BatchEntry> &actual,
@@ -177,6 +185,29 @@ TEST_F(BatchStoreTest, SaveAndLoadRoundTrip) {
     store.save(entries);
 
     expect_entries_eq(store.load(), entries);
+}
+
+TEST_F(BatchStoreTest, LoadsVersionOneQueueForStartupMigration) {
+    {
+        std::ofstream queue(queue_);
+        queue << "id=legacy\n"
+                 "path=docs/legacy.srt\n"
+                 "file_type=3\n"
+                 "source_language=Auto\n"
+                 "target_language=Chinese\n"
+                 "entry_state=0\n"
+                 "created_at=1\n"
+                 "updated_at=1\n"
+                 "_segments=1\n"
+                 "s=0:0:1:0\n"
+                 "ss=hello\n";
+    }
+    BatchStore store(queue_);
+    const auto entries = store.load();
+    ASSERT_EQ(entries.size(), 1U);
+    EXPECT_EQ(entries[0].id, "legacy");
+    EXPECT_TRUE(entries[0].output_path.empty());
+    EXPECT_TRUE(entries[0].file.segments[0].literal_prefix.empty());
 }
 
 TEST_F(BatchStoreTest, SaveReplacesExistingQueue) {

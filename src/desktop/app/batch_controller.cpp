@@ -2,13 +2,14 @@
 
 #include "shared/string_bridge.h"
 #include "domain/batch/batch_file_handler.h"
+#include "domain/batch/batch_output_writer.h"
 #include "domain/batch/batch_store.h"
 #include "domain/logging/component.h"
 #include "domain/logging/logger.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
-#include <fstream>
 #include <stdexcept>
 #include <utility>
 
@@ -48,6 +49,14 @@ std::int64_t now_epoch_ms() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
                std::chrono::system_clock::now().time_since_epoch())
         .count();
+}
+
+std::string output_path_key(const std::filesystem::path &path) {
+    std::string key = path.lexically_normal().u8string();
+    std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return key;
 }
 
 // Find entry by id in a vector; returns nullptr if not found.
@@ -102,8 +111,43 @@ void BatchController::loadPersistedEntries() {
         // Processing (normalize back to Queued, keeping completed segment
         // checkpoints) or duplicate ids (rewrite to unique ids). Both are
         // repaired here, before any UI projection is emitted.
-        store_.recover_abandoned_processing();
-        store_.repair_duplicate_ids();
+        try {
+            store_.recover_abandoned_processing();
+            store_.repair_duplicate_ids();
+        } catch (const std::exception &error) {
+            const auto quarantined = store_.quarantine_corrupt();
+            qtrans::log::get(qtrans::log::Component::App)
+                ->error("quarantined corrupt batch queue at {}: {}",
+                        quarantined.u8string(), error.what());
+            emit errorOccurred(QStringLiteral(
+                "Batch queue was corrupt and has been moved aside"));
+            emitQueueSnapshot();
+            return;
+        }
+
+        auto migrated_entries = store_.load();
+        bool migrated = false;
+        std::vector<std::filesystem::path> reserved_paths;
+        for (auto &entry : migrated_entries) {
+            if (entry.output_path.empty()) {
+                const auto legacy_path =
+                    output_path_for(entry.file.path, outputDir_);
+                const bool already_reserved = std::any_of(
+                    reserved_paths.begin(), reserved_paths.end(),
+                    [&](const auto &path) {
+                        return output_path_key(path) ==
+                               output_path_key(legacy_path);
+                    });
+                entry.output_path =
+                    already_reserved
+                        ? allocate_output_path(entry.file.path, outputDir_,
+                                               reserved_paths)
+                        : legacy_path;
+                migrated = true;
+            }
+            reserved_paths.push_back(entry.output_path);
+        }
+        if (migrated) store_.save(migrated_entries);
 
         const auto entries = store_.load();
         for (const auto &e : entries) {
@@ -122,7 +166,7 @@ void BatchController::loadPersistedEntries() {
 
             // If completed and output file exists, emit saved.
             if (e.state == BatchEntryState::Completed) {
-                const auto path = output_path_for(e.file.path, outputDir_);
+                const auto path = outputPath(e);
                 if (std::filesystem::exists(path)) {
                     emit entrySaved(QString::fromStdString(e.id),
                                     QString::fromStdString(path.u8string()));
@@ -166,11 +210,19 @@ void BatchController::addFile(const QString &path,
         entry.file.path = native_path;
         entry.file.file_type = type;
         entry.file.segments = std::move(parsed.segments);
+        entry.file.trailing_text = std::move(parsed.trailing_text);
         entry.source_language = src;
         entry.target_language = tgt;
         entry.state = BatchEntryState::Queued;
         entry.created_at = now_epoch_sec();
         entry.updated_at = entry.created_at;
+
+        std::vector<std::filesystem::path> reserved_paths;
+        for (const auto &queued : store_.load()) {
+            reserved_paths.push_back(outputPath(queued));
+        }
+        entry.output_path =
+            allocate_output_path(native_path, outputDir_, reserved_paths);
 
         store_.append(entry);
         emit entryAdded(QString::fromStdString(entry.id), source_lang, target_lang);
@@ -262,15 +314,18 @@ void BatchController::resume() {
 
 void BatchController::saveEntry(const QString &entry_id) {
     try {
-        const auto entries = store_.load();
+        auto entries = store_.load();
         const std::string id = qtrans::app::to_utf8(entry_id);
-        auto *entry = find_entry(const_cast<std::vector<BatchEntry> &>(entries), id);
+        auto *entry = find_entry(entries, id);
         if (!entry) return;
         if (entry->state != BatchEntryState::Completed) return;
 
-        writeOutputFile(*entry);
-        const auto path = output_path_for(entry->file.path, outputDir_);
-        emit entrySaved(entry_id, QString::fromStdString(path.u8string()));
+        const auto result = writeOutputFile(*entry);
+        if (!result.success) {
+            emit errorOccurred(QString::fromStdString(result.error_message));
+            return;
+        }
+        emit entrySaved(entry_id, QString::fromStdString(result.path.u8string()));
         emitQueueSnapshot();
     }
     QTRANS_BATCH_BOUNDARY(false)
@@ -297,19 +352,13 @@ void BatchController::saveEntriesToDirectory(const QStringList &entry_ids,
             const auto *entry = find_entry(entries, id);
             if (!entry || entry->state != BatchEntryState::Completed) continue;
 
-            const auto out_path = output_path_for(entry->file.path, dir);
-            auto *handler = get_handler(entry->file.file_type);
-            if (!handler) continue;
-
-            const std::string text = handler->assembleOutput(entry->file.segments);
-            std::ofstream out(out_path, std::ios::binary);
-            if (!out) continue;
-            out << text;
-            out.flush();
-
-            qtrans::log::get(qtrans::log::Component::App)
-                ->debug("batch saved to: {} ({} bytes)", out_path.u8string(), text.size());
-            emit entrySaved(eid, QString::fromStdString(out_path.u8string()));
+            const auto filename = outputPath(*entry).filename();
+            const auto result = write_batch_output_atomic(*entry, dir / filename);
+            if (!result.success) {
+                emit errorOccurred(QString::fromStdString(result.error_message));
+                continue;
+            }
+            emit entrySaved(eid, QString::fromStdString(result.path.u8string()));
         }
         emitQueueSnapshot();
     }
@@ -449,7 +498,7 @@ QVariantMap BatchController::snapshotEntry(const BatchEntry &entry) const {
     m.insert(QStringLiteral("completed"), completed);
 
     if (completed) {
-        const auto path = output_path_for(entry.file.path, outputDir_);
+        const auto path = outputPath(entry);
         const bool exists = std::filesystem::exists(path);
         m.insert(QStringLiteral("saved"), exists);
         m.insert(QStringLiteral("save_path"),
@@ -594,22 +643,42 @@ void BatchController::onTranslationFinished(const TranslationJobResult &result) 
             }
 
             if (all_done) {
-                setEntryState(currentEntryId_, BatchEntryState::Completed);
-                emit entryStateChanged(QString::fromStdString(currentEntryId_),
-                                       static_cast<int>(BatchEntryState::Completed));
-
-                const auto updated = store_.load();
-                for (const auto &e : updated) {
+                bool output_saved = false;
+                for (const auto &e : entries) {
                     if (e.id == currentEntryId_) {
-                        writeOutputFile(e);
-                        const auto path = output_path_for(e.file.path, outputDir_);
-                        emit entrySaved(QString::fromStdString(e.id),
-                                        QString::fromStdString(path.u8string()));
+                        const auto write_result = writeOutputFile(e);
+                        if (!write_result.success) {
+                            setEntryState(currentEntryId_, BatchEntryState::Failed);
+                            emit entryStateChanged(
+                                QString::fromStdString(currentEntryId_),
+                                static_cast<int>(BatchEntryState::Failed));
+                            running_ = false;
+                            paused_ = false;
+                            emitBatchState();
+                            emit errorOccurred(QStringLiteral("Batch output failed: ") +
+                                               QString::fromStdString(
+                                                   write_result.error_message));
+                        } else {
+                            setEntryState(currentEntryId_,
+                                          BatchEntryState::Completed);
+                            emit entryStateChanged(
+                                QString::fromStdString(currentEntryId_),
+                                static_cast<int>(BatchEntryState::Completed));
+                            emit entrySaved(
+                                QString::fromStdString(e.id),
+                                QString::fromStdString(
+                                    write_result.path.u8string()));
+                            output_saved = true;
+                        }
                         break;
                     }
                 }
                 currentEntryId_.clear();
                 currentSegmentIndex_ = -1;
+                if (!output_saved) {
+                    emitQueueSnapshot();
+                    return;
+                }
             }
 
             if (!paused_) advanceBatch();
@@ -704,14 +773,28 @@ void BatchController::advanceBatch() {
                 }
             }
 
-            // No pending and no failed segments left: the entry is finished.
+            // Commit the output before exposing Completed so durable state
+            // remains truthful if creation, writing, or rename fails.
+            const auto write_result = writeOutputFile(entry);
+            if (!write_result.success) {
+                setEntryState(entry.id, BatchEntryState::Failed);
+                emit entryStateChanged(QString::fromStdString(entry.id),
+                                       static_cast<int>(BatchEntryState::Failed));
+                running_ = false;
+                paused_ = false;
+                emitBatchState();
+                emit errorOccurred(QStringLiteral("Batch output failed: ") +
+                                   QString::fromStdString(
+                                       write_result.error_message));
+                emitQueueSnapshot();
+                return;
+            }
             setEntryState(entry.id, BatchEntryState::Completed);
             emit entryStateChanged(QString::fromStdString(entry.id),
                                    static_cast<int>(BatchEntryState::Completed));
-            writeOutputFile(entry);
-            const auto path = output_path_for(entry.file.path, outputDir_);
-            emit entrySaved(QString::fromStdString(entry.id),
-                            QString::fromStdString(path.u8string()));
+            emit entrySaved(
+                QString::fromStdString(entry.id),
+                QString::fromStdString(write_result.path.u8string()));
         }
 
         running_ = false;
@@ -756,39 +839,19 @@ void BatchController::setEntryState(const std::string &entry_id,
     store_.update_entry_state(entry_id, state);
 }
 
-void BatchController::writeOutputFile(const BatchEntry &entry) {
-    if (outputDir_.empty()) return;
-
-    std::error_code ec;
-    std::filesystem::create_directories(outputDir_, ec);
-    if (ec) {
-        qtrans::log::get(qtrans::log::Component::App)
-            ->error("batch cannot create output dir: {} ({})",
-                    outputDir_.u8string(), ec.message());
-        return;
+BatchOutputWriteResult BatchController::writeOutputFile(
+    const BatchEntry &entry) {
+    if (outputDir_.empty()) {
+        return {false, {}, "batch output directory is empty"};
     }
+    return write_batch_output_atomic(entry, outputPath(entry));
+}
 
-    auto *handler = get_handler(entry.file.file_type);
-    if (!handler) {
-        qtrans::log::get(qtrans::log::Component::App)
-            ->error("batch no handler for file type {}", static_cast<int>(entry.file.file_type));
-        return;
-    }
-
-    const auto out_path = output_path_for(entry.file.path, outputDir_);
-    const std::string text = handler->assembleOutput(entry.file.segments);
-
-    std::ofstream out(out_path, std::ios::binary);
-    if (!out) {
-        qtrans::log::get(qtrans::log::Component::App)
-            ->error("batch cannot write output file: {}", out_path.u8string());
-        return;
-    }
-    out << text;
-    out.flush();
-
-    qtrans::log::get(qtrans::log::Component::App)
-        ->debug("batch wrote output: {} ({} bytes)", out_path.u8string(), text.size());
+std::filesystem::path BatchController::outputPath(
+    const BatchEntry &entry) const {
+    return entry.output_path.empty()
+               ? output_path_for(entry.file.path, outputDir_)
+               : entry.output_path;
 }
 
 void BatchController::handleBoundaryError(bool stop_batch, const char *operation,

@@ -8,6 +8,7 @@
 #include <QString>
 
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -20,6 +21,7 @@ Q_DECLARE_METATYPE(TranslationJobId)
 Q_DECLARE_METATYPE(TranslationState)
 Q_DECLARE_METATYPE(TranslationChannel)
 Q_DECLARE_METATYPE(TranslationJobResult)
+Q_DECLARE_METATYPE(RuntimeSnapshot)
 
 // Sole ModelHost owner for desktop inference. Lives on the worker thread and
 // adapts the core ModelHost invocation domain to typed desktop translation
@@ -45,6 +47,8 @@ public:
     // service thread. Safe from any thread.
     TranslationJobId translateNative(const NativeTranslationRequest &request);
     TranslationJobId translateBatch(const BatchTranslationRequest &request);
+    TranslationJobTicket submitNative(const NativeTranslationRequest &request);
+    TranslationJobTicket submitBatch(const BatchTranslationRequest &request);
 
     // ── Model lifecycle ──────────────────────────────────────────────────
     void loadModel();
@@ -56,6 +60,7 @@ public:
     bool cancel(TranslationJobId id);
     bool preemptBatch();
     TranslationState jobState(TranslationJobId id) const;
+    RuntimeSnapshot runtimeSnapshot() const;
 
     // ── Local OpenAI-compatible API bridge ───────────────────────────────
     // Safe from any thread. Submission is scheduled on the service thread;
@@ -114,8 +119,11 @@ signals:
     void translationDelta(TranslationJobId id, TranslationChannel channel,
                           const QString &piece);
     void translationFinished(TranslationJobResult result);
+    void runtimeSnapshotChanged(RuntimeSnapshot snapshot);
 
 private:
+    static constexpr std::size_t kTerminalHistoryLimit = 128;
+
     struct JobRecord {
         TranslationJobId id;
         TranslationState state = TranslationState::Pending;
@@ -123,10 +131,10 @@ private:
         bool batch = false;
         bool back_translate = false;
         bool back_started = false;
-        bool cancel_requested = false;
         bool running = false;
         TranslationChannel active_channel = TranslationChannel::Target;
         qtrans::core::InvocationHandle handle;
+        std::shared_ptr<TranslationCancellation> cancellation;
     };
 
     void submitJob(TranslationJobId id, const NativeTranslationRequest &request,
@@ -135,6 +143,9 @@ private:
                          const qtrans::core::InvocationEvent &event);
     void finishJob(TranslationJobId id, TranslationState state,
                    const QString &error = {});
+    void rememberTerminalJob(TranslationJobId id, TranslationState state);
+    void publishRuntimeSnapshot(
+        std::optional<RuntimeLifecycleState> lifecycle_override = std::nullopt);
     static TranslationState mapFinishState(qtrans::core::FinishReason reason);
 
     void doSubmitApiChat(std::uint64_t request_id, const ApiChatRequest &request);
@@ -145,6 +156,8 @@ private:
     mutable std::mutex mutex_;
     std::uint64_t next_job_id_ = 1;
     std::unordered_map<std::uint64_t, JobRecord> jobs_;
+    std::unordered_map<std::uint64_t, TranslationState> terminal_jobs_;
+    std::deque<std::uint64_t> terminal_job_order_;
     std::string model_id_;
     std::string model_path_;
     qtrans::core::ModelHost host_;

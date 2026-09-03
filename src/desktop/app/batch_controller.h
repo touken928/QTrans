@@ -3,6 +3,7 @@
 #include "app/inference_service.h"
 #include "domain/batch/batch_store.h"
 #include "domain/batch/batch_types.h"
+#include "domain/batch/batch_output_writer.h"
 #include "domain/inference/inference_types.h"
 
 #include <QObject>
@@ -110,7 +111,8 @@ private:
     void advanceBatch();
     void submitNextSegment(const BatchEntry &entry, int segment_index);
     void setEntryState(const std::string &entry_id, BatchEntryState state);
-    void writeOutputFile(const BatchEntry &entry);
+    BatchOutputWriteResult writeOutputFile(const BatchEntry &entry);
+    std::filesystem::path outputPath(const BatchEntry &entry) const;
     void emitBatchState();
     // Build the UI projection for one entry (shared by entryMetadata and the
     // queueSnapshot payload).

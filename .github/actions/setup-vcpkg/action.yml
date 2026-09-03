@@ -1,0 +1,110 @@
+name: Install vcpkg dependencies
+description: Restore the binary cache, checkout the manifest baseline, and install dependencies.
+
+inputs:
+  vcpkg-root:
+    description: vcpkg checkout directory
+    required: true
+  target-triplet:
+    description: vcpkg target and host triplet
+    required: true
+  install-root:
+    description: Manifest install root
+    required: true
+  binary-cache-path:
+    description: vcpkg binary artifacts cache directory
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Restore vcpkg binary cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ inputs.binary-cache-path }}
+        key: vcpkg-binary-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target-triplet }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/**', 'CMakePresets.json', 'cmake/toolchains/**') }}
+        restore-keys: |
+          vcpkg-binary-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target-triplet }}-
+        save-always: true
+
+    - name: Checkout and bootstrap vcpkg
+      if: runner.os != 'Windows'
+      shell: bash
+      env:
+        VCPKG_ROOT: ${{ inputs.vcpkg-root }}
+        VCPKG_DEFAULT_BINARY_CACHE: ${{ inputs.binary-cache-path }}
+      run: |
+        set -euo pipefail
+        mkdir -p "${VCPKG_DEFAULT_BINARY_CACHE}"
+        baseline="$(grep -o '"baseline": "[^"]*"' vcpkg-configuration.json | head -1 | cut -d'"' -f4)"
+        if [[ ! -d "${VCPKG_ROOT}/.git" ]]; then
+          rm -rf "${VCPKG_ROOT}"
+          git clone https://github.com/microsoft/vcpkg.git "${VCPKG_ROOT}"
+        fi
+        git -C "${VCPKG_ROOT}" fetch --depth 1 origin "${baseline}"
+        git -C "${VCPKG_ROOT}" checkout --detach "${baseline}"
+        "${VCPKG_ROOT}/bootstrap-vcpkg.sh" -disableMetrics
+
+    - name: Checkout and bootstrap vcpkg
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        VCPKG_ROOT: ${{ inputs.vcpkg-root }}
+        VCPKG_DEFAULT_BINARY_CACHE: ${{ inputs.binary-cache-path }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        New-Item -ItemType Directory -Force -Path $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+        $config = Get-Content vcpkg-configuration.json | ConvertFrom-Json
+        $baseline = $config.'default-registry'.baseline
+        if (-not (Test-Path "$env:VCPKG_ROOT\.git")) {
+          Remove-Item $env:VCPKG_ROOT -Recurse -Force -ErrorAction SilentlyContinue
+          git clone https://github.com/microsoft/vcpkg.git $env:VCPKG_ROOT
+        }
+        git -C $env:VCPKG_ROOT fetch --depth 1 origin $baseline
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        git -C $env:VCPKG_ROOT checkout --detach $baseline
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    - name: Install manifest dependencies
+      if: runner.os != 'Windows'
+      shell: bash
+      env:
+        INSTALL_ROOT: ${{ inputs.install-root }}
+        TARGET_TRIPLET: ${{ inputs.target-triplet }}
+        VCPKG_ROOT: ${{ inputs.vcpkg-root }}
+        VCPKG_DEFAULT_BINARY_CACHE: ${{ inputs.binary-cache-path }}
+      run: |
+        set -euo pipefail
+        "${VCPKG_ROOT}/vcpkg" install \
+          --triplet "${TARGET_TRIPLET}" \
+          --host-triplet "${TARGET_TRIPLET}" \
+          --x-manifest-root="${GITHUB_WORKSPACE}" \
+          --x-install-root="${INSTALL_ROOT}" \
+          --clean-after-build
+
+    - name: Install manifest dependencies
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        INSTALL_ROOT: ${{ inputs.install-root }}
+        TARGET_TRIPLET: ${{ inputs.target-triplet }}
+        VCPKG_ROOT: ${{ inputs.vcpkg-root }}
+        VCPKG_DEFAULT_BINARY_CACHE: ${{ inputs.binary-cache-path }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        & "$env:VCPKG_ROOT\vcpkg.exe" install `
+          --triplet $env:TARGET_TRIPLET `
+          --host-triplet $env:TARGET_TRIPLET `
+          --x-manifest-root=$env:GITHUB_WORKSPACE `
+          --x-install-root=$env:INSTALL_ROOT `
+          --clean-after-build
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    - name: Save vcpkg binary cache
+      if: ${{ success() }}
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ inputs.binary-cache-path }}
+        key: vcpkg-binary-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target-triplet }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/**', 'CMakePresets.json', 'cmake/toolchains/**') }}

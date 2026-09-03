@@ -7,9 +7,10 @@ TEST(TranslationLanguages, CountMatchesArray) {
     EXPECT_GT(count, 0);
     const TranslationLanguage *arr = translation_languages();
     ASSERT_NE(arr, nullptr);
-    // Linear walk to validate count consistency.
+    // Walk only the reported number of entries; the API does not promise a
+    // null sentinel after the array.
     int walked = 0;
-    while (arr[walked].id != nullptr) {
+    while (walked < count && arr[walked].id != nullptr) {
         ++walked;
     }
     EXPECT_EQ(walked, count);

@@ -18,6 +18,11 @@ file(WRITE "${smoke_root}/consumer/CMakeLists.txt" [=[
 cmake_minimum_required(VERSION 3.21)
 project(QTransCoreConsumer LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
+if(MSVC)
+    # The installed core is validated against the x64-windows-static triplet,
+    # whose libraries use the static MSVC runtime.
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
+endif()
 find_package(QTransCore CONFIG REQUIRED)
 add_executable(consumer main.cpp)
 target_link_libraries(consumer PRIVATE QTrans::Core)
@@ -46,6 +51,7 @@ string(JOIN ";" prefix_path_argument ${prefix_path})
 execute_process(
     COMMAND "${CMAKE_COMMAND}" -S "${smoke_root}/consumer" -B "${smoke_root}/build"
             "-DCMAKE_PREFIX_PATH=${prefix_path_argument}"
+            -DCMAKE_BUILD_TYPE=Release
     RESULT_VARIABLE configure_result
 )
 if(NOT configure_result EQUAL 0)
@@ -53,7 +59,7 @@ if(NOT configure_result EQUAL 0)
 endif()
 
 execute_process(
-    COMMAND "${CMAKE_COMMAND}" --build "${smoke_root}/build"
+    COMMAND "${CMAKE_COMMAND}" --build "${smoke_root}/build" --config Release
     RESULT_VARIABLE build_result
 )
 if(NOT build_result EQUAL 0)
@@ -63,6 +69,12 @@ endif()
 set(smoke_binary "${smoke_root}/build/consumer")
 if(WIN32)
     set(smoke_binary "${smoke_binary}.exe")
+endif()
+if(NOT EXISTS "${smoke_binary}")
+    set(smoke_binary "${smoke_root}/build/Release/consumer")
+    if(WIN32)
+        set(smoke_binary "${smoke_binary}.exe")
+    endif()
 endif()
 
 execute_process(

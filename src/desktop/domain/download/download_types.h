@@ -32,6 +32,9 @@ struct DownloadRequest {
     std::string local_path;
     std::string remote_spec;
     std::string modelscope_remote_spec;
+    // Lowercase SHA-256 pinned by the model catalog. Production downloads are
+    // not accepted until the complete file matches this digest.
+    std::string expected_sha256;
     int download_hub = 2;  // 0 = HuggingFace, 1 = ModelScope, otherwise Auto
 };
 

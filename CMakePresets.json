@@ -40,6 +40,17 @@
         "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/mingw-x64.cmake",
         "VCPKG_TARGET_TRIPLET": "x64-mingw-static-release"
       }
+    },
+    {
+      "name": "x64-msvc-static-release",
+      "displayName": "MSVC x64 static (Release)",
+      "description": "Release build for Windows x64 using MSVC and the static CRT.",
+      "inherits": "base",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "VCPKG_HOST_TRIPLET": "x64-windows-static",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+      }
     }
   ],
   "buildPresets": [
@@ -52,6 +63,11 @@
       "name": "x64-mingw-static-release",
       "displayName": "MinGW x64 (Release)",
       "configurePreset": "x64-mingw-static-release"
+    },
+    {
+      "name": "x64-msvc-static-release",
+      "displayName": "MSVC x64 static (Release)",
+      "configurePreset": "x64-msvc-static-release"
     }
   ]
 }

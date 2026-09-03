@@ -35,7 +35,7 @@
 Prebuilt binaries are available on the [Releases](https://github.com/touken928/QTrans/releases) page:
 
 - `QTrans-<version>-macos-arm64` — macOS ARM64
-- `QTrans-<version>-mingw-x64.zip` — Windows x64 (`QTrans.exe` + `libomp.dll`)
+- `QTrans-<version>-windows-x64.zip` — Windows x64 (`QTrans.exe`, MSVC static runtime)
 Download the archive for your platform. On Windows, unzip and run `QTrans.exe`. On macOS, make the app executable if needed, then run it. On first launch, open **Model**, download the model, and click **Load**. Default model: **Q4** on all supported platforms. App data is stored under `~/.qtrans/` in system mode; batch queue state persists under `~/.qtrans/batch/`, and translated batch outputs are written to `~/.qtrans/batch/output/`.
 
 ## Build from Source
@@ -45,7 +45,7 @@ Download the archive for your platform. On Windows, unzip and run `QTrans.exe`. 
 - [vcpkg](https://vcpkg.io/) (set `VCPKG_ROOT`)
 - CMake 3.31+, Ninja
 - macOS: `brew install ninja pkg-config autoconf autoconf-archive automake libtool`
-- Windows: MinGW toolchain (e.g. [llvm-mingw](https://github.com/mstorsjo/llvm-mingw)) in `PATH`
+- Windows: Visual Studio 2022 C++ build tools (run from a Developer shell)
 
 ### Build
 
@@ -54,13 +54,13 @@ Download the archive for your platform. On Windows, unzip and run `QTrans.exe`. 
 cmake --preset arm64-osx-release
 cmake --build --preset arm64-osx-release
 
-# Windows MinGW x64 (Release, Vulkan GPU)
-cmake --preset x64-mingw-static-release
-cmake --build --preset x64-mingw-static-release
+# Windows MSVC x64 (Release, Vulkan GPU, static CRT/dependencies)
+cmake --preset x64-msvc-static-release
+cmake --build --preset x64-msvc-static-release
 
 ```
 
-The public presets provide macOS ARM64 and Windows MinGW x64 Release builds. The triplet is set per preset.
+The primary public presets are macOS ARM64 and Windows MSVC x64 Release. The legacy MinGW preset remains available for development. Under MSVC, third-party libraries and the C/C++ runtime are statically linked; normal Windows system DLL imports remain.
 
 ## Development
 

@@ -8,6 +8,7 @@
 #include <QObject>
 
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -80,6 +81,8 @@ signals:
     void downloadFinished(DownloadResult result);
 
 private:
+    static constexpr std::size_t kTerminalHistoryLimit = 128;
+
     struct DownloadRecord {
         DownloadId id;
         DownloadState state = DownloadState::Pending;
@@ -109,6 +112,7 @@ private:
     // Runs on the owning thread: publishes a Failed downloadFinished for a
     // request rejected because another download was already active.
     void rejectDownload(DownloadId id, std::string message);
+    void rememberTerminalDownload(DownloadId id, DownloadState state);
 
     mutable std::mutex mutex_;
     std::uint64_t next_download_id_ = 1;
@@ -120,6 +124,8 @@ private:
     // completion must never join or clear the current lifecycle.
     std::uint64_t generation_ = 0;
     std::unordered_map<std::uint64_t, DownloadRecord> downloads_;
+    std::unordered_map<std::uint64_t, DownloadState> terminal_downloads_;
+    std::deque<std::uint64_t> terminal_download_order_;
     DownloadRequest request_;
     std::unique_ptr<IModelDownloader> download_executor_;
     std::thread download_thread_;

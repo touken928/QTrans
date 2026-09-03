@@ -1,6 +1,6 @@
 #include "domain/storage/app_paths.h"
+#include "../test_environment.h"
 
-#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 
@@ -21,30 +21,23 @@ constexpr const char kHomeAltEnv[] = "USERPROFILE";
 class AppPathsDetect : public ::testing::Test {
 protected:
     void SetUp() override {
-        saved_home_ = std::getenv(kHomeEnv);
-        saved_alt_ = std::getenv(kHomeAltEnv);
+        saved_home_ = test_support::read_environment(kHomeEnv);
+        saved_alt_ = test_support::read_environment(kHomeAltEnv);
     }
 
     void TearDown() override {
-        if (saved_home_) {
-            ::setenv(kHomeEnv, saved_home_, 1);
-        } else {
-            ::unsetenv(kHomeEnv);
-        }
-        if (saved_alt_) {
-            ::setenv(kHomeAltEnv, saved_alt_, 1);
-        } else {
-            ::unsetenv(kHomeAltEnv);
-        }
+        test_support::restore_environment(kHomeEnv, saved_home_);
+        test_support::restore_environment(kHomeAltEnv, saved_alt_);
     }
 
-    const char *saved_home_ = nullptr;
-    const char *saved_alt_ = nullptr;
+    test_support::EnvironmentValue saved_home_;
+    test_support::EnvironmentValue saved_alt_;
 };
 
 TEST_F(AppPathsDetect, PortableModeWhenMarkerExists) {
     auto tmp = std::filesystem::temp_directory_path() /
-               ("qtrans_app_paths_portable_" + std::to_string(::getpid()));
+               ("qtrans_app_paths_portable_" +
+                std::to_string(test_support::current_pid()));
     std::filesystem::remove_all(tmp);
     std::filesystem::create_directories(tmp);
     std::ofstream(tmp / ".portable").close();
@@ -64,8 +57,8 @@ TEST_F(AppPathsDetect, SystemModeUsesHomeDirectory) {
     const auto home = std::filesystem::temp_directory_path() / "qtrans_test_home";
     std::filesystem::remove_all(home);
     std::filesystem::create_directories(home);
-    ::setenv(kHomeEnv, home.string().c_str(), 1);
-    ::setenv(kHomeAltEnv, home.string().c_str(), 1);
+    test_support::set_environment(kHomeEnv, home.string());
+    test_support::set_environment(kHomeAltEnv, home.string());
 
     const auto exec_dir = std::filesystem::temp_directory_path() / "qtrans_exec_dir";
     std::filesystem::remove_all(exec_dir);
@@ -86,8 +79,8 @@ TEST_F(AppPathsDetect, DefaultModelPathUnderModelsDir) {
     const auto home = std::filesystem::temp_directory_path() / "qtrans_test_home2";
     std::filesystem::remove_all(home);
     std::filesystem::create_directories(home);
-    ::setenv(kHomeEnv, home.string().c_str(), 1);
-    ::setenv(kHomeAltEnv, home.string().c_str(), 1);
+    test_support::set_environment(kHomeEnv, home.string());
+    test_support::set_environment(kHomeAltEnv, home.string());
 
     const auto exec_dir = std::filesystem::temp_directory_path() / "qtrans_exec_dir2";
     std::filesystem::remove_all(exec_dir);
@@ -104,7 +97,8 @@ TEST_F(AppPathsDetect, DefaultModelPathUnderModelsDir) {
 
 TEST(AppPaths, EnsureDirectoriesIsIdempotent) {
     const auto base = std::filesystem::temp_directory_path() /
-                      ("qtrans_ensure_" + std::to_string(::getpid()));
+                      ("qtrans_ensure_" +
+                       std::to_string(test_support::current_pid()));
     std::filesystem::remove_all(base);
     AppPaths paths{};
     paths.models_dir = base / "models";

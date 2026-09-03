@@ -42,11 +42,19 @@ else()
     set(GGML_METAL OFF)
 endif()
 
+# A static MSVC release must not acquire the vcomp runtime DLL through ggml.
+# MinGW keeps OpenMP because its release package already ships libomp.dll.
+if(VCPKG_TARGET_IS_WINDOWS AND NOT VCPKG_TARGET_IS_MINGW)
+    set(GGML_OPENMP OFF)
+else()
+    set(GGML_OPENMP ON)
+endif()
+
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS
         -DBUILD_SHARED_LIBS=${BUILD_SHARED_LIBS}
-        -DGGML_OPENMP:BOOL=ON
+        -DGGML_OPENMP:BOOL=${GGML_OPENMP}
         -DGGML_CCACHE=OFF
         -DGGML_CPU=ON
         -DGGML_METAL=${GGML_METAL}

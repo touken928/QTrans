@@ -35,7 +35,7 @@
 预编译二进制可在 [Releases](https://github.com/touken928/QTrans/releases) 页面获取：
 
 - `QTrans-<版本>-macos-arm64` — macOS ARM64
-- `QTrans-<版本>-mingw-x64.zip` — Windows x64（`QTrans.exe` + `libomp.dll`）
+- `QTrans-<版本>-windows-x64.zip` — Windows x64（`QTrans.exe`，MSVC 静态运行时）
 下载对应平台的压缩包。Windows 解压后直接运行 `QTrans.exe`；macOS 上如需请先赋予可执行权限，然后运行。首次使用请打开 **Model** 页面下载模型，再点击 **Load**。默认模型为 **Q4**。
 
 ## 从源码构建
@@ -45,7 +45,7 @@
 - [vcpkg](https://vcpkg.io/)（设置 `VCPKG_ROOT`）
 - CMake 3.31+、Ninja
 - macOS：`brew install ninja pkg-config autoconf autoconf-archive automake libtool`
-- Windows：MinGW 工具链（如 [llvm-mingw](https://github.com/mstorsjo/llvm-mingw)）需要加入 `PATH`
+- Windows：Visual Studio 2022 C++ 构建工具（在 Developer shell 中执行）
 
 ### 构建
 
@@ -55,14 +55,14 @@ cmake --preset arm64-osx-release
 cmake --build --preset arm64-osx-release
 # 产物：build/arm64-osx-release/src/desktop/QTrans
 
-# Windows MinGW x64（Release，Vulkan GPU）
-cmake --preset x64-mingw-static-release
-cmake --build --preset x64-mingw-static-release
-# 产物：build/x64-mingw-static-release/src/desktop/QTrans.exe
+# Windows MSVC x64（Release，Vulkan GPU，静态 CRT/依赖）
+cmake --preset x64-msvc-static-release
+cmake --build --preset x64-msvc-static-release
+# 产物：build/x64-msvc-static-release/src/desktop/QTrans.exe
 
 ```
 
-公开 preset 提供 macOS ARM64 和 Windows MinGW x64 Release 构建，每个 preset 已内置 triplet。
+主要公开 preset 为 macOS ARM64 和 Windows MSVC x64 Release；旧 MinGW preset 仍可用于开发。MSVC 产物静态链接第三方库及 C/C++ 运行时，只保留正常的 Windows 系统 DLL 导入。
 
 ## 开发
 

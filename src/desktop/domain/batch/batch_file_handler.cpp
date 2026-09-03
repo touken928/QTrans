@@ -3,142 +3,146 @@
 #include <algorithm>
 #include <cctype>
 #include <fstream>
-#include <sstream>
+#include <iterator>
+#include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace {
 
-// ── Utilities ───────────────────────────────────────────────────────────────
+struct LineSpan {
+    std::size_t begin = 0;
+    std::size_t content_end = 0;
+    std::size_t end = 0;
+    bool blank = true;
+};
 
-bool is_blank_line(const std::string &line) {
-    return std::all_of(line.begin(), line.end(),
-                       [](unsigned char c) { return std::isspace(c); });
+std::string read_all(std::istream &in) {
+    return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
 }
 
-std::string rtrim_copy(const std::string &s) {
-    auto end = s.find_last_not_of(" \t\r\n");
-    return end == std::string::npos ? std::string{} : s.substr(0, end + 1);
+std::vector<LineSpan> line_spans(std::string_view text) {
+    std::vector<LineSpan> lines;
+    for (std::size_t begin = 0; begin < text.size();) {
+        std::size_t content_end = text.find('\n', begin);
+        std::size_t end = content_end;
+        if (content_end == std::string_view::npos) {
+            content_end = text.size();
+            end = text.size();
+        } else {
+            end = content_end + 1;
+            if (content_end > begin && text[content_end - 1] == '\r') --content_end;
+        }
+
+        bool blank = true;
+        for (std::size_t i = begin; i < content_end; ++i) {
+            if (!std::isspace(static_cast<unsigned char>(text[i]))) {
+                blank = false;
+                break;
+            }
+        }
+        lines.push_back({begin, content_end, end, blank});
+        begin = end;
+    }
+    return lines;
 }
 
-// ── PlainText handler (also used for .txt, .md) ────────────────────────────
+void append_segment(ParseResult &result, std::string_view document,
+                    const std::vector<LineSpan> &lines, std::size_t first,
+                    std::size_t last, std::size_t &cursor) {
+    BatchSegment segment;
+    segment.index = static_cast<int>(result.segments.size());
+    segment.start_line = static_cast<int>(first);
+    segment.end_line = static_cast<int>(last + 1);
+    segment.literal_prefix =
+        std::string(document.substr(cursor, lines[first].begin - cursor));
+    segment.source_text = std::string(document.substr(
+        lines[first].begin, lines[last].content_end - lines[first].begin));
+    cursor = lines[last].content_end;
+    result.segments.push_back(std::move(segment));
+}
 
-class PlainTextHandler : public BatchFileHandler {
+std::string assemble_document(const BatchFile &file) {
+    std::string output;
+    for (const auto &segment : file.segments) {
+        output += segment.literal_prefix;
+        output += segment.state == BatchSegmentState::Completed
+                      ? segment.translated_text
+                      : segment.source_text;
+    }
+    output += file.trailing_text;
+    return output;
+}
+
+class PlainTextHandler final : public BatchFileHandler {
 public:
     ParseResult parse(std::istream &in) const override {
         ParseResult result;
-        std::vector<std::string> lines;
-        std::string line;
+        const std::string document = read_all(in);
+        const auto lines = line_spans(document);
+        std::size_t cursor = 0;
 
-        while (std::getline(in, line)) {
-            lines.push_back(line);
-        }
-
-        int seg_index = 0;
-        int current_start = 0;
-        std::string paragraph;
-
-        auto flush = [&](int end_line) {
-            if (paragraph.empty()) return;
-            BatchSegment seg;
-            seg.index = seg_index++;
-            seg.start_line = current_start;
-            seg.end_line = end_line;
-            seg.source_text = std::move(paragraph);
-            result.segments.push_back(std::move(seg));
-            paragraph.clear();
-        };
-
-        for (int i = 0; i < static_cast<int>(lines.size()); ++i) {
-            if (is_blank_line(lines[i])) {
-                flush(i);
-                current_start = i + 1;
-            } else {
-                if (!paragraph.empty()) paragraph += '\n';
-                paragraph += rtrim_copy(lines[i]);
+        for (std::size_t i = 0; i < lines.size();) {
+            if (lines[i].blank) {
+                ++i;
+                continue;
             }
+            const std::size_t first = i;
+            while (i + 1 < lines.size() && !lines[i + 1].blank) ++i;
+            append_segment(result, document, lines, first, i, cursor);
+            ++i;
         }
-        flush(static_cast<int>(lines.size()));
-
-        if (result.segments.empty()) {
-            BatchSegment seg;
-            seg.index = 0;
-            seg.start_line = 0;
-            seg.end_line = static_cast<int>(lines.size());
-            for (const auto &l : lines) {
-                if (!seg.source_text.empty()) seg.source_text += '\n';
-                seg.source_text += rtrim_copy(l);
-            }
-            result.segments.push_back(std::move(seg));
-        }
+        result.trailing_text = document.substr(cursor);
         return result;
     }
 
-    std::string assembleOutput(const std::vector<BatchSegment> &segments) const override {
-        std::string out;
-        for (const auto &seg : segments) {
-            if (seg.state != BatchSegmentState::Completed) continue;
-            if (!out.empty()) out += "\n\n";
-            out += seg.translated_text;
-        }
-        return out;
+    std::string assembleOutput(const BatchFile &file) const override {
+        return assemble_document(file);
     }
 };
 
-// ── SRT handler ────────────────────────────────────────────────────────────
-
-// Stores original SRT block lines (index + timing + text) per segment so the
-// output can faithfully reconstruct the original file structure.
-// The parse method stores raw block data as metadata in segment start/end
-// tracking; the assemble method uses the original struct block info.
-//
-// Since BatchSegment cannot store arbitrary metadata without schema changes,
-// we re-use start_line/end_line to reference the original line range in the
-// raw file.  assembleOutput() re-reads the original SRT file and splices in
-// translated text for each completed segment.
-
-class SrtHandler : public BatchFileHandler {
+class SrtHandler final : public BatchFileHandler {
 public:
     ParseResult parse(std::istream &in) const override {
         ParseResult result;
-        std::string line;
-        int seg_index = 0;
-        int current_line = 0;
+        const std::string document = read_all(in);
+        const auto lines = line_spans(document);
+        std::size_t cursor = 0;
 
-        auto next_nonblank = [&]() -> bool {
-            while (std::getline(in, line)) {
-                ++current_line;
-                if (!is_blank_line(line)) return true;
+        for (std::size_t i = 0; i < lines.size();) {
+            while (i < lines.size() && lines[i].blank) ++i;
+            if (i == lines.size()) break;
+
+            ++i;  // index line is preserved in the next literal_prefix
+            if (i == lines.size()) {
+                result.success = false;
+                result.error_message = "SRT block is missing its timing line";
+                return result;
             }
-            return false;
-        };
-
-        while (true) {
-            if (!next_nonblank()) break;
-            int block_start = current_line - 1;
-
-            // Timing line (skip)
-            if (!std::getline(in, line)) break;
-            ++current_line;
-
-            // Text lines
-            std::string text;
-            while (std::getline(in, line)) {
-                ++current_line;
-                if (is_blank_line(line)) break;
-                if (!text.empty()) text += '\n';
-                text += rtrim_copy(line);
+            const std::size_t timing_line = i++;
+            const std::string_view timing = std::string_view(document).substr(
+                lines[timing_line].begin,
+                lines[timing_line].content_end - lines[timing_line].begin);
+            if (timing.find("-->") == std::string_view::npos) {
+                result.success = false;
+                result.error_message = "invalid SRT timing line";
+                return result;
             }
 
-            if (text.empty()) continue;
+            const std::size_t text_first = i;
+            while (i < lines.size() && !lines[i].blank) ++i;
+            if (text_first == i) {
+                result.success = false;
+                result.error_message = "SRT block is missing subtitle text";
+                return result;
+            }
 
-            BatchSegment seg;
-            seg.index = seg_index++;
-            seg.start_line = block_start;
-            seg.end_line = current_line;  // past the trailing blank
-            seg.source_text = std::move(text);
-            result.segments.push_back(std::move(seg));
+            append_segment(result, document, lines, text_first, i - 1, cursor);
+            // append_segment keeps everything before the subtitle text,
+            // including index and timing lines, in literal_prefix.
         }
 
+        result.trailing_text = document.substr(cursor);
         if (result.segments.empty()) {
             result.success = false;
             result.error_message = "no SRT blocks found";
@@ -146,85 +150,86 @@ public:
         return result;
     }
 
-    std::string assembleOutput(const std::vector<BatchSegment> &segments) const override {
-        // Group segments by original file — all segments in this vector
-        // belong to the same file.  Reconstruct using original line mapping.
-        // Since we don't have the original file path here, this version
-        // does a simple concatenation with double newline.
-        // A future improvement could accept the original file path and
-        // do proper SRT splicing.
-        std::string out;
-        for (const auto &seg : segments) {
-            if (seg.state != BatchSegmentState::Completed) continue;
-            if (!out.empty()) out += "\n\n";
-            out += seg.translated_text;
-        }
-        return out;
+    std::string assembleOutput(const BatchFile &file) const override {
+        return assemble_document(file);
     }
 };
-
-// ── Handler registry ────────────────────────────────────────────────────────
 
 const PlainTextHandler kPlainTextHandler;
 const SrtHandler kSrtHandler;
 
 std::unordered_map<BatchFileType, const BatchFileHandler *> make_registry() {
-    std::unordered_map<BatchFileType, const BatchFileHandler *> reg;
-    reg[BatchFileType::PlainText] = &kPlainTextHandler;
-    reg[BatchFileType::Txt] = &kPlainTextHandler;
-    reg[BatchFileType::Md] = &kPlainTextHandler;
-    reg[BatchFileType::Srt] = &kSrtHandler;
-    return reg;
+    return {{BatchFileType::PlainText, &kPlainTextHandler},
+            {BatchFileType::Txt, &kPlainTextHandler},
+            {BatchFileType::Md, &kPlainTextHandler},
+            {BatchFileType::Srt, &kSrtHandler}};
 }
 
 const auto &registry() {
-    static const auto reg = make_registry();
-    return reg;
+    static const auto handlers = make_registry();
+    return handlers;
+}
+
+std::string lowercase(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return value;
 }
 
 }  // namespace
 
-// ── Free functions ──────────────────────────────────────────────────────────
-
 BatchFileType detect_file_type(const std::filesystem::path &path) {
-    const std::string ext = path.extension().u8string();
-    if (ext == ".txt") return BatchFileType::Txt;
-    if (ext == ".md" || ext == ".markdown") return BatchFileType::Md;
-    if (ext == ".srt") return BatchFileType::Srt;
+    const std::string extension = lowercase(path.extension().u8string());
+    if (extension == ".txt") return BatchFileType::Txt;
+    if (extension == ".md" || extension == ".markdown") return BatchFileType::Md;
+    if (extension == ".srt") return BatchFileType::Srt;
     return BatchFileType::PlainText;
 }
 
 const BatchFileHandler *get_handler(BatchFileType type) {
-    auto it = registry().find(type);
-    return it != registry().end() ? it->second : nullptr;
+    const auto it = registry().find(type);
+    return it == registry().end() ? nullptr : it->second;
 }
 
-ParseResult parse_batch_file(const std::filesystem::path &path, BatchFileType type) {
-    auto *handler = get_handler(type);
-    if (!handler) {
-        ParseResult r;
-        r.success = false;
-        r.error_message = "unsupported file type";
-        return r;
-    }
+ParseResult parse_batch_file(const std::filesystem::path &path,
+                             BatchFileType type) {
+    const auto *handler = get_handler(type);
+    if (!handler) return {{}, {}, "unsupported file type", false};
 
-    std::ifstream in(path, std::ios::binary);
-    if (!in) {
-        ParseResult r;
-        r.success = false;
-        r.error_message = "cannot open file: " + path.u8string();
-        return r;
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        return {{}, {}, "cannot open file: " + path.u8string(), false};
     }
-
-    return handler->parse(in);
+    return handler->parse(input);
 }
 
 std::filesystem::path output_path_for(const std::filesystem::path &input_path,
                                       const std::filesystem::path &output_dir) {
-    // Build the output name from the UTF-8 representation so non-ASCII stems
-    // survive on Windows/MinGW, where the narrow .string() conversion is
-    // codepage-bound.
-    return output_dir / std::filesystem::u8path(input_path.stem().u8string() +
-                                                "_translated" +
-                                                input_path.extension().u8string());
+    return output_dir / std::filesystem::u8path(
+                            input_path.stem().u8string() + "_translated" +
+                            input_path.extension().u8string());
+}
+
+std::filesystem::path allocate_output_path(
+    const std::filesystem::path &input_path,
+    const std::filesystem::path &output_dir,
+    const std::vector<std::filesystem::path> &reserved_paths) {
+    std::unordered_set<std::string> reserved;
+    for (const auto &path : reserved_paths) {
+        reserved.insert(lowercase(path.lexically_normal().u8string()));
+    }
+
+    const std::string stem = input_path.stem().u8string() + "_translated";
+    const std::string extension = input_path.extension().u8string();
+    for (std::size_t suffix = 1;; ++suffix) {
+        const std::string name =
+            stem + (suffix == 1 ? "" : "_" + std::to_string(suffix)) + extension;
+        const auto candidate = output_dir / std::filesystem::u8path(name);
+        std::error_code error;
+        if (!std::filesystem::exists(candidate, error) &&
+            reserved.count(lowercase(candidate.lexically_normal().u8string())) == 0) {
+            return candidate;
+        }
+    }
 }

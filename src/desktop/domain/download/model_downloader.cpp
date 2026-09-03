@@ -2,11 +2,37 @@
 
 #include "domain/download/download.h"
 
+#include <QCryptographicHash>
+#include <QFile>
+
+#include <filesystem>
+
+bool download_file_matches_sha256(const std::string &path,
+                                  const std::string &expected_sha256,
+                                  std::string *actual_sha256) {
+    QFile file(QString::fromUtf8(path.data(), static_cast<int>(path.size())));
+    if (!file.open(QIODevice::ReadOnly)) return false;
+
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    while (!file.atEnd()) {
+        const QByteArray block = file.read(1024 * 1024);
+        if (block.isEmpty() && file.error() != QFileDevice::NoError) return false;
+        hash.addData(block);
+    }
+    const std::string digest = hash.result().toHex().toStdString();
+    if (actual_sha256 != nullptr) *actual_sha256 = digest;
+    return digest == expected_sha256;
+}
+
 ExecutionResult ProductionModelDownloader::download(
     const DownloadRequest &request,
     const DownloadCancelToken *cancel_token,
     DownloadProgressHandler on_progress) {
     try {
+        if (request.expected_sha256.empty()) {
+            return {ExecutionOutcome::Failed,
+                    "download rejected: model digest is not pinned"};
+        }
         DownloadSpec spec{};
         switch (request.download_hub) {
             case 0:
@@ -42,6 +68,17 @@ ExecutionResult ProductionModelDownloader::download(
         });
         download_to_file(request.local_path, spec, true, cancel_token);
         download_set_progress_callback(nullptr);
+        std::string actual_digest;
+        if (!download_file_matches_sha256(request.local_path,
+                                          request.expected_sha256,
+                                          &actual_digest)) {
+            std::error_code remove_error;
+            std::filesystem::remove(std::filesystem::u8path(request.local_path),
+                                    remove_error);
+            return {ExecutionOutcome::Failed,
+                    "download checksum mismatch (expected " +
+                        request.expected_sha256 + ", got " + actual_digest + ")"};
+        }
         return {ExecutionOutcome::Completed, {}};
     } catch (const DownloadCancelled &) {
         download_set_progress_callback(nullptr);
