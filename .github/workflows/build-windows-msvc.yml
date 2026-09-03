@@ -44,10 +44,16 @@ jobs:
       - name: Enable MSVC developer environment
         uses: ilammy/msvc-dev-cmd@v1
 
+      - name: Select repository vcpkg
+        shell: pwsh
+        run: Add-Content -Path $env:GITHUB_ENV -Value 'VCPKG_ROOT=C:\vcpkg'
+
       - name: Install vcpkg dependencies
         uses: ./.github/actions/setup-vcpkg
+        env:
+          VCPKG_ROOT: C:\vcpkg
         with:
-          vcpkg-root: ${{ env.VCPKG_ROOT }}
+          vcpkg-root: C:\vcpkg
           target-triplet: ${{ env.VCPKG_TARGET_TRIPLET }}
           install-root: ${{ env.VCPKG_INSTALL_ROOT }}
           binary-cache-path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
