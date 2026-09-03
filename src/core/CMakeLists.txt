@@ -90,3 +90,10 @@ endif()
 if(QTRANS_GPU_METAL_VALUE)
     target_compile_definitions(qtrans_core PRIVATE QTRANS_GPU_METAL)
 endif()
+
+# ICU's Windows headers default to __declspec(dllimport).  The vcpkg static
+# triplet builds ICU archives, but consumers still need to select the static
+# ABI explicitly or MSVC emits an import-table dependency on icuuc.dll.
+if(WIN32 AND VCPKG_LIBRARY_LINKAGE STREQUAL "static")
+    target_compile_definitions(qtrans_core PRIVATE U_STATIC_IMPLEMENTATION)
+endif()
