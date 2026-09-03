@@ -1,8 +1,8 @@
 #include "domain/inference/platform_profile.h"
 #include "domain/storage/app_paths.h"
 #include "domain/settings/settings.h"
+#include "../test_environment.h"
 
-#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -24,27 +24,24 @@ namespace {
 class AppSettingsTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        saved_home_ = std::getenv(kHomeEnv);
+        saved_home_ = test_support::read_environment(kHomeEnv);
         home_ = std::filesystem::temp_directory_path() /
-                ("qtrans_settings_home_" + std::to_string(::getpid()) + "_" +
+                ("qtrans_settings_home_" +
+                 std::to_string(test_support::current_pid()) + "_" +
                  ::testing::UnitTest::GetInstance()->current_test_info()->name());
         std::filesystem::remove_all(home_);
         std::filesystem::create_directories(home_);
-        ::setenv(kHomeEnv, home_.string().c_str(), 1);
+        test_support::set_environment(kHomeEnv, home_.string());
         paths_ = AppPaths::detect(std::filesystem::temp_directory_path() / "qtrans_exec");
     }
 
     void TearDown() override {
-        if (saved_home_) {
-            ::setenv(kHomeEnv, saved_home_, 1);
-        } else {
-            ::unsetenv(kHomeEnv);
-        }
+        test_support::restore_environment(kHomeEnv, saved_home_);
         std::filesystem::remove_all(home_);
     }
 
     std::filesystem::path home_;
-    const char *saved_home_ = nullptr;
+    test_support::EnvironmentValue saved_home_;
     AppPaths paths_;
 };
 
