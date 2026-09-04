@@ -123,6 +123,16 @@ jobs:
             }
           Write-Host 'Final PE imports'
           & dumpbin /dependents (Join-Path $env:BUILD_DIR 'src/desktop/QTrans.exe')
+          Write-Host 'Static libraries containing ICU symbols'
+          Get-ChildItem $env:BUILD_DIR, $env:VCPKG_INSTALL_ROOT -Filter '*.lib' -Recurse |
+            ForEach-Object {
+              $hits = & dumpbin /symbols $_.FullName 2>$null |
+                Select-String -Pattern '(?i)icu(uc|in|dt)|__imp_.*icu'
+              if ($hits) {
+                Write-Host "--- $($_.FullName)"
+                $hits | Select-Object -First 40
+              }
+            }
 
       - name: Run tests
         if: ${{ !inputs.package }}
