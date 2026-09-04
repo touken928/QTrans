@@ -3,7 +3,9 @@
 include(CMakeFindDependencyMacro)
 
 find_dependency(llama CONFIG REQUIRED)
-find_dependency(ICU REQUIRED COMPONENTS uc i18n data)
+if(NOT WIN32)
+    find_dependency(ICU REQUIRED COMPONENTS uc i18n data)
+endif()
 find_dependency(simdutf CONFIG REQUIRED)
 find_dependency(spdlog CONFIG REQUIRED)
 
