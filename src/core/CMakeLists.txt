@@ -34,12 +34,13 @@ target_include_directories(qtrans_core
 target_link_libraries(qtrans_core
     PUBLIC
         llama
-        ICU::uc
-        ICU::i18n
-        ICU::data
         simdutf::simdutf
         spdlog::spdlog
 )
+
+if(QTRANS_USE_ICU)
+    target_link_libraries(qtrans_core PUBLIC ICU::uc ICU::i18n ICU::data)
+endif()
 
 set_target_properties(qtrans_core PROPERTIES EXPORT_NAME Core)
 
@@ -91,12 +92,4 @@ if(QTRANS_GPU_METAL_VALUE)
     target_compile_definitions(qtrans_core PRIVATE QTRANS_GPU_METAL)
 endif()
 
-# ICU's Windows headers default to __declspec(dllimport).  The vcpkg static
-# triplet builds ICU archives, but consumers still need to select the static
-# ABI explicitly or MSVC emits an import-table dependency on icuuc.dll.
-#
-# VCPKG_LIBRARY_LINKAGE is a triplet/port variable and is intentionally not
-# exposed to project CMake code.  Detect the selected triplet instead.
-if(WIN32 AND VCPKG_TARGET_TRIPLET MATCHES "static")
-    target_compile_definitions(qtrans_core PRIVATE U_STATIC_IMPLEMENTATION)
-endif()
+target_compile_definitions(qtrans_core PRIVATE QTRANS_USE_ICU=${QTRANS_USE_ICU})
