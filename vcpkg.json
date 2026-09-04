@@ -30,7 +30,10 @@
       ]
     },
     "gtest",
-    "icu",
+    {
+      "name": "icu",
+      "platform": "!windows"
+    },
     "simdutf",
     "spdlog"
   ]
