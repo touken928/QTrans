@@ -60,8 +60,8 @@ const BatchFileHandler *get_handler(BatchFileType type);
 ParseResult parse_batch_file(const std::filesystem::path &path, BatchFileType type);
 
 // Compute the default output path inside output_dir. Returned as a
-// std::filesystem::path so it can be opened with the native (Unicode-safe)
-// representation instead of a lossy narrow string on MinGW.
+// std::filesystem::path so it can be opened with the native, Unicode-safe
+// representation on Windows.
 std::filesystem::path output_path_for(const std::filesystem::path &input_path,
                                       const std::filesystem::path &output_dir);
 

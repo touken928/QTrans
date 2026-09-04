@@ -60,7 +60,7 @@ cmake --build --preset x64-msvc-static-release
 
 ```
 
-The primary public presets are macOS ARM64 and Windows MSVC x64 Release. The legacy MinGW preset remains available for development. Under MSVC, third-party libraries and the C/C++ runtime are statically linked; normal Windows system DLL imports remain.
+The supported build targets are macOS ARM64 with Clang and Windows x64 with MSVC. Under MSVC, third-party libraries and the C/C++ runtime are statically linked; normal Windows system DLL imports remain.
 
 ## Development
 

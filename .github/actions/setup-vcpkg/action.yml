@@ -19,13 +19,13 @@ runs:
   using: composite
   steps:
     - name: Restore vcpkg binary cache
-      uses: actions/cache@v4
+      id: restore-vcpkg-cache
+      uses: actions/cache/restore@v4
       with:
         path: ${{ inputs.binary-cache-path }}
         key: vcpkg-binary-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target-triplet }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'overlay/**', 'CMakePresets.json', 'cmake/toolchains/**') }}
         restore-keys: |
           vcpkg-binary-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target-triplet }}-
-        save-always: true
 
     - name: Checkout and bootstrap vcpkg
       if: runner.os != 'Windows'
@@ -103,7 +103,7 @@ runs:
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     - name: Save vcpkg binary cache
-      if: ${{ success() }}
+      if: ${{ success() && steps.restore-vcpkg-cache.outputs.cache-hit != 'true' }}
       uses: actions/cache/save@v4
       with:
         path: ${{ inputs.binary-cache-path }}

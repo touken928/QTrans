@@ -8,7 +8,7 @@
 - Backend bootstrap and selection are exposed only through `qtrans/core.h`; local llama-cpp runtime, backend probing, chunking, and callback control are `src/core/internal/` implementation details.
 
 ## Build And Test
-- Public release presets require `VCPKG_ROOT` from the environment; MinGW also requires the toolchain executables on `PATH`. macOS: `cmake --preset arm64-osx-release && cmake --build --preset arm64-osx-release`; Windows: `cmake --preset x64-mingw-static-release && cmake --build --preset x64-mingw-static-release`.
+- Public release presets require `VCPKG_ROOT` from the environment. Supported targets are macOS ARM64 with Clang and Windows x64 with MSVC only. macOS: `cmake --preset arm64-osx-release && cmake --build --preset arm64-osx-release`; Windows: `cmake --preset x64-msvc-static-release && cmake --build --preset x64-msvc-static-release`.
 - Tests are opt-in: `cmake --preset arm64-osx-release -DQTRANS_BUILD_TESTS=ON`, then build, then `ctest --test-dir build/arm64-osx-release --output-on-failure`.
 - Focus tests by label, e.g. `ctest --test-dir build/arm64-osx-release -L dir:core --output-on-failure` or `-L dir:model`.
 

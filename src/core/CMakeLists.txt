@@ -94,6 +94,9 @@ endif()
 # ICU's Windows headers default to __declspec(dllimport).  The vcpkg static
 # triplet builds ICU archives, but consumers still need to select the static
 # ABI explicitly or MSVC emits an import-table dependency on icuuc.dll.
-if(WIN32 AND VCPKG_LIBRARY_LINKAGE STREQUAL "static")
+#
+# VCPKG_LIBRARY_LINKAGE is a triplet/port variable and is intentionally not
+# exposed to project CMake code.  Detect the selected triplet instead.
+if(WIN32 AND VCPKG_TARGET_TRIPLET MATCHES "static")
     target_compile_definitions(qtrans_core PRIVATE U_STATIC_IMPLEMENTATION)
 endif()
