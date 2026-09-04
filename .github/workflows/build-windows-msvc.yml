@@ -93,7 +93,11 @@ jobs:
             Select-String -Pattern 'QTrans\.exe'
           $response = Join-Path $env:BUILD_DIR 'src/desktop/CMakeFiles/QTrans.rsp'
           Write-Host "QTrans response file: $response"
-          Get-Content $response | Select-String -Pattern '(?i)icu|qt6|qtrans|\.lib'
+          if (Test-Path $response) {
+            Get-Content $response | Select-String -Pattern '(?i)icu|qt6|qtrans|\.lib'
+          } else {
+            Write-Host 'Response file was removed after linking; using the link command above.'
+          }
           foreach ($library in @(
               (Join-Path $env:BUILD_DIR 'src/core/qtrans_core.lib'),
               (Join-Path $env:BUILD_DIR 'src/desktop/qtrans_desktop.lib'),
