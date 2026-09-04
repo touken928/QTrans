@@ -21,6 +21,41 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(llama CONFIG REQUIRED)
 find_package(CURL REQUIRED)
 find_package(ICU REQUIRED COMPONENTS uc i18n data)
+
+# CMake's FindICU prefers the unprefixed Windows library names.  Some vcpkg
+# ICU builds install both the import library (icuuc.lib) and the static archive
+# (sicuuc.lib), so explicitly select the static archive for our static triplet.
+# This also applies to Qt's transitive ICU targets and keeps the final app
+# independent of icu*.dll.
+if(MSVC AND VCPKG_TARGET_TRIPLET MATCHES "static")
+    set(_qtrans_icu_lib_dir
+        "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib")
+    foreach(_qtrans_icu_component IN ITEMS uc i18n data)
+        if(_qtrans_icu_component STREQUAL "uc")
+            set(_qtrans_icu_static_names sicuuc icuuc)
+        elseif(_qtrans_icu_component STREQUAL "i18n")
+            set(_qtrans_icu_static_names sicuin icui18n)
+        else()
+            set(_qtrans_icu_static_names sicudt icudt)
+        endif()
+        unset(_qtrans_icu_static_library)
+        find_library(_qtrans_icu_static_library
+            NAMES ${_qtrans_icu_static_names}
+            PATHS "${_qtrans_icu_lib_dir}"
+            NO_DEFAULT_PATH)
+        if(NOT _qtrans_icu_static_library)
+            message(FATAL_ERROR
+                "Static ICU library for ${_qtrans_icu_component} was not found in ${_qtrans_icu_lib_dir}")
+        endif()
+        set_target_properties(ICU::${_qtrans_icu_component} PROPERTIES
+            IMPORTED_LOCATION "${_qtrans_icu_static_library}"
+            IMPORTED_LOCATION_RELEASE "${_qtrans_icu_static_library}")
+        unset(_qtrans_icu_static_library CACHE)
+    endforeach()
+    unset(_qtrans_icu_lib_dir)
+    unset(_qtrans_icu_static_names)
+endif()
+
 find_package(simdutf CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(Qt6 REQUIRED COMPONENTS Widgets Network)
