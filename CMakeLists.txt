@@ -2,6 +2,19 @@ cmake_minimum_required(VERSION 3.31)
 
 project(QTrans VERSION 0.1.0 LANGUAGES C CXX)
 
+if(APPLE)
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "^(AppleClang|Clang)$" OR
+       NOT CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
+        message(FATAL_ERROR "QTrans supports macOS ARM64 with Clang only")
+    endif()
+elseif(WIN32)
+    if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+        message(FATAL_ERROR "QTrans supports Windows x64 with MSVC only")
+    endif()
+else()
+    message(FATAL_ERROR "QTrans supports macOS ARM64 with Clang and Windows x64 with MSVC only")
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 

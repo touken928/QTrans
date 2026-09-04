@@ -43,8 +43,7 @@ else()
 endif()
 
 # A static MSVC release must not acquire the vcomp runtime DLL through ggml.
-# MinGW keeps OpenMP because its release package already ships libomp.dll.
-if(VCPKG_TARGET_IS_WINDOWS AND NOT VCPKG_TARGET_IS_MINGW)
+if(VCPKG_TARGET_IS_WINDOWS)
     set(GGML_OPENMP OFF)
 else()
     set(GGML_OPENMP ON)

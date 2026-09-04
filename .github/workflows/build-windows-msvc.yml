@@ -39,7 +39,7 @@ jobs:
       BUILD_DIR: ${{ github.workspace }}\build\x64-msvc-static-release
       DIST_SUFFIX: windows-x64
       VCPKG_ROOT: C:\vcpkg
-      VCPKG_TARGET_TRIPLET: x64-windows-static
+      VCPKG_TARGET_TRIPLET: x64-windows-static-release
       VCPKG_INSTALL_ROOT: ${{ github.workspace }}\build\x64-msvc-static-release\vcpkg_installed
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\.vcpkg-cache
 
@@ -47,14 +47,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Restore release binary
+        if: ${{ inputs.package }}
+        id: restore-release-binary
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.BUILD_DIR }}\src\desktop\QTrans.exe
+          key: release-binary-${{ runner.os }}-${{ runner.arch }}-${{ env.CMAKE_PRESET }}-${{ github.sha }}
+
       - name: Enable MSVC developer environment
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Select repository vcpkg
+        if: ${{ !inputs.package || steps.restore-release-binary.outputs.cache-hit != 'true' }}
         shell: pwsh
         run: Add-Content -Path $env:GITHUB_ENV -Value 'VCPKG_ROOT=C:\vcpkg'
 
       - name: Install vcpkg dependencies
+        if: ${{ !inputs.package || steps.restore-release-binary.outputs.cache-hit != 'true' }}
         uses: ./.github/actions/setup-vcpkg
         env:
           VCPKG_ROOT: C:\vcpkg
@@ -70,12 +80,20 @@ jobs:
         run: cmake --preset ${env:CMAKE_PRESET} -DQTRANS_BUILD_TESTS=ON -DVCPKG_INSTALLED_DIR="${env:VCPKG_INSTALL_ROOT}" -DVCPKG_APPLOCAL_DEPS=OFF
 
       - name: Configure release
-        if: ${{ inputs.package }}
+        if: ${{ inputs.package && steps.restore-release-binary.outputs.cache-hit != 'true' }}
         shell: pwsh
         run: cmake --preset ${env:CMAKE_PRESET} -DQTRANS_BUILD_TESTS=OFF -DVCPKG_INSTALLED_DIR="${env:VCPKG_INSTALL_ROOT}" -DVCPKG_APPLOCAL_DEPS=OFF
 
       - name: Build
+        if: ${{ !inputs.package || steps.restore-release-binary.outputs.cache-hit != 'true' }}
         run: cmake --build --preset ${env:CMAKE_PRESET} --parallel ${env:NUMBER_OF_PROCESSORS}
+
+      - name: Save release binary
+        if: ${{ inputs.package && steps.restore-release-binary.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.BUILD_DIR }}\src\desktop\QTrans.exe
+          key: release-binary-${{ runner.os }}-${{ runner.arch }}-${{ env.CMAKE_PRESET }}-${{ github.sha }}
 
       - name: Run tests
         if: ${{ !inputs.package }}

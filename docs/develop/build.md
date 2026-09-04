@@ -23,7 +23,9 @@
 |--------|------|
 | `arm64-osx-release` | macOS ARM64 Release（Metal GPU） |
 | `x64-msvc-static-release` | Windows MSVC x64 Release（Vulkan、静态 CRT/依赖） |
-| `x64-mingw-static-release` | Windows MinGW x64 Release（Vulkan GPU 静态编入） |
+
+目前仅支持 macOS ARM64 Clang 和 Windows MSVC x64。
+两个 preset 均使用 vcpkg 的 release-only triplet；依赖不会额外编译 Debug 版本。
 
 构建目录：`build/<preset 名>/`。
 

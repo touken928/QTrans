@@ -15,6 +15,12 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      package:
+        description: Verify imports and upload the release package
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -41,10 +47,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Restore release binary
+        if: ${{ inputs.package }}
+        id: restore-release-binary
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.BUILD_DIR }}/src/desktop/QTrans
+          key: release-binary-${{ runner.os }}-${{ runner.arch }}-${{ env.CMAKE_PRESET }}-${{ github.sha }}
+
       - name: Install build tools
+        if: ${{ !inputs.package || steps.restore-release-binary.outputs.cache-hit != 'true' }}
         run: brew install ninja pkg-config autoconf autoconf-archive automake libtool
 
       - name: Install vcpkg dependencies
+        if: ${{ !inputs.package || steps.restore-release-binary.outputs.cache-hit != 'true' }}
         uses: ./.github/actions/setup-vcpkg
         with:
           vcpkg-root: ${{ env.VCPKG_ROOT }}
@@ -57,11 +73,19 @@ jobs:
         run: cmake --preset "${CMAKE_PRESET}" -DQTRANS_BUILD_TESTS=ON
 
       - name: Configure release
-        if: ${{ inputs.package }}
+        if: ${{ inputs.package && steps.restore-release-binary.outputs.cache-hit != 'true' }}
         run: cmake --preset "${CMAKE_PRESET}" -DQTRANS_BUILD_TESTS=OFF
 
       - name: Build
+        if: ${{ !inputs.package || steps.restore-release-binary.outputs.cache-hit != 'true' }}
         run: cmake --build --preset "${CMAKE_PRESET}" --parallel "$(sysctl -n hw.ncpu)"
+
+      - name: Save release binary
+        if: ${{ inputs.package && steps.restore-release-binary.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.BUILD_DIR }}/src/desktop/QTrans
+          key: release-binary-${{ runner.os }}-${{ runner.arch }}-${{ env.CMAKE_PRESET }}-${{ github.sha }}
 
       - name: Run tests
         if: ${{ !inputs.package }}

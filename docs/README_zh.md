@@ -62,7 +62,7 @@ cmake --build --preset x64-msvc-static-release
 
 ```
 
-主要公开 preset 为 macOS ARM64 和 Windows MSVC x64 Release；旧 MinGW preset 仍可用于开发。MSVC 产物静态链接第三方库及 C/C++ 运行时，只保留正常的 Windows 系统 DLL 导入。
+目前仅支持 macOS ARM64 Clang 和 Windows MSVC x64 构建。MSVC 产物静态链接第三方库及 C/C++ 运行时，只保留正常的 Windows 系统 DLL 导入。
 
 ## 开发
 
