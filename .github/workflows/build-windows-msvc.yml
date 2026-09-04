@@ -111,6 +111,18 @@ jobs:
                 Select-Object -First 20
             }
           }
+          Write-Host 'Libraries with ICU linker directives'
+          Get-ChildItem (Join-Path $env:VCPKG_INSTALL_ROOT 'x64-windows-static/lib') -Filter '*.lib' |
+            ForEach-Object {
+              $hits = & dumpbin /directives $_.FullName 2>$null |
+                Select-String -Pattern '(?i)icu'
+              if ($hits) {
+                Write-Host "--- $($_.Name)"
+                $hits
+              }
+            }
+          Write-Host 'Final PE imports'
+          & dumpbin /dependents (Join-Path $env:BUILD_DIR 'src/desktop/QTrans.exe')
 
       - name: Run tests
         if: ${{ !inputs.package }}
