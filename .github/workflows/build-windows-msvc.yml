@@ -39,7 +39,7 @@ jobs:
       BUILD_DIR: ${{ github.workspace }}\build\x64-msvc-static-release
       DIST_SUFFIX: windows-x64
       VCPKG_ROOT: C:\vcpkg
-      VCPKG_TARGET_TRIPLET: x64-windows-static-release
+      VCPKG_TARGET_TRIPLET: x64-windows-static-release-noicu
       VCPKG_OVERLAY_TRIPLETS: ${{ github.workspace }}\overlay\triplets
       VCPKG_INSTALL_ROOT: ${{ github.workspace }}\build\x64-msvc-static-release\vcpkg_installed
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\.vcpkg-cache
