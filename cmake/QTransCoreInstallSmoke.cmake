@@ -19,7 +19,7 @@ cmake_minimum_required(VERSION 3.21)
 project(QTransCoreConsumer LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 if(MSVC)
-    # The installed core is validated against the x64-windows-static-release triplet,
+    # The installed core is validated against the x64-windows-static-release-noicu triplet,
     # whose libraries use the static MSVC runtime.
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
 endif()

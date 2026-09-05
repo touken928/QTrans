@@ -36,8 +36,8 @@
       "description": "Release build for Windows x64 using MSVC and the static CRT.",
       "inherits": "base",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static-release",
-        "VCPKG_HOST_TRIPLET": "x64-windows-static-release",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-release-noicu",
+        "VCPKG_HOST_TRIPLET": "x64-windows-static-release-noicu",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
       }
     }
