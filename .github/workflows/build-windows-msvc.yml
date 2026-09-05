@@ -54,7 +54,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.BUILD_DIR }}\src\desktop\QTrans.exe
-          key: release-binary-${{ runner.os }}-${{ runner.arch }}-${{ env.CMAKE_PRESET }}-${{ github.sha }}
+          key: release-binary-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.CMAKE_PRESET }}-${{ github.sha }}
 
       - name: Enable MSVC developer environment
         uses: ilammy/msvc-dev-cmd@v1
@@ -94,7 +94,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ env.BUILD_DIR }}\src\desktop\QTrans.exe
-          key: release-binary-${{ runner.os }}-${{ runner.arch }}-${{ env.CMAKE_PRESET }}-${{ github.sha }}
+          key: release-binary-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.CMAKE_PRESET }}-${{ github.sha }}
 
       - name: Run tests
         if: ${{ !inputs.package }}
