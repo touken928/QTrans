@@ -37,6 +37,7 @@ runs:
         conan install app
         --profile:host "${{ inputs.profile }}"
         --profile:build default
+        -c:b tools.cmake.cmaketoolchain:generator=Ninja
         --settings:build compiler.cppstd=17
         --output-folder "${{ inputs.output-folder }}"
         --build missing

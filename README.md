@@ -54,6 +54,7 @@ Download the archive for your platform. On Windows, unzip and run `QTrans.exe`. 
 export CONAN_WORKSPACE_ENABLE=will_break_next
 conan profile detect --force
 conan install app --profile:host conan/profiles/macos-arm64 --profile:build default \
+  -c:b tools.cmake.cmaketoolchain:generator=Ninja \
   --settings:build compiler.cppstd=17 \
   --output-folder build/arm64-osx-release/conan --build missing
 cmake -S app --preset arm64-osx-release
@@ -63,6 +64,7 @@ cmake --build build/arm64-osx-release
 set CONAN_WORKSPACE_ENABLE=will_break_next
 conan profile detect --force
 conan install app --profile:host conan/profiles/windows-x64-static --profile:build default ^
+  -c:b tools.cmake.cmaketoolchain:generator=Ninja ^
   --settings:build compiler.cppstd=17 ^
   --output-folder build/x64-msvc-static-release/conan --build missing
 cmake -S app --preset x64-msvc-static-release
