@@ -10,7 +10,6 @@
 
 #include <algorithm>
 #include <atomic>
-#include <cstdio>
 #include <filesystem>
 #include <functional>
 #include <sstream>
@@ -107,8 +106,6 @@ void emit_hymt_message(qtrans::core::DiagnosticLevel level, const std::string &m
 // ---------------------------------------------------------------------------
 
 struct LlamaModelHolder {
-    std::vector<std::uint8_t> buffer;
-    FILE *file = nullptr;
     llama_model *model = nullptr;
 
     LlamaModelHolder() = default;
@@ -120,19 +117,11 @@ struct LlamaModelHolder {
             llama_model_free(model);
             model = nullptr;
         }
-        if (file != nullptr) {
-            std::fclose(file);
-            file = nullptr;
-        }
-        buffer.clear();
     }
     LlamaModelHolder(const LlamaModelHolder &) = delete;
     LlamaModelHolder &operator=(const LlamaModelHolder &) = delete;
     LlamaModelHolder(LlamaModelHolder &&other) noexcept
-        : buffer(std::move(other.buffer)),
-          file(other.file),
-          model(other.model) {
-        other.file = nullptr;
+        : model(other.model) {
         other.model = nullptr;
     }
     LlamaModelHolder &operator=(LlamaModelHolder &&other) noexcept {
@@ -140,34 +129,12 @@ struct LlamaModelHolder {
             if (model != nullptr) {
                 llama_model_free(model);
             }
-            if (file != nullptr) {
-                std::fclose(file);
-            }
-            buffer = std::move(other.buffer);
-            file = other.file;
             model = other.model;
-            other.file = nullptr;
             other.model = nullptr;
         }
         return *this;
     }
 };
-
-FILE *open_memory_as_file(std::vector<std::uint8_t> &buffer) {
-#if defined(_WIN32)
-    FILE *file = std::tmpfile();
-    if (file == nullptr) return nullptr;
-    const size_t written = std::fwrite(buffer.data(), 1, buffer.size(), file);
-    if (written != buffer.size()) {
-        std::fclose(file);
-        return nullptr;
-    }
-    std::rewind(file);
-    return file;
-#else
-    return fmemopen(buffer.data(), buffer.size(), "rb");
-#endif
-}
 
 LlamaModelHolder load_llama_model(const std::filesystem::path &path,
                                   const llama_model_params &params) {
@@ -180,20 +147,6 @@ LlamaModelHolder load_llama_model(const std::filesystem::path &path,
         reinterpret_cast<const char *>(path_utf8.c_str()), model_params);
     if (holder.model == nullptr)
         throw std::runtime_error("failed to load llama model from file: " + path.string());
-    return holder;
-}
-
-LlamaModelHolder load_llama_model(const std::vector<std::uint8_t> &data,
-                                  const llama_model_params &params) {
-    if (data.empty()) throw std::invalid_argument("gguf data is empty");
-    LlamaModelHolder holder;
-    holder.buffer = data;
-    holder.file = open_memory_as_file(holder.buffer);
-    if (holder.file == nullptr) throw std::runtime_error("failed to open gguf memory buffer");
-    llama_model_params model_params = params;
-    model_params.use_mmap = false;
-    holder.model = llama_model_load_from_file_ptr(holder.file, model_params);
-    if (holder.model == nullptr) throw std::runtime_error("failed to load llama model from memory");
     return holder;
 }
 

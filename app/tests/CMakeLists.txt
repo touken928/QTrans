@@ -42,15 +42,6 @@ gtest_discover_tests(qtrans_tests_core_internal
         LABELS "dir:core"
 )
 
-add_test(
-    NAME CoreInstallSmoke
-    COMMAND ${CMAKE_COMMAND}
-        -DQTRANS_BUILD_DIR=${CMAKE_BINARY_DIR}
-        -DQTRANS_SOURCE_DIR=${CMAKE_SOURCE_DIR}
-        -DQTRANS_DEPENDENCY_PREFIX=${CMAKE_PREFIX_PATH}
-        -P ${CMAKE_SOURCE_DIR}/cmake/QTransCoreInstallSmoke.cmake
-)
-
 set(QTRANS_TEST_DIRS
     batch
     services

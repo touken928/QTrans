@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="src/desktop/resources/logo.png" width="250" alt="QTrans">
+  <img src="app/src/desktop/resources/logo.png" width="250" alt="QTrans">
 </p>
 
 <p align="center">
@@ -42,7 +42,7 @@ Download the archive for your platform. On Windows, unzip and run `QTrans.exe`. 
 
 ### Prerequisites
 
-- [vcpkg](https://vcpkg.io/) (set `VCPKG_ROOT`)
+- [Conan 2](https://conan.io/) 2.28+
 - CMake 3.31+, Ninja
 - macOS: `brew install ninja pkg-config autoconf autoconf-archive automake libtool`
 - Windows: Visual Studio 2022 C++ build tools (run from a Developer shell)
@@ -51,12 +51,22 @@ Download the archive for your platform. On Windows, unzip and run `QTrans.exe`. 
 
 ```bash
 # macOS ARM64 (Release)
-cmake --preset arm64-osx-release
-cmake --build --preset arm64-osx-release
+export CONAN_WORKSPACE_ENABLE=will_break_next
+conan profile detect --force
+conan install app --profile:host conan/profiles/macos-arm64 --profile:build default \
+  --lockfile conan/locks/macos-arm64.lock \
+  --output-folder build/arm64-osx-release/conan --build missing
+cmake -S app --preset arm64-osx-release
+cmake --build build/arm64-osx-release
 
 # Windows MSVC x64 (Release, Vulkan GPU, static CRT/dependencies)
-cmake --preset x64-msvc-static-release
-cmake --build --preset x64-msvc-static-release
+set CONAN_WORKSPACE_ENABLE=will_break_next
+conan profile detect --force
+conan install app --profile:host conan/profiles/windows-x64-static --profile:build default ^
+  --lockfile conan/locks/windows-x64-static.lock ^
+  --output-folder build/x64-msvc-static-release/conan --build missing
+cmake -S app --preset x64-msvc-static-release
+cmake --build build/x64-msvc-static-release
 
 ```
 
@@ -64,15 +74,15 @@ The supported build targets are macOS ARM64 with Clang and Windows x64 with MSVC
 
 ## Development
 
-See [docs/develop/](docs/develop/) (Chinese) for workflow, CI, branch protection, and releases.
+See the [中文说明](docs/README_zh.md) for project usage and development notes.
 
 ## Project Layout
 
-- `src/core/` - reusable translation runtime, backends, and remote/local runtime integration
-- `src/desktop/domain/` - desktop-side non-UI logic such as download, settings, storage, inference, and batch translation
-- `src/desktop/ui/` - Qt Widgets UI including translate, word selection, batch, model, and shell pages
-- `src/desktop/app/` - desktop entry and worker-thread glue such as `main.cpp`, `inference_service.*`, `download_service.*`, and `batch_controller.*`
-- `tests/core/` - core runtime unit tests
+- `app/` - main Conan consumer and CMake project
+- `app/src/core/` - reusable translation runtime, backends, and remote/local runtime integration
+- `app/src/desktop/` - Qt Widgets application, desktop domain logic, and worker-thread glue
+- `app/tests/` - application and core unit tests
+- `libs/` - repository-owned Conan packages declared explicitly in `conanws.yml`
 
 ## License
 

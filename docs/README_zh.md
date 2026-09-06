@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../src/desktop/resources/logo.png" width="250" alt="QTrans">
+  <img src="../app/src/desktop/resources/logo.png" width="250" alt="QTrans">
 </p>
 
 <p align="center">
@@ -42,7 +42,7 @@
 
 ### 环境要求
 
-- [vcpkg](https://vcpkg.io/)（设置 `VCPKG_ROOT`）
+- [Conan 2](https://conan.io/) 2.28+
 - CMake 3.31+、Ninja
 - macOS：`brew install ninja pkg-config autoconf autoconf-archive automake libtool`
 - Windows：Visual Studio 2022 C++ 构建工具（在 Developer shell 中执行）
@@ -51,13 +51,23 @@
 
 ```bash
 # macOS ARM64（Release）
-cmake --preset arm64-osx-release
-cmake --build --preset arm64-osx-release
+export CONAN_WORKSPACE_ENABLE=will_break_next
+conan profile detect --force
+conan install app --profile:host conan/profiles/macos-arm64 --profile:build default \
+  --lockfile conan/locks/macos-arm64.lock \
+  --output-folder build/arm64-osx-release/conan --build missing
+cmake -S app --preset arm64-osx-release
+cmake --build build/arm64-osx-release
 # 产物：build/arm64-osx-release/src/desktop/QTrans
 
 # Windows MSVC x64（Release，Vulkan GPU，静态 CRT/依赖）
-cmake --preset x64-msvc-static-release
-cmake --build --preset x64-msvc-static-release
+set CONAN_WORKSPACE_ENABLE=will_break_next
+conan profile detect --force
+conan install app --profile:host conan/profiles/windows-x64-static --profile:build default ^
+  --lockfile conan/locks/windows-x64-static.lock ^
+  --output-folder build/x64-msvc-static-release/conan --build missing
+cmake -S app --preset x64-msvc-static-release
+cmake --build build/x64-msvc-static-release
 # 产物：build/x64-msvc-static-release/src/desktop/QTrans.exe
 
 ```

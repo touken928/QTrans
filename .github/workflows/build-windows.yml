@@ -38,11 +38,9 @@ jobs:
       CMAKE_PRESET: x64-msvc-static-release
       BUILD_DIR: ${{ github.workspace }}\build\x64-msvc-static-release
       DIST_SUFFIX: windows-x64
-      VCPKG_ROOT: C:\vcpkg
-      VCPKG_TARGET_TRIPLET: x64-windows-static-release-noicu
-      VCPKG_OVERLAY_TRIPLETS: ${{ github.workspace }}\overlay\triplets
-      VCPKG_INSTALL_ROOT: ${{ github.workspace }}\build\x64-msvc-static-release\vcpkg_installed
-      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\.vcpkg-cache
+      CONAN_PROFILE: conan/profiles/windows-x64-static
+      CONAN_LOCKFILE: conan/locks/windows-x64-static.lock
+      CONAN_OUTPUT_FOLDER: ${{ github.workspace }}\build\x64-msvc-static-release\conan
 
     steps:
       - name: Checkout
@@ -59,34 +57,29 @@ jobs:
       - name: Enable MSVC developer environment
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Select repository vcpkg
+      - name: Install Conan dependencies
         if: ${{ !inputs.package || steps.restore-release-binary.outputs.cache-hit != 'true' }}
-        shell: pwsh
-        run: Add-Content -Path $env:GITHUB_ENV -Value 'VCPKG_ROOT=C:\vcpkg'
-
-      - name: Install vcpkg dependencies
-        if: ${{ !inputs.package || steps.restore-release-binary.outputs.cache-hit != 'true' }}
-        uses: ./.github/actions/setup-vcpkg
-        env:
-          VCPKG_ROOT: C:\vcpkg
+        uses: ./.github/actions/setup-conan
         with:
-          vcpkg-root: C:\vcpkg
-          target-triplet: ${{ env.VCPKG_TARGET_TRIPLET }}
-          install-root: ${{ env.VCPKG_INSTALL_ROOT }}
-          binary-cache-path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          profile: ${{ env.CONAN_PROFILE }}
+          lockfile: ${{ env.CONAN_LOCKFILE }}
+          output-folder: ${{ env.CONAN_OUTPUT_FOLDER }}
 
       - name: Configure tests
         if: ${{ !inputs.package }}
         shell: pwsh
-        run: cmake --preset ${env:CMAKE_PRESET} -DQTRANS_BUILD_TESTS=ON -DVCPKG_INSTALLED_DIR="${env:VCPKG_INSTALL_ROOT}" -DVCPKG_APPLOCAL_DEPS=OFF
+        working-directory: app
+        run: cmake --preset ${env:CMAKE_PRESET} -DQTRANS_BUILD_TESTS=ON
 
       - name: Configure release
         if: ${{ inputs.package && steps.restore-release-binary.outputs.cache-hit != 'true' }}
         shell: pwsh
-        run: cmake --preset ${env:CMAKE_PRESET} -DQTRANS_BUILD_TESTS=OFF -DVCPKG_INSTALLED_DIR="${env:VCPKG_INSTALL_ROOT}" -DVCPKG_APPLOCAL_DEPS=OFF
+        working-directory: app
+        run: cmake --preset ${env:CMAKE_PRESET} -DQTRANS_BUILD_TESTS=OFF
 
       - name: Build
         if: ${{ !inputs.package || steps.restore-release-binary.outputs.cache-hit != 'true' }}
+        working-directory: app
         run: cmake --build --preset ${env:CMAKE_PRESET} --parallel ${env:NUMBER_OF_PROCESSORS}
 
       - name: Save release binary

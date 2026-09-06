@@ -4,5 +4,6 @@ triplets/
 .vscode/
 *.user
 .DS_Store
-.vcpkg-cache/
+.conan-cache/
+__pycache__/
 .slim/deepwork/

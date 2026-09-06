@@ -15,7 +15,7 @@ jobs:
       package: true
 
   windows:
-    uses: ./.github/workflows/build-windows-msvc.yml
+    uses: ./.github/workflows/build-windows.yml
     with:
       package: true
 
