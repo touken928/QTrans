@@ -17,8 +17,7 @@ class QTransDependencies(ConanFile):
         self.requires("simdutf/8.2.0")
         self.requires("spdlog/1.17.0")
         self.requires("gtest/1.17.0")
-        if self.settings.os == "Macos":
-            self.requires("icu/78.2")
+        self.requires("sentbreak/0.1.0")
 
     def configure(self):
         self.options["llama-cpp"].shared = False
@@ -35,8 +34,7 @@ class QTransDependencies(ConanFile):
         self.options["simdutf"].shared = False
         self.options["spdlog"].shared = False
         self.options["gtest"].shared = False
-        if self.settings.os == "Macos":
-            self.options["icu"].shared = False
+        self.options["sentbreak"].shared = False
 
     def validate(self):
         if self.settings.os == "Macos" and self.settings.arch != "armv8":

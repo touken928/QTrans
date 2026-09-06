@@ -4,6 +4,7 @@ include(GoogleTest)
 add_executable(qtrans_tests_core
     core/test_core_api.cpp
     core/test_model_host.cpp
+    core/test_sentence_splitter.cpp
 )
 target_link_libraries(qtrans_tests_core
     PRIVATE
@@ -16,7 +17,12 @@ if(MSVC)
 else()
     target_compile_options(qtrans_tests_core PRIVATE -Wall -Wextra -Wpedantic)
 endif()
-target_include_directories(qtrans_tests_core PRIVATE ${PROJECT_SOURCE_DIR}/src/core/internal/host)
+target_include_directories(
+    qtrans_tests_core
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/core/internal
+        ${PROJECT_SOURCE_DIR}/src/core/internal/host
+)
 gtest_discover_tests(qtrans_tests_core
     PROPERTIES
         LABELS "dir:core"
