@@ -20,14 +20,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(llama-cpp CONFIG REQUIRED)
 find_package(CURL REQUIRED)
-if(WIN32)
-    # Keep the release executable self-contained and use the built-in splitter
-    # instead of packaging ICU on Windows.
-    set(QTRANS_USE_ICU 0)
-else()
-    find_package(ICU REQUIRED COMPONENTS uc i18n data)
-    set(QTRANS_USE_ICU 1)
-endif()
+find_package(ICU REQUIRED COMPONENTS uc i18n data)
 
 find_package(simdutf CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)

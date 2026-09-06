@@ -105,7 +105,7 @@ jobs:
             Select-String -Pattern '\.dll' |
             ForEach-Object { $_.Line.Trim() }
           $forbidden = $imports | Where-Object {
-            $_ -match '(?i)(qt6|ggml|llama|curl|ssl|crypto|icu|spdlog|vcomp|msvcp|vcruntime|libomp)'
+            $_ -match '(?i)(qt6|ggml|llama|curl|ssl|crypto|spdlog|vcomp|msvcp|vcruntime|libomp)'
           }
           if ($forbidden) {
             $forbidden | ForEach-Object { Write-Host "::error::Unexpected bundled-runtime dependency: $_" }
