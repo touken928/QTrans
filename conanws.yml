@@ -1,0 +1,7 @@
+packages:
+  - path: app
+    ref: qtrans-dependencies/0.1.0
+
+# Add future in-repository recipes explicitly, for example:
+#  - path: libs/qtrans-example
+#    ref: qtrans-example/0.1.0

@@ -1,9 +1,8 @@
 {
-  "$comment": "Shared public presets require VCPKG_ROOT from the environment; do not add machine-specific paths.",
+  "$comment": "Run the matching conan install command before configuring a public preset.",
   "version": 10,
   "cmakeMinimumRequired": {
     "major": 3,
-    
     "minor": 31,
     "patch": 0
   },
@@ -12,9 +11,8 @@
       "name": "base",
       "hidden": true,
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/${presetName}",
+      "binaryDir": "${sourceDir}/../build/${presetName}",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "CMAKE_BUILD_TYPE": "Release"
       }
     },
@@ -22,12 +20,11 @@
       "name": "arm64-osx-release",
       "displayName": "macOS ARM64 Clang (Release)",
       "description": "Release build for macOS ARM64 using Clang.",
-      "$comment": "Requires VCPKG_ROOT in the environment and an arm64 macOS toolchain.",
+      "$comment": "Requires ../build/arm64-osx-release/conan/conan_toolchain.cmake.",
       "inherits": "base",
       "cacheVariables": {
-        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/macos-arm64.cmake",
-        "VCPKG_TARGET_TRIPLET": "arm64-osx-release",
-        "VCPKG_HOST_TRIPLET": "arm64-osx-release"
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/../build/arm64-osx-release/conan/conan_toolchain.cmake",
+        "CMAKE_OSX_ARCHITECTURES": "arm64"
       }
     },
     {
@@ -36,8 +33,7 @@
       "description": "Release build for Windows x64 using MSVC and the static CRT.",
       "inherits": "base",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static-release-noicu",
-        "VCPKG_HOST_TRIPLET": "x64-windows-static-release-noicu",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/../build/x64-msvc-static-release/conan/conan_toolchain.cmake",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
       }
     }

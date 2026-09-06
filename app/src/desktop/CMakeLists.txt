@@ -137,14 +137,12 @@ if(WIN32)
     target_sources(QTrans PRIVATE ${_QT_SOURCES_WIN} domain/platform/single_instance/win/single_instance_activate.cpp)
     set_target_properties(QTrans PROPERTIES WIN32_EXECUTABLE TRUE)
     qt_import_plugins(QTrans
-        INCLUDE_BY_TYPE platforms Qt6::QWindowsIntegrationPlugin
-        INCLUDE_BY_TYPE styles Qt6::QWindowsVistaStylePlugin
+        INCLUDE Qt6::QWindowsIntegrationPlugin
     )
 elseif(APPLE)
     target_sources(QTrans PRIVATE ${_QT_SOURCES_MAC} domain/platform/single_instance/mac/single_instance.mm)
     target_link_libraries(QTrans PRIVATE "-framework AppKit" "-framework ApplicationServices" "-framework Carbon" "-framework CoreGraphics")
     qt_import_plugins(QTrans
-        INCLUDE_BY_TYPE platforms Qt6::QCocoaIntegrationPlugin
-        INCLUDE_BY_TYPE styles Qt6::QMacStylePlugin
+        INCLUDE Qt6::QCocoaIntegrationPlugin
     )
 endif()

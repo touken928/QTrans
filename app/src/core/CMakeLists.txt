@@ -1,6 +1,3 @@
-include(CMakePackageConfigHelpers)
-include(GNUInstallDirs)
-
 add_library(qtrans_core STATIC
     internal/diagnostics.cpp
     internal/backend.cpp
@@ -33,7 +30,7 @@ target_include_directories(qtrans_core
 
 target_link_libraries(qtrans_core
     PUBLIC
-        llama
+        llama-cpp::llama
         simdutf::simdutf
         spdlog::spdlog
 )
@@ -41,43 +38,6 @@ target_link_libraries(qtrans_core
 if(QTRANS_USE_ICU)
     target_link_libraries(qtrans_core PUBLIC ICU::uc ICU::i18n ICU::data)
 endif()
-
-set_target_properties(qtrans_core PROPERTIES EXPORT_NAME Core)
-
-install(
-    TARGETS qtrans_core
-    EXPORT QTransCoreTargets
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    FILE_SET public_headers DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
-
-install(
-    EXPORT QTransCoreTargets
-    FILE QTransCoreTargets.cmake
-    NAMESPACE QTrans::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/QTransCore
-)
-
-configure_package_config_file(
-    ${CMAKE_SOURCE_DIR}/cmake/QTransCoreConfig.cmake.in
-    ${CMAKE_CURRENT_BINARY_DIR}/QTransCoreConfig.cmake
-    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/QTransCore
-    NO_CHECK_REQUIRED_COMPONENTS_MACRO
-)
-write_basic_package_version_file(
-    ${CMAKE_CURRENT_BINARY_DIR}/QTransCoreConfigVersion.cmake
-    VERSION ${PROJECT_VERSION}
-    COMPATIBILITY SameMajorVersion
-)
-
-install(
-    FILES
-        ${CMAKE_CURRENT_BINARY_DIR}/QTransCoreConfig.cmake
-        ${CMAKE_CURRENT_BINARY_DIR}/QTransCoreConfigVersion.cmake
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/QTransCore
-)
 
 target_compile_definitions(qtrans_core
     PRIVATE

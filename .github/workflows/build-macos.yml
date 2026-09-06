@@ -38,10 +38,9 @@ jobs:
       CMAKE_PRESET: arm64-osx-release
       BUILD_DIR: ${{ github.workspace }}/build/arm64-osx-release
       DIST_SUFFIX: macos-arm64
-      VCPKG_ROOT: /Users/runner/vcpkg
-      VCPKG_TARGET_TRIPLET: arm64-osx-release
-      VCPKG_INSTALL_ROOT: ${{ github.workspace }}/build/arm64-osx-release/vcpkg_installed
-      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
+      CONAN_PROFILE: conan/profiles/macos-arm64-release
+      CONAN_LOCKFILE: conan/locks/macos-arm64-release.lock
+      CONAN_OUTPUT_FOLDER: ${{ github.workspace }}/build/arm64-osx-release/conan
 
     steps:
       - name: Checkout
@@ -59,25 +58,27 @@ jobs:
         if: ${{ !inputs.package || steps.restore-release-binary.outputs.cache-hit != 'true' }}
         run: brew install ninja pkg-config autoconf autoconf-archive automake libtool
 
-      - name: Install vcpkg dependencies
+      - name: Install Conan dependencies
         if: ${{ !inputs.package || steps.restore-release-binary.outputs.cache-hit != 'true' }}
-        uses: ./.github/actions/setup-vcpkg
+        uses: ./.github/actions/setup-conan
         with:
-          vcpkg-root: ${{ env.VCPKG_ROOT }}
-          target-triplet: ${{ env.VCPKG_TARGET_TRIPLET }}
-          install-root: ${{ env.VCPKG_INSTALL_ROOT }}
-          binary-cache-path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          profile: ${{ env.CONAN_PROFILE }}
+          lockfile: ${{ env.CONAN_LOCKFILE }}
+          output-folder: ${{ env.CONAN_OUTPUT_FOLDER }}
 
       - name: Configure tests
         if: ${{ !inputs.package }}
+        working-directory: app
         run: cmake --preset "${CMAKE_PRESET}" -DQTRANS_BUILD_TESTS=ON
 
       - name: Configure release
         if: ${{ inputs.package && steps.restore-release-binary.outputs.cache-hit != 'true' }}
+        working-directory: app
         run: cmake --preset "${CMAKE_PRESET}" -DQTRANS_BUILD_TESTS=OFF
 
       - name: Build
         if: ${{ !inputs.package || steps.restore-release-binary.outputs.cache-hit != 'true' }}
+        working-directory: app
         run: cmake --build --preset "${CMAKE_PRESET}" --parallel "$(sysctl -n hw.ncpu)"
 
       - name: Save release binary
@@ -102,7 +103,7 @@ jobs:
           cp "${binary}" "${output}"
           chmod +x "${output}"
 
-          if otool -L "${output}" | grep -E '@rpath|/vcpkg/'; then
+          if otool -L "${output}" | grep -E '@rpath|/.conan2/'; then
             echo "Unexpected dynamic third-party libraries in static macOS build"
             otool -L "${output}"
             exit 1

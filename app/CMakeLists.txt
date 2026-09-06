@@ -18,11 +18,11 @@ endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(llama CONFIG REQUIRED)
+find_package(llama-cpp CONFIG REQUIRED)
 find_package(CURL REQUIRED)
 if(WIN32)
-    # The vcpkg ICU package currently exposes an import library on Windows;
-    # keep the release executable self-contained and use the built-in splitter.
+    # Keep the release executable self-contained and use the built-in splitter
+    # instead of packaging ICU on Windows.
     set(QTRANS_USE_ICU 0)
 else()
     find_package(ICU REQUIRED COMPONENTS uc i18n data)
@@ -42,7 +42,7 @@ else()
     set(QTRANS_MULTI_BACKEND_VALUE 0)
 endif()
 
-if(DEFINED VCPKG_TARGET_TRIPLET AND VCPKG_TARGET_TRIPLET MATCHES "osx")
+if(APPLE)
     set(QTRANS_GPU_METAL_VALUE 1)
 else()
     set(QTRANS_GPU_METAL_VALUE 0)
