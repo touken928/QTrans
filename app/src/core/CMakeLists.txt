@@ -33,11 +33,9 @@ target_link_libraries(qtrans_core
         llama-cpp::llama
         simdutf::simdutf
         spdlog::spdlog
+    PRIVATE
+        sentbreak::sentbreak
 )
-
-if(QTRANS_USE_ICU)
-    target_link_libraries(qtrans_core PUBLIC ICU::uc ICU::i18n ICU::data)
-endif()
 
 target_compile_definitions(qtrans_core
     PRIVATE
@@ -51,5 +49,3 @@ endif()
 if(QTRANS_GPU_METAL_VALUE)
     target_compile_definitions(qtrans_core PRIVATE QTRANS_GPU_METAL)
 endif()
-
-target_compile_definitions(qtrans_core PRIVATE QTRANS_USE_ICU=${QTRANS_USE_ICU})

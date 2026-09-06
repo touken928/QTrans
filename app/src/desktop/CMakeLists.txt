@@ -131,18 +131,35 @@ set(_QT_SOURCES_MAC
 
 add_executable(QTrans ${_QT_SOURCES_COMMON})
 
-target_link_libraries(QTrans PRIVATE qtrans_desktop Qt6::Widgets)
-
 if(WIN32)
     target_sources(QTrans PRIVATE ${_QT_SOURCES_WIN} domain/platform/single_instance/win/single_instance_activate.cpp)
     set_target_properties(QTrans PROPERTIES WIN32_EXECUTABLE TRUE)
-    qt_import_plugins(QTrans
-        INCLUDE Qt6::QWindowsIntegrationPlugin
-    )
+    set(_QTRANS_PLUGIN_TARGET Qt6::QWindowsIntegrationPlugin)
+    set(_QTRANS_PLUGIN_CLASS QWindowsIntegrationPlugin)
 elseif(APPLE)
     target_sources(QTrans PRIVATE ${_QT_SOURCES_MAC} domain/platform/single_instance/mac/single_instance.mm)
-    target_link_libraries(QTrans PRIVATE "-framework AppKit" "-framework ApplicationServices" "-framework Carbon" "-framework CoreGraphics")
-    qt_import_plugins(QTrans
-        INCLUDE Qt6::QCocoaIntegrationPlugin
-    )
+    target_link_libraries(QTrans PRIVATE "-framework AppKit" "-framework ApplicationServices" "-framework Carbon" "-framework CoreGraphics" "-framework IOSurface")
+    set(_QTRANS_PLUGIN_TARGET Qt6::QCocoaIntegrationPlugin)
+    set(_QTRANS_PLUGIN_CLASS QCocoaIntegrationPlugin)
 endif()
+
+# The Qt platform plugin must be linked into the executable because every Qt
+# dependency in this project is static. Conan's CMakeDeps Qt package exposes
+# the plugin as an INTERFACE target, but without the QT_PLUGIN_* properties
+# that Qt's official qt_import_plugins() requires, so that call is a no-op and
+# the plugin would be missing at runtime ("Could not find the Qt platform
+# plugin ..."). Link the plugin target directly and import it via
+# Q_IMPORT_PLUGIN instead.
+if(DEFINED _QTRANS_PLUGIN_TARGET)
+    target_compile_definitions(QTrans PRIVATE QT_STATICPLUGIN)
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/qt_plugin_import_QTrans.cpp"
+        "#include <QtPlugin>\n"
+        "Q_IMPORT_PLUGIN(${_QTRANS_PLUGIN_CLASS})\n"
+    )
+    target_sources(QTrans PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/qt_plugin_import_QTrans.cpp")
+    # Link the plugin ahead of the Qt targets so its Qt symbol references
+    # resolve against the Qt libraries that follow it on the link line.
+    target_link_libraries(QTrans PRIVATE ${_QTRANS_PLUGIN_TARGET})
+endif()
+
+target_link_libraries(QTrans PRIVATE qtrans_desktop Qt6::Widgets)

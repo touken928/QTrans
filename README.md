@@ -58,6 +58,7 @@ conan install app --profile:host conan/profiles/macos-arm64-release --profile:bu
   -c:b tools.cmake.cmaketoolchain:generator=Ninja \
   --settings:build compiler.cppstd=17 \
   --output-folder build/arm64-osx-release/conan --build missing
+conan build libs/sentbreak --profile:host conan/profiles/macos-arm64-release --profile:build default
 cmake -S app --preset arm64-osx-release
 cmake --build build/arm64-osx-release
 
@@ -69,6 +70,7 @@ conan install app --profile:host conan/profiles/windows-x64-release --profile:bu
   -c:b tools.cmake.cmaketoolchain:generator=Ninja ^
   --settings:build compiler.cppstd=17 ^
   --output-folder build/x64-msvc-static-release/conan --build missing
+conan build libs/sentbreak --profile:host conan/profiles/windows-x64-release --profile:build default
 cmake -S app --preset x64-msvc-static-release
 cmake --build build/x64-msvc-static-release
 
