@@ -53,7 +53,8 @@ Download the archive for your platform. On Windows, unzip and run `QTrans.exe`. 
 # macOS ARM64 (Release)
 export CONAN_WORKSPACE_ENABLE=will_break_next
 conan profile detect --force
-conan install app --profile:host conan/profiles/macos-arm64 --profile:build default \
+conan install app --profile:host conan/profiles/macos-arm64-release --profile:build default \
+  --lockfile conan/locks/macos-arm64-release.lock \
   -c:b tools.cmake.cmaketoolchain:generator=Ninja \
   --settings:build compiler.cppstd=17 \
   --output-folder build/arm64-osx-release/conan --build missing
@@ -63,13 +64,28 @@ cmake --build build/arm64-osx-release
 # Windows MSVC x64 (Release, Vulkan GPU, static CRT/dependencies)
 set CONAN_WORKSPACE_ENABLE=will_break_next
 conan profile detect --force
-conan install app --profile:host conan/profiles/windows-x64-static --profile:build default ^
+conan install app --profile:host conan/profiles/windows-x64-release --profile:build default ^
+  --lockfile conan/locks/windows-x64-release.lock ^
   -c:b tools.cmake.cmaketoolchain:generator=Ninja ^
   --settings:build compiler.cppstd=17 ^
   --output-folder build/x64-msvc-static-release/conan --build missing
 cmake -S app --preset x64-msvc-static-release
 cmake --build build/x64-msvc-static-release
 
+```
+
+When you change dependencies (`app/conanfile.py`, `conanws.yml`, or a profile), refresh the matching lockfile and commit it:
+
+```bash
+# macOS ARM64 (Release)
+export CONAN_WORKSPACE_ENABLE=will_break_next
+conan lock create app --profile:host conan/profiles/macos-arm64-release --profile:build default \
+  --lockfile-out conan/locks/macos-arm64-release.lock
+
+# Windows MSVC x64 (Release)
+set CONAN_WORKSPACE_ENABLE=will_break_next
+conan lock create app --profile:host conan/profiles/windows-x64-release --profile:build default ^
+  --lockfile-out conan/locks/windows-x64-release.lock
 ```
 
 The supported build targets are macOS ARM64 with Clang and Windows x64 with MSVC. Under MSVC, third-party libraries and the C/C++ runtime are statically linked; normal Windows system DLL imports remain.

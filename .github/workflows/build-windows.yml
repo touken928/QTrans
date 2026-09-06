@@ -38,7 +38,8 @@ jobs:
       CMAKE_PRESET: x64-msvc-static-release
       BUILD_DIR: ${{ github.workspace }}\build\x64-msvc-static-release
       DIST_SUFFIX: windows-x64
-      CONAN_PROFILE: conan/profiles/windows-x64-static
+      CONAN_PROFILE: conan/profiles/windows-x64-release
+      CONAN_LOCKFILE: conan/locks/windows-x64-release.lock
       CONAN_OUTPUT_FOLDER: ${{ github.workspace }}\build\x64-msvc-static-release\conan
 
     steps:
@@ -61,6 +62,7 @@ jobs:
         uses: ./.github/actions/setup-conan
         with:
           profile: ${{ env.CONAN_PROFILE }}
+          lockfile: ${{ env.CONAN_LOCKFILE }}
           output-folder: ${{ env.CONAN_OUTPUT_FOLDER }}
 
       - name: Configure tests

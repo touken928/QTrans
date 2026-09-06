@@ -53,7 +53,8 @@
 # macOS ARM64（Release）
 export CONAN_WORKSPACE_ENABLE=will_break_next
 conan profile detect --force
-conan install app --profile:host conan/profiles/macos-arm64 --profile:build default \
+conan install app --profile:host conan/profiles/macos-arm64-release --profile:build default \
+  --lockfile conan/locks/macos-arm64-release.lock \
   -c:b tools.cmake.cmaketoolchain:generator=Ninja \
   --settings:build compiler.cppstd=17 \
   --output-folder build/arm64-osx-release/conan --build missing
@@ -64,7 +65,8 @@ cmake --build build/arm64-osx-release
 # Windows MSVC x64（Release，Vulkan GPU，静态 CRT/依赖）
 set CONAN_WORKSPACE_ENABLE=will_break_next
 conan profile detect --force
-conan install app --profile:host conan/profiles/windows-x64-static --profile:build default ^
+conan install app --profile:host conan/profiles/windows-x64-release --profile:build default ^
+  --lockfile conan/locks/windows-x64-release.lock ^
   -c:b tools.cmake.cmaketoolchain:generator=Ninja ^
   --settings:build compiler.cppstd=17 ^
   --output-folder build/x64-msvc-static-release/conan --build missing
@@ -72,6 +74,20 @@ cmake -S app --preset x64-msvc-static-release
 cmake --build build/x64-msvc-static-release
 # 产物：build/x64-msvc-static-release/src/desktop/QTrans.exe
 
+```
+
+变更依赖（`app/conanfile.py`、`conanws.yml` 或 profile）后，刷新对应 lockfile 并提交：
+
+```bash
+# macOS ARM64（Release）
+export CONAN_WORKSPACE_ENABLE=will_break_next
+conan lock create app --profile:host conan/profiles/macos-arm64-release --profile:build default \
+  --lockfile-out conan/locks/macos-arm64-release.lock
+
+# Windows MSVC x64（Release）
+set CONAN_WORKSPACE_ENABLE=will_break_next
+conan lock create app --profile:host conan/profiles/windows-x64-release --profile:build default ^
+  --lockfile-out conan/locks/windows-x64-release.lock
 ```
 
 目前仅支持 macOS ARM64 Clang 和 Windows MSVC x64 构建。MSVC 产物静态链接第三方库及 C/C++ 运行时，只保留正常的 Windows 系统 DLL 导入。
