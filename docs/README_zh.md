@@ -54,7 +54,7 @@
 export CONAN_WORKSPACE_ENABLE=will_break_next
 conan profile detect --force
 conan install app --profile:host conan/profiles/macos-arm64 --profile:build default \
-  --lockfile conan/locks/macos-arm64.lock \
+  --settings:build compiler.cppstd=17 \
   --output-folder build/arm64-osx-release/conan --build missing
 cmake -S app --preset arm64-osx-release
 cmake --build build/arm64-osx-release
@@ -64,7 +64,7 @@ cmake --build build/arm64-osx-release
 set CONAN_WORKSPACE_ENABLE=will_break_next
 conan profile detect --force
 conan install app --profile:host conan/profiles/windows-x64-static --profile:build default ^
-  --lockfile conan/locks/windows-x64-static.lock ^
+  --settings:build compiler.cppstd=17 ^
   --output-folder build/x64-msvc-static-release/conan --build missing
 cmake -S app --preset x64-msvc-static-release
 cmake --build build/x64-msvc-static-release
@@ -76,7 +76,7 @@ cmake --build build/x64-msvc-static-release
 
 ## 开发
 
-参与贡献、分支规范、CI、发版等说明见 **[开发文档](develop/README.md)**。
+参与贡献、分支规范、CI、发版等说明请参考仓库中的 workflow 配置和 README。
 
 ## 许可证
 

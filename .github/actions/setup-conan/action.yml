@@ -1,12 +1,9 @@
 name: Install Conan dependencies
-description: Restore the Conan cache and install the locked dependency graph.
+description: Restore the Conan cache and install the dependency graph.
 
 inputs:
   profile:
     description: Repository host profile
-    required: true
-  lockfile:
-    description: Platform lockfile
     required: true
   output-folder:
     description: Folder for Conan CMake generators
@@ -24,7 +21,7 @@ runs:
       uses: actions/cache/restore@v4
       with:
         path: ~/.conan2
-        key: conan-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/conanfile.py', 'conanws.yml', inputs.profile, inputs.lockfile) }}
+        key: conan-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/conanfile.py', 'conanws.yml', inputs.profile) }}
         restore-keys: |
           conan-v1-${{ runner.os }}-${{ runner.arch }}-
 
@@ -40,7 +37,7 @@ runs:
         conan install app
         --profile:host "${{ inputs.profile }}"
         --profile:build default
-        --lockfile "${{ inputs.lockfile }}"
+        --settings:build compiler.cppstd=17
         --output-folder "${{ inputs.output-folder }}"
         --build missing
 
@@ -49,4 +46,4 @@ runs:
       uses: actions/cache/save@v4
       with:
         path: ~/.conan2
-        key: conan-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/conanfile.py', 'conanws.yml', inputs.profile, inputs.lockfile) }}
+        key: conan-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/conanfile.py', 'conanws.yml', inputs.profile) }}

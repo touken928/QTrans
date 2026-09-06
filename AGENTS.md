@@ -9,7 +9,7 @@
 - Backend bootstrap and selection are exposed only through `qtrans/core.h`; local llama-cpp runtime, backend probing, chunking, and callback control are `app/src/core/internal/` implementation details.
 
 ## Build And Test
-- Run `conan install` with the matching repository profile and lockfile before a public release preset. Supported targets are macOS ARM64 with Clang and Windows x64 with MSVC only. The exact commands are documented in `README.md`.
+- Run `conan install` with the matching repository profile before a public release preset. The Conan build context must use C++17. Supported targets are macOS ARM64 with Clang and Windows x64 with MSVC only. The exact commands are documented in `README.md`.
 - Tests are opt-in: from `app/`, run `cmake --preset arm64-osx-release -DQTRANS_BUILD_TESTS=ON`, then build, then run `ctest --test-dir ../build/arm64-osx-release --output-on-failure`.
 - Focus tests by label, e.g. `ctest --test-dir build/arm64-osx-release -L dir:core --output-on-failure` or `-L dir:model`.
 
@@ -44,4 +44,4 @@
 ## Git Workflow
 - `main` is protected. Use branches named `users/<github-login>/<topic>`; CI rejects other names and owner mismatches.
 - Do not commit or push directly to `main`; open a PR to `main` and let GitHub merge.
-- Do not change `app/conanfile.py`, Conan profiles/lockfiles, or Qt modules unless the task explicitly requires dependency changes.
+- Do not change `app/conanfile.py`, Conan profiles, or Qt modules unless the task explicitly requires dependency changes.

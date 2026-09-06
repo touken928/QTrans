@@ -15,4 +15,3 @@ members are exposed as editable packages while Conan commands run inside this
 repository. Each recipe must declare (or resolve) both `name` and `version`.
 
 Add a package reference to `app/conanfile.py` only when QTrans consumes it.
-Regenerate both files under `conan/locks/` whenever the dependency graph changes.
