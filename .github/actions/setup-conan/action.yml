@@ -46,6 +46,18 @@ runs:
         --output-folder "${{ inputs.output-folder }}"
         --build missing
 
+    # Workspace members are consumed as editable packages: Conan does not build
+    # them during `conan install`, but the app links them, so every repository
+    # library must be built (into its workspace build folder) up front.
+    - name: Build workspace libraries
+      shell: bash
+      env:
+        CONAN_WORKSPACE_ENABLE: will_break_next
+      run: >-
+        conan build libs/sentbreak
+        --profile:host "${{ inputs.profile }}"
+        --profile:build default
+
     - name: Save Conan cache
       if: ${{ success() && steps.restore-conan-cache.outputs.cache-hit != 'true' }}
       uses: actions/cache/save@v4
