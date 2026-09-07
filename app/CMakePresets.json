@@ -28,12 +28,13 @@
       }
     },
     {
-      "name": "x64-msvc-static-release",
-      "displayName": "MSVC x64 static (Release)",
-      "description": "Release build for Windows x64 using MSVC and the static CRT.",
+      "name": "x64-clangcl-static-release",
+      "displayName": "clang-cl x64 static (Release)",
+      "description": "Release build for Windows x64 using clang-cl, lld-link, the MSVC ABI, and the static CRT.",
       "inherits": "base",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/../build/x64-msvc-static-release/conan/conan_toolchain.cmake",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/../build/x64-clangcl-static-release/conan/conan_toolchain.cmake",
+        "CMAKE_LINKER_TYPE": "LLD",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
       }
     }
@@ -45,9 +46,9 @@
       "configurePreset": "arm64-osx-release"
     },
     {
-      "name": "x64-msvc-static-release",
-      "displayName": "MSVC x64 static (Release)",
-      "configurePreset": "x64-msvc-static-release"
+      "name": "x64-clangcl-static-release",
+      "displayName": "clang-cl x64 static (Release)",
+      "configurePreset": "x64-clangcl-static-release"
     }
   ]
 }

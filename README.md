@@ -35,7 +35,7 @@
 Prebuilt binaries are available on the [Releases](https://github.com/touken928/QTrans/releases) page:
 
 - `QTrans-<version>-macos-arm64` — macOS ARM64
-- `QTrans-<version>-windows-x64.zip` — Windows x64 (`QTrans.exe`, MSVC static runtime)
+- `QTrans-<version>-windows-x64.zip` — Windows x64 (`QTrans.exe`, clang-cl with the MSVC static runtime)
 Download the archive for your platform. On Windows, unzip and run `QTrans.exe`. On macOS, make the app executable if needed, then run it. On first launch, open **Model**, download the model, and click **Load**. Default model: **Q4** on all supported platforms. App data is stored under `~/.qtrans/` in system mode; batch queue state persists under `~/.qtrans/batch/`, and translated batch outputs are written to `~/.qtrans/batch/output/`.
 
 ## Build from Source
@@ -45,7 +45,7 @@ Download the archive for your platform. On Windows, unzip and run `QTrans.exe`. 
 - [Conan 2](https://conan.io/) 2.28+
 - CMake 3.31+, Ninja
 - macOS: `brew install ninja pkg-config autoconf autoconf-archive automake libtool`
-- Windows: Visual Studio 2022 C++ build tools (run from a Developer shell)
+- Windows: Visual Studio C++ build tools and LLVM (`clang-cl`, `lld-link`; run from a Developer shell)
 
 ### Build
 
@@ -62,17 +62,17 @@ conan build libs/sentbreak --profile:host conan/profiles/macos-arm64-release --p
 cmake -S app --preset arm64-osx-release
 cmake --build build/arm64-osx-release
 
-# Windows MSVC x64 (Release, Vulkan GPU, static CRT/dependencies)
+# Windows clang-cl x64 (Release, MSVC ABI, Vulkan GPU, static CRT/dependencies)
 set CONAN_WORKSPACE_ENABLE=will_break_next
 conan profile detect --force
-conan install app --profile:host conan/profiles/windows-x64-release --profile:build default ^
+conan install app --profile:host conan/profiles/windows-x64-clangcl-release --profile:build default ^
   --lockfile conan/locks/windows-x64-release.lock ^
   -c:b tools.cmake.cmaketoolchain:generator=Ninja ^
   --settings:build compiler.cppstd=17 ^
-  --output-folder build/x64-msvc-static-release/conan --build missing
-conan build libs/sentbreak --profile:host conan/profiles/windows-x64-release --profile:build default
-cmake -S app --preset x64-msvc-static-release
-cmake --build build/x64-msvc-static-release
+  --output-folder build/x64-clangcl-static-release/conan --build missing
+conan build libs/sentbreak --profile:host conan/profiles/windows-x64-clangcl-release --profile:build default
+cmake -S app --preset x64-clangcl-static-release
+cmake --build build/x64-clangcl-static-release
 
 ```
 
@@ -84,13 +84,13 @@ export CONAN_WORKSPACE_ENABLE=will_break_next
 conan lock create app --profile:host conan/profiles/macos-arm64-release --profile:build default \
   --lockfile-out conan/locks/macos-arm64-release.lock
 
-# Windows MSVC x64 (Release)
+# Windows clang-cl x64 (Release, MSVC ABI)
 set CONAN_WORKSPACE_ENABLE=will_break_next
-conan lock create app --profile:host conan/profiles/windows-x64-release --profile:build default ^
+conan lock create app --profile:host conan/profiles/windows-x64-clangcl-release --profile:build default ^
   --lockfile-out conan/locks/windows-x64-release.lock
 ```
 
-The supported build targets are macOS ARM64 with Clang and Windows x64 with MSVC. Under MSVC, third-party libraries and the C/C++ runtime are statically linked; normal Windows system DLL imports remain.
+The supported build targets are macOS ARM64 with Clang and Windows x64 with clang-cl and lld-link. The Windows profile uses Conan's `msvc` compiler model because clang-cl emits the MSVC ABI. Windows artifacts statically link compatible third-party libraries and the MSVC C/C++ runtime; normal Windows system DLL imports remain.
 
 ## Development
 
