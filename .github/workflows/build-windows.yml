@@ -1,4 +1,4 @@
-name: Build / Windows MSVC
+name: Build / Windows clang-cl
 
 on:
   workflow_call:
@@ -26,21 +26,21 @@ permissions:
   contents: read
 
 concurrency:
-  group: build-windows-msvc-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: build-windows-clangcl-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    name: ${{ inputs.package && 'MSVC x64 release' || 'MSVC build and tests' }}
+    name: ${{ inputs.package && 'clang-cl x64 release' || 'clang-cl build and tests' }}
     runs-on: windows-latest
     timeout-minutes: 180
     env:
-      CMAKE_PRESET: x64-msvc-static-release
-      BUILD_DIR: ${{ github.workspace }}\build\x64-msvc-static-release
+      CMAKE_PRESET: x64-clangcl-static-release
+      BUILD_DIR: ${{ github.workspace }}\build\x64-clangcl-static-release
       DIST_SUFFIX: windows-x64
-      CONAN_PROFILE: conan/profiles/windows-x64-release
+      CONAN_PROFILE: conan/profiles/windows-x64-clangcl-release
       CONAN_LOCKFILE: conan/locks/windows-x64-release.lock
-      CONAN_OUTPUT_FOLDER: ${{ github.workspace }}\build\x64-msvc-static-release\conan
+      CONAN_OUTPUT_FOLDER: ${{ github.workspace }}\build\x64-clangcl-static-release\conan
 
     steps:
       - name: Checkout
@@ -54,8 +54,14 @@ jobs:
           path: ${{ env.BUILD_DIR }}\src\desktop\QTrans.exe
           key: release-binary-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.CMAKE_PRESET }}-${{ github.sha }}
 
-      - name: Enable MSVC developer environment
+      - name: Enable MSVC SDK environment
         uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Verify LLVM toolchain
+        shell: pwsh
+        run: |
+          clang-cl --version
+          lld-link --version
 
       - name: Install Conan dependencies
         if: ${{ !inputs.package || steps.restore-release-binary.outputs.cache-hit != 'true' }}

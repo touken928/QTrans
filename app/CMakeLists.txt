@@ -8,11 +8,17 @@ if(APPLE)
         message(FATAL_ERROR "QTrans supports macOS ARM64 with Clang only")
     endif()
 elseif(WIN32)
-    if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
-        message(FATAL_ERROR "QTrans supports Windows x64 with MSVC only")
+    if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR
+       NOT CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC" OR
+       NOT CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC" OR
+       NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+        message(FATAL_ERROR "QTrans supports Windows x64 with clang-cl and the MSVC ABI only")
+    endif()
+    if(NOT CMAKE_LINKER_TYPE STREQUAL "LLD")
+        message(FATAL_ERROR "QTrans Windows builds require lld-link (CMAKE_LINKER_TYPE=LLD)")
     endif()
 else()
-    message(FATAL_ERROR "QTrans supports macOS ARM64 with Clang and Windows x64 with MSVC only")
+    message(FATAL_ERROR "QTrans supports macOS ARM64 with Clang and Windows x64 with clang-cl only")
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
