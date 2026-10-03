@@ -11,6 +11,10 @@ inputs:
   output-folder:
     description: Folder for Conan CMake generators
     required: true
+  build-pattern:
+    description: Extra Conan --build pattern, forced even when a cached binary exists
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -36,15 +40,21 @@ runs:
       shell: bash
       env:
         CONAN_WORKSPACE_ENABLE: will_break_next
-      run: >-
-        conan install app
-        --profile:host "${{ inputs.profile }}"
-        --profile:build default
-        --lockfile "${{ inputs.lockfile }}"
-        -c:b tools.cmake.cmaketoolchain:generator=Ninja
-        --settings:build compiler.cppstd=17
-        --output-folder "${{ inputs.output-folder }}"
-        --build missing
+      run: |
+        args=(
+          conan install app
+          --profile:host "${{ inputs.profile }}"
+          --profile:build default
+          --lockfile "${{ inputs.lockfile }}"
+          -c:b tools.cmake.cmaketoolchain:generator=Ninja
+          --settings:build compiler.cppstd=17
+          --output-folder "${{ inputs.output-folder }}"
+          --build missing
+        )
+        if [ -n "${{ inputs.build-pattern }}" ]; then
+          args+=(--build "${{ inputs.build-pattern }}")
+        fi
+        "${args[@]}"
 
     # Workspace members are consumed as editable packages: Conan does not build
     # them during `conan install`, but the app links them, so every repository

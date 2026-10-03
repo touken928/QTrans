@@ -114,6 +114,7 @@ target_link_libraries(QTrans PRIVATE
     Qt6::Network
 )
 
+qtrans_link_llama_openmp(QTrans)
 qtrans_apply_project_definitions(QTrans)
 
 if(QTRANS_BUILD_TESTS)

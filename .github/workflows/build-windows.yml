@@ -70,6 +70,7 @@ jobs:
           profile: ${{ env.CONAN_PROFILE }}
           lockfile: ${{ env.CONAN_LOCKFILE }}
           output-folder: ${{ env.CONAN_OUTPUT_FOLDER }}
+          build-pattern: llama-cpp*
 
       - name: Configure tests
         if: ${{ !inputs.package }}

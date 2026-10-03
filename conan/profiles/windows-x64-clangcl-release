@@ -17,3 +17,6 @@ tools.build:compiler_executables={"c":"clang-cl", "cpp":"clang-cl"}
 openssl/*:tools.build:compiler_executables={"c":"cl", "cpp":"cl"}
 tools.cmake.cmaketoolchain:generator=Ninja
 tools.cmake.cmaketoolchain:extra_variables={"CMAKE_LINKER_TYPE":"LLD"}
+# clang-cl builds ggml with LLVM OpenMP, but the static library does not
+# export that runtime. The shipped binary must not import libomp.dll.
+llama-cpp/*:tools.cmake.cmaketoolchain:extra_variables={"CMAKE_LINKER_TYPE":"LLD","GGML_OPENMP":"OFF"}

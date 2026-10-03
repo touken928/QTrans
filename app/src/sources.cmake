@@ -152,6 +152,16 @@ set(QTRANS_RUNTIME_INCLUDE_DIRS
     ${QTRANS_SRC_DIR}/runtime/internal/host
 )
 
+# ggml-cpu may be built with LLVM OpenMP. The llama-cpp package does not
+# re-export that runtime, so every target that links the static library must.
+function(qtrans_link_llama_openmp target)
+    if(NOT WIN32)
+        return()
+    endif()
+    find_package(OpenMP REQUIRED)
+    target_link_libraries(${target} PRIVATE OpenMP::OpenMP_C)
+endfunction()
+
 function(qtrans_apply_project_definitions target)
     target_compile_definitions(${target} PRIVATE
         $<$<CONFIG:Release>:SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_WARN>
