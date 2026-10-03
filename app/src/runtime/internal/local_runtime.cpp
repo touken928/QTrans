@@ -25,7 +25,7 @@ namespace {
 const char *backend_registry_name(Backend backend) {
     switch (backend) {
         case Backend::Metal:
-            return "MTL";
+            return "Metal";
         case Backend::Vulkan:
             return "Vulkan";
         case Backend::Cpu:

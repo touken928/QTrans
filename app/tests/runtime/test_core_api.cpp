@@ -16,6 +16,11 @@ TEST(CoreBackend, BackendStateReportsResolvedSelection) {
     EXPECT_TRUE(state.initialized);
     EXPECT_EQ(backend_state().selected, state.selected);
     EXPECT_FALSE(state.label.empty());
+#if defined(__APPLE__)
+    EXPECT_TRUE(state.capabilities.metal_available);
+    EXPECT_EQ(state.selected, Backend::Metal);
+    EXPECT_EQ(state.label, "Metal");
+#endif
 }
 
 TEST(CoreBackend, ExplicitUnavailableBackendDoesNotPoisonAutomaticSelection) {

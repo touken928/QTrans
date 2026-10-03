@@ -93,7 +93,7 @@ bool probe_vulkan_gpu(BackendCapabilities &caps) {
 
 bool probe_metal_gpu(BackendCapabilities &caps) {
 #ifdef QTRANS_GPU_METAL
-    const ggml_backend_reg_t reg = ggml_backend_reg_by_name("MTL");
+    const ggml_backend_reg_t reg = ggml_backend_reg_by_name("Metal");
     if (reg == nullptr) {
         add_backend_diagnostic(caps, Backend::Metal, "backend_not_registered",
                                "Metal backend did not register with ggml", true,
