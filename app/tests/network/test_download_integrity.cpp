@@ -1,4 +1,4 @@
-#include "domain/download/model_downloader.h"
+#include "download/model_downloader.h"
 
 #include <gtest/gtest.h>
 

@@ -17,35 +17,58 @@ set(QTRANS_RUNTIME_SOURCES
     ${QTRANS_SRC_DIR}/runtime/internal/text/chunker.cpp
 )
 
-set(QTRANS_APPLICATION_SOURCES
-    ${QTRANS_SRC_DIR}/application/inference_service.cpp
-    ${QTRANS_SRC_DIR}/application/inference_service.h
-    ${QTRANS_SRC_DIR}/application/api/http_request_parser.cpp
-    ${QTRANS_SRC_DIR}/application/api/http_request_parser.h
-    ${QTRANS_SRC_DIR}/application/api/openai_protocol.cpp
-    ${QTRANS_SRC_DIR}/application/api/openai_protocol.h
-    ${QTRANS_SRC_DIR}/application/local_api_service.cpp
-    ${QTRANS_SRC_DIR}/application/local_api_service.h
-    ${QTRANS_SRC_DIR}/application/download_service.cpp
-    ${QTRANS_SRC_DIR}/application/download_service.h
-    ${QTRANS_SRC_DIR}/application/batch_controller.cpp
-    ${QTRANS_SRC_DIR}/application/batch_controller.h
+set(QTRANS_TRANSLATE_SOURCES
+    ${QTRANS_SRC_DIR}/translate/inference_service.cpp
+    ${QTRANS_SRC_DIR}/translate/inference_service.h
+    ${QTRANS_SRC_DIR}/translate/inference_types.cpp
+    ${QTRANS_SRC_DIR}/translate/inference_types.h
+    ${QTRANS_SRC_DIR}/translate/http_request_parser.cpp
+    ${QTRANS_SRC_DIR}/translate/http_request_parser.h
+    ${QTRANS_SRC_DIR}/translate/openai_protocol.cpp
+    ${QTRANS_SRC_DIR}/translate/openai_protocol.h
+    ${QTRANS_SRC_DIR}/translate/api_chat.h
+    ${QTRANS_SRC_DIR}/translate/local_api_service.cpp
+    ${QTRANS_SRC_DIR}/translate/local_api_service.h
 )
 
-set(QTRANS_DOMAIN_SOURCES
-    ${QTRANS_SRC_DIR}/domain/storage/app_paths.cpp
-    ${QTRANS_SRC_DIR}/domain/settings/settings.cpp
-    ${QTRANS_SRC_DIR}/domain/inference/inference_resolver.cpp
-    ${QTRANS_SRC_DIR}/domain/inference/inference_types.cpp
-    ${QTRANS_SRC_DIR}/domain/model-catalog/model_catalog.cpp
-    ${QTRANS_SRC_DIR}/domain/model-catalog/language_list.cpp
-    ${QTRANS_SRC_DIR}/domain/inference/platform_profile.cpp
-    ${QTRANS_SRC_DIR}/domain/inference/runtime_capabilities.cpp
-    ${QTRANS_SRC_DIR}/domain/download/download.cpp
-    ${QTRANS_SRC_DIR}/domain/download/model_downloader.cpp
-    ${QTRANS_SRC_DIR}/domain/batch/batch_store.cpp
-    ${QTRANS_SRC_DIR}/domain/batch/batch_file_handler.cpp
-    ${QTRANS_SRC_DIR}/domain/batch/batch_output_writer.cpp
+set(QTRANS_DOWNLOAD_SOURCES
+    ${QTRANS_SRC_DIR}/download/download_service.cpp
+    ${QTRANS_SRC_DIR}/download/download_service.h
+    ${QTRANS_SRC_DIR}/download/download.cpp
+    ${QTRANS_SRC_DIR}/download/download.h
+    ${QTRANS_SRC_DIR}/download/model_downloader.cpp
+    ${QTRANS_SRC_DIR}/download/model_downloader.h
+    ${QTRANS_SRC_DIR}/download/model_catalog.cpp
+    ${QTRANS_SRC_DIR}/download/model_catalog.h
+    ${QTRANS_SRC_DIR}/download/language_list.cpp
+    ${QTRANS_SRC_DIR}/download/language_list.h
+    ${QTRANS_SRC_DIR}/download/inference_resolver.cpp
+    ${QTRANS_SRC_DIR}/download/inference_resolver.h
+    ${QTRANS_SRC_DIR}/download/runtime_capabilities.cpp
+    ${QTRANS_SRC_DIR}/download/runtime_capabilities.h
+    ${QTRANS_SRC_DIR}/download/platform_profile.cpp
+    ${QTRANS_SRC_DIR}/download/platform_profile.h
+)
+
+set(QTRANS_BATCH_SOURCES
+    ${QTRANS_SRC_DIR}/batch/batch_controller.cpp
+    ${QTRANS_SRC_DIR}/batch/batch_controller.h
+    ${QTRANS_SRC_DIR}/batch/batch_entry_view.h
+    ${QTRANS_SRC_DIR}/batch/batch_store.cpp
+    ${QTRANS_SRC_DIR}/batch/batch_store.h
+    ${QTRANS_SRC_DIR}/batch/batch_file_handler.cpp
+    ${QTRANS_SRC_DIR}/batch/batch_file_handler.h
+    ${QTRANS_SRC_DIR}/batch/batch_output_writer.cpp
+    ${QTRANS_SRC_DIR}/batch/batch_output_writer.h
+)
+
+set(QTRANS_PROCESS_SOURCES
+    ${QTRANS_SRC_DIR}/worker_host.cpp
+    ${QTRANS_SRC_DIR}/worker_host.h
+    ${QTRANS_SRC_DIR}/paths/app_paths.cpp
+    ${QTRANS_SRC_DIR}/paths/app_paths.h
+    ${QTRANS_SRC_DIR}/settings/settings.cpp
+    ${QTRANS_SRC_DIR}/settings/settings.h
 )
 
 set(QTRANS_LOGGING_SOURCES
@@ -61,19 +84,25 @@ set(QTRANS_SHARED_SOURCES
     ${QTRANS_SRC_DIR}/shared/string_bridge.cpp
 )
 
-# Sources previously compiled into the desktop support library: application
-# services, domain, logging, and shared helpers. UI and platform stay out.
+# Non-UI sources shared by the executable and the tests. Popup and instance
+# stay on the executable; they are not a second library.
 set(QTRANS_APP_SUPPORT_SOURCES
-    ${QTRANS_APPLICATION_SOURCES}
-    ${QTRANS_DOMAIN_SOURCES}
+    ${QTRANS_TRANSLATE_SOURCES}
+    ${QTRANS_DOWNLOAD_SOURCES}
+    ${QTRANS_BATCH_SOURCES}
+    ${QTRANS_PROCESS_SOURCES}
     ${QTRANS_LOGGING_SOURCES}
     ${QTRANS_SHARED_SOURCES}
 )
 
 set(QTRANS_UI_SOURCES
-    ${QTRANS_SRC_DIR}/ui/shared/theme/theme.h
+    ${QTRANS_SRC_DIR}/shared/theme/app_theme.cpp
+    ${QTRANS_SRC_DIR}/shared/theme/app_theme.h
+    ${QTRANS_SRC_DIR}/shared/theme/theme.h
     ${QTRANS_SRC_DIR}/ui/shell/mainwindow.cpp
     ${QTRANS_SRC_DIR}/ui/shell/mainwindow.h
+    ${QTRANS_SRC_DIR}/ui/shell/model_flow.cpp
+    ${QTRANS_SRC_DIR}/ui/shell/model_flow.h
     ${QTRANS_SRC_DIR}/ui/shell/page_id.h
     ${QTRANS_SRC_DIR}/ui/shell/shell_status_bar.cpp
     ${QTRANS_SRC_DIR}/ui/shell/shell_status_bar.h
@@ -85,8 +114,6 @@ set(QTRANS_UI_SOURCES
     ${QTRANS_SRC_DIR}/ui/shared/modal_overlay.h
     ${QTRANS_SRC_DIR}/ui/shared/panels/alert_panel.cpp
     ${QTRANS_SRC_DIR}/ui/shared/panels/alert_panel.h
-    ${QTRANS_SRC_DIR}/ui/shared/theme/app_theme.cpp
-    ${QTRANS_SRC_DIR}/ui/shared/theme/app_theme.h
     ${QTRANS_SRC_DIR}/ui/shared/panels/download_progress_panel.cpp
     ${QTRANS_SRC_DIR}/ui/shared/panels/download_progress_panel.h
     ${QTRANS_SRC_DIR}/ui/shared/media/image_utils.cpp
@@ -109,37 +136,51 @@ set(QTRANS_UI_SOURCES
     ${QTRANS_SRC_DIR}/ui/pages/batch/batch_table_view.h
     ${QTRANS_SRC_DIR}/ui/shared/widget_utils.cpp
     ${QTRANS_SRC_DIR}/ui/shared/widget_utils.h
-    ${QTRANS_SRC_DIR}/ui/popup/popup_window.cpp
-    ${QTRANS_SRC_DIR}/ui/popup/popup_window.h
-    ${QTRANS_SRC_DIR}/ui/popup/session_controller.cpp
-    ${QTRANS_SRC_DIR}/ui/popup/session_controller.h
     ${QTRANS_SRC_DIR}/ui/popup/system_tray.cpp
     ${QTRANS_SRC_DIR}/ui/popup/system_tray.h
     ${QTRANS_SRC_DIR}/resources/qtrans.qrc
 )
 
-set(QTRANS_PLATFORM_SOURCES
-    ${QTRANS_SRC_DIR}/platform/single_instance/single_instance.cpp
-    ${QTRANS_SRC_DIR}/platform/single_instance/single_instance.h
-    ${QTRANS_SRC_DIR}/platform/clipboard/clipboard_capture.cpp
-    ${QTRANS_SRC_DIR}/platform/clipboard/clipboard_capture.h
-    ${QTRANS_SRC_DIR}/platform/hotkeys/hotkey_manager.h
+set(QTRANS_POPUP_SOURCES
+    ${QTRANS_SRC_DIR}/popup/popup_window.cpp
+    ${QTRANS_SRC_DIR}/popup/popup_window.h
+    ${QTRANS_SRC_DIR}/popup/session_controller.cpp
+    ${QTRANS_SRC_DIR}/popup/session_controller.h
+    ${QTRANS_SRC_DIR}/popup/popup_escape_queue.cpp
+    ${QTRANS_SRC_DIR}/popup/popup_escape_queue.h
+    ${QTRANS_SRC_DIR}/popup/popup_surface.h
+    ${QTRANS_SRC_DIR}/popup/clipboard_capture.cpp
+    ${QTRANS_SRC_DIR}/popup/clipboard_capture.h
+    ${QTRANS_SRC_DIR}/popup/hotkey_manager.h
 )
 
-set(QTRANS_PLATFORM_SOURCES_WIN
-    ${QTRANS_SRC_DIR}/platform/win/clipboard_capture.cpp
-    ${QTRANS_SRC_DIR}/platform/win/hotkey_manager.cpp
-    ${QTRANS_SRC_DIR}/platform/single_instance/win/single_instance_activate.cpp
+set(QTRANS_POPUP_SOURCES_WIN
+    ${QTRANS_SRC_DIR}/popup/win/clipboard_capture.cpp
+    ${QTRANS_SRC_DIR}/popup/win/hotkey_manager.cpp
+    ${QTRANS_SRC_DIR}/popup/win/popup_surface.cpp
 )
 
-set(QTRANS_PLATFORM_SOURCES_MAC
-    ${QTRANS_SRC_DIR}/platform/mac/clipboard_capture.cpp
-    ${QTRANS_SRC_DIR}/platform/mac/hotkey_manager.cpp
-    ${QTRANS_SRC_DIR}/platform/mac/platform_utils.cpp
-    ${QTRANS_SRC_DIR}/platform/mac/platform_utils.h
-    ${QTRANS_SRC_DIR}/platform/mac/popup_platform.h
-    ${QTRANS_SRC_DIR}/platform/mac/popup_platform.mm
-    ${QTRANS_SRC_DIR}/platform/single_instance/mac/single_instance.mm
+set(QTRANS_POPUP_SOURCES_MAC
+    ${QTRANS_SRC_DIR}/popup/mac/clipboard_capture.cpp
+    ${QTRANS_SRC_DIR}/popup/mac/hotkey_manager.cpp
+    ${QTRANS_SRC_DIR}/popup/mac/platform_utils.cpp
+    ${QTRANS_SRC_DIR}/popup/mac/platform_utils.h
+    ${QTRANS_SRC_DIR}/popup/mac/popup_platform.h
+    ${QTRANS_SRC_DIR}/popup/mac/popup_platform.mm
+    ${QTRANS_SRC_DIR}/popup/mac/popup_surface.mm
+)
+
+set(QTRANS_INSTANCE_SOURCES
+    ${QTRANS_SRC_DIR}/instance/single_instance.cpp
+    ${QTRANS_SRC_DIR}/instance/single_instance.h
+)
+
+set(QTRANS_INSTANCE_SOURCES_WIN
+    ${QTRANS_SRC_DIR}/instance/win/single_instance_activate.cpp
+)
+
+set(QTRANS_INSTANCE_SOURCES_MAC
+    ${QTRANS_SRC_DIR}/instance/mac/single_instance.mm
 )
 
 set(QTRANS_APP_INCLUDE_DIRS
@@ -148,6 +189,9 @@ set(QTRANS_APP_INCLUDE_DIRS
 
 set(QTRANS_RUNTIME_INCLUDE_DIRS
     ${QTRANS_SRC_DIR}/runtime/include
+)
+
+set(QTRANS_RUNTIME_INTERNAL_INCLUDE_DIRS
     ${QTRANS_SRC_DIR}/runtime/internal
     ${QTRANS_SRC_DIR}/runtime/internal/host
 )

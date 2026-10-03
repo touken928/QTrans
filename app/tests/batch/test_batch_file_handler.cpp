@@ -1,5 +1,5 @@
-#include "domain/batch/batch_file_handler.h"
-#include "domain/batch/batch_output_writer.h"
+#include "batch/batch_file_handler.h"
+#include "batch/batch_output_writer.h"
 
 #include <gtest/gtest.h>
 

@@ -1,34 +1,33 @@
 #include "ui/pages/batch/batch_queue_model.h"
-#include "domain/batch/batch_enums.h"
+#include "batch/batch_enums.h"
 
 #include <gtest/gtest.h>
 
 #include <QCoreApplication>
 #include <QItemSelection>
 #include <QItemSelectionModel>
-#include <QVariantMap>
 
 namespace {
 
-// Build one snapshot entry map for a stable id.
-QVariantMap entry(const QString &id) {
-    QVariantMap m;
-    m.insert(QStringLiteral("id"), id);
-    m.insert(QStringLiteral("file"), id + QStringLiteral(".txt"));
-    m.insert(QStringLiteral("file_path"), QStringLiteral("/tmp/") + id + QStringLiteral(".txt"));
-    m.insert(QStringLiteral("source"), QStringLiteral("Auto"));
-    m.insert(QStringLiteral("target"), QStringLiteral("English"));
-    m.insert(QStringLiteral("state"), static_cast<int>(BatchEntryState::Queued));
-    m.insert(QStringLiteral("segments_done"), 0);
-    m.insert(QStringLiteral("segments_total"), 1);
-    m.insert(QStringLiteral("completed"), false);
-    m.insert(QStringLiteral("saved"), false);
-    m.insert(QStringLiteral("save_path"), QString{});
-    return m;
+// Build one snapshot entry for a stable id.
+BatchEntryView entry(const QString &id) {
+    BatchEntryView view;
+    view.id = id;
+    view.file = id + QStringLiteral(".txt");
+    view.file_path = QStringLiteral("/tmp/") + id + QStringLiteral(".txt");
+    view.source = QStringLiteral("Auto");
+    view.target = QStringLiteral("English");
+    view.state = static_cast<int>(BatchEntryState::Queued);
+    view.segments_done = 0;
+    view.segments_total = 1;
+    view.completed = false;
+    view.saved = false;
+    view.save_path = QString{};
+    return view;
 }
 
-QVariantList snapshotOf(const QStringList &ids) {
-    QVariantList list;
+QVector<BatchEntryView> snapshotOf(const QStringList &ids) {
+    QVector<BatchEntryView> list;
     list.reserve(ids.size());
     for (const QString &id : ids) {
         list.append(entry(id));
@@ -71,10 +70,7 @@ TEST(BatchQueueModel, MiddleRemovalKeepsSurvivorRowsAndSelection) {
     EXPECT_EQ(rowOf(model, QStringLiteral("c")), 1);
     EXPECT_TRUE(selection.isRowSelected(1, QModelIndex()));
     // The surviving row still carries its own data, not a stale neighbour's.
-    EXPECT_EQ(model.entryData(QStringLiteral("c"))
-                  .value(QStringLiteral("file"))
-                  .toString(),
-              QStringLiteral("c.txt"));
+    EXPECT_EQ(model.entryData(QStringLiteral("c")).file, QStringLiteral("c.txt"));
 }
 
 TEST(BatchQueueModel, InsertBeforeSurvivorMaintainsOrderAndSelection) {
@@ -127,10 +123,7 @@ TEST(BatchQueueModel, CombinedMiddleRemovalAndInsertKeepsSurvivorsStable) {
     EXPECT_EQ(rowOf(model, QStringLiteral("c")), 2);
     EXPECT_EQ(rowOf(model, QStringLiteral("d")), 3);
     EXPECT_TRUE(selection.isRowSelected(3, QModelIndex()));
-    EXPECT_EQ(model.entryData(QStringLiteral("d"))
-                  .value(QStringLiteral("file"))
-                  .toString(),
-              QStringLiteral("d.txt"));
+    EXPECT_EQ(model.entryData(QStringLiteral("d")).file, QStringLiteral("d.txt"));
 }
 
 TEST(BatchQueueModel, RowDataUpdatesInPlaceWithoutStructuralChange) {
@@ -142,20 +135,15 @@ TEST(BatchQueueModel, RowDataUpdatesInPlaceWithoutStructuralChange) {
     BatchQueueModel model;
     model.applySnapshot(snapshotOf({"a", "b"}));
 
-    QVariantMap updated = entry(QStringLiteral("b"));
-    updated.insert(QStringLiteral("state"), static_cast<int>(BatchEntryState::Processing));
-    updated.insert(QStringLiteral("segments_done"), 1);
+    BatchEntryView updated = entry(QStringLiteral("b"));
+    updated.state = static_cast<int>(BatchEntryState::Processing);
+    updated.segments_done = 1;
     model.applySnapshot({entry(QStringLiteral("a")), updated});
 
     EXPECT_EQ(idsOf(model), QStringList({"a", "b"}));
-    EXPECT_EQ(model.entryData(QStringLiteral("b"))
-                  .value(QStringLiteral("state"))
-                  .toInt(),
+    EXPECT_EQ(model.entryData(QStringLiteral("b")).state,
               static_cast<int>(BatchEntryState::Processing));
-    EXPECT_EQ(model.entryData(QStringLiteral("b"))
-                  .value(QStringLiteral("segments_done"))
-                  .toInt(),
-              1);
+    EXPECT_EQ(model.entryData(QStringLiteral("b")).segments_done, 1);
 }
 
 TEST(BatchQueueModel, DuplicateIdsInSnapshotAreDeduped) {
@@ -165,7 +153,7 @@ TEST(BatchQueueModel, DuplicateIdsInSnapshotAreDeduped) {
     QCoreApplication application(argc, argv);
 
     BatchQueueModel model;
-    QVariantList snapshot = snapshotOf({"a", "b"});
+    QVector<BatchEntryView> snapshot = snapshotOf({"a", "b"});
     snapshot.append(entry(QStringLiteral("a")));  // defensive duplicate
     model.applySnapshot(snapshot);
 

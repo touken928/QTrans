@@ -1,12 +1,12 @@
 #pragma once
 
+#include "batch/batch_entry_view.h"
+
 #include <QAbstractTableModel>
 #include <QHash>
 #include <QSortFilterProxyModel>
 #include <QStringList>
 #include <QVector>
-#include <QVariantList>
-#include <QVariantMap>
 
 // QAbstractTableModel over the durable batch queue. Rows mirror the queue
 // file order (insertion order) and are keyed by the stable durable entry id,
@@ -52,20 +52,19 @@ public:
     // Replace the queue contents with the given snapshot. Entries arrive in
     // durable queue order; stable ids keep their row (selection survives),
     // added ids insert, missing ids are removed.
-    void applySnapshot(const QVariantList &entries);
+    void applySnapshot(const QVector<BatchEntryView> &entries);
 
     QStringList entryIds() const;
-    QVariantMap entryData(const QString &entry_id) const;
+    BatchEntryView entryData(const QString &entry_id) const;
     int rowIndexOfId(const QString &entry_id) const;
 
 private:
     struct Row {
-        QString id;
-        QVariantMap data;
+        BatchEntryView entry;
     };
 
     void removeRowAt(int row);
-    void insertRowAt(int row, const QVariantMap &data);
+    void insertRowAt(int row, const BatchEntryView &entry);
     void rebuildIdIndex();
 
     QVector<Row> rows_;

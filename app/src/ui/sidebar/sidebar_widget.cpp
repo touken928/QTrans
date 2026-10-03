@@ -1,5 +1,5 @@
 #include "ui/sidebar/sidebar_widget.h"
-#include "ui/shared/theme/theme.h"
+#include "shared/theme/theme.h"
 #include "ui/shared/media/image_utils.h"
 
 #include <QButtonGroup>

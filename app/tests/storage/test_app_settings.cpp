@@ -1,6 +1,6 @@
-#include "domain/inference/platform_profile.h"
-#include "domain/storage/app_paths.h"
-#include "domain/settings/settings.h"
+#include "download/platform_profile.h"
+#include "paths/app_paths.h"
+#include "settings/settings.h"
 #include "../test_environment.h"
 
 #include <filesystem>

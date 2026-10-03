@@ -1,30 +1,31 @@
 #include "ui/shell/mainwindow.h"
 
+#include "ui/shell/model_flow.h"
 #include "ui/shell/model_unavailable_banner.h"
 #include "ui/shell/preferences_page.h"
 #include "ui/shell/shell_status_bar.h"
 #include "ui/shared/modal_overlay.h"
-#include "application/batch_controller.h"
-#include "application/download_service.h"
-#include "application/inference_service.h"
-#include "application/local_api_service.h"
-#include "ui/shared/theme/app_theme.h"
+#include "batch/batch_controller.h"
+#include "download/download_service.h"
+#include "translate/inference_service.h"
+#include "translate/local_api_service.h"
+#include "shared/theme/app_theme.h"
 #include "ui/shared/panels/alert_panel.h"
 #include "ui/shared/panels/download_progress_panel.h"
 #include "ui/pages/batch/batch_page.h"
 #include "ui/pages/models/model_page.h"
 #include "ui/sidebar/sidebar_widget.h"
 #include "ui/pages/translate/translate_page.h"
-#include "domain/batch/batch_enums.h"
-#include "domain/download/download.h"
-#include "domain/model-catalog/model_catalog.h"
-#include "domain/inference/runtime_capabilities.h"
+#include "batch/batch_enums.h"
+#include "download/download.h"
+#include "download/model_catalog.h"
+#include "download/runtime_capabilities.h"
 #include "shared/string_bridge.h"
 #include "logging/component.h"
 #include "logging/logger.h"
-#include "platform/hotkeys/hotkey_manager.h"
-#include "ui/popup/popup_window.h"
-#include "ui/popup/session_controller.h"
+#include "popup/hotkey_manager.h"
+#include "popup/popup_window.h"
+#include "popup/session_controller.h"
 #include "ui/popup/system_tray.h"
 
 #include <QCloseEvent>
@@ -63,7 +64,7 @@ MainWindow::MainWindow(
     settings_.load(paths_);
     settings_.ensureStorage(paths_);
     initializeInferenceBackend();
-    settings_.migrateModelSelection(RuntimeCapabilities::instance());
+    settings_.migrateModelSelection(runtime_caps_);
     syncSettingsToServices();
 
     central_root_ = new QWidget(this);
@@ -122,6 +123,51 @@ MainWindow::MainWindow(
     modal_ = new ModalOverlay(central_root_);
     switchPage(PageId::Translate);
 
+    // ── Model lifecycle flow (download -> load -> unload) ──────────────
+    // ModelFlow owns the correlation state and talks to the services; this
+    // window projects that state onto widgets via the signals below.
+    model_flow_ = new ModelFlow(inference_service_, download_service_, this);
+    connect(model_flow_, &ModelFlow::showDownloadDialog, this, &MainWindow::showDownloadDialog);
+    connect(model_flow_, &ModelFlow::hideModalRequested, this, &MainWindow::hideModal);
+    connect(model_flow_, &ModelFlow::alertRequested, this,
+            [this](const QString &title, const QString &message) {
+                showAlertDialog(title, message);
+            });
+    connect(model_flow_, &ModelFlow::stateChanged, this, [this]() {
+        model_page_->setLoadingModelId(model_flow_->loadingModelId());
+        model_page_->setUnloading(model_flow_->unloading());
+        model_page_->setDownloadingModelId(model_flow_->activeDownloadModelId());
+        if (model_flow_->activeDownloadId().is_valid()) {
+            model_page_->setDownloadProgress(model_flow_->lastDownloadDone(),
+                                             model_flow_->lastDownloadTotal());
+        } else {
+            model_page_->setDownloadProgress(0, 0);
+            status_bar_->setDownloadProgress(-1, -1, 0.0, 0.0);
+        }
+        refreshModelAvailability();
+        projectShellState();
+    });
+    connect(model_flow_, &ModelFlow::downloadProgress, this,
+            [this](qint64 downloaded, qint64 total, double speed_bps, double eta_seconds) {
+                model_page_->setDownloadProgress(downloaded, total);
+                status_bar_->setDownloadProgress(downloaded, total, speed_bps, eta_seconds);
+                if (download_panel_ != nullptr) {
+                    download_panel_->setProgress(downloaded, total, speed_bps, eta_seconds);
+                }
+            });
+    connect(model_flow_, &ModelFlow::downloadFailed, this, [this]() {
+        if (download_panel_ != nullptr) {
+            download_panel_->setFailure();
+        }
+    });
+    connect(model_flow_, &ModelFlow::downloadReadyToLoad, this, [this]() {
+        if (download_panel_ != nullptr) {
+            download_panel_->setLoading();
+        }
+    });
+    connect(model_flow_, &ModelFlow::loadFinished, this, &MainWindow::onModelLoadFinished);
+    connect(model_flow_, &ModelFlow::unloadFinished, this, &MainWindow::onModelUnloadFinished);
+
     connect(sidebar_, &SidebarWidget::pageSelected, this, &MainWindow::onPageSelected);
 
     // ── Unavailable-model banner (nonmodal, shell-controlled) ─────────
@@ -159,12 +205,8 @@ MainWindow::MainWindow(
     });
     connect(model_page_, &ModelPage::cancelDownloadRequested, this, [this]() {
         // Cancelling is only ever offered for the single correlated active
-        // download; stale ids cannot reach this slot.
-        if (active_download_id_.is_valid()) {
-            awaiting_download_load_ = false;
-            hideModal();
-            download_service_->cancel(active_download_id_);
-        }
+        // download; ModelFlow ignores a stale/invalid id.
+        model_flow_->cancelFromPage();
     });
     connect(model_page_, &ModelPage::modelEdited, this, &MainWindow::applySettingsFromPage);
     connect(translate_page_, &TranslatePage::translateRequested, this, &MainWindow::onTranslateRequested);
@@ -174,37 +216,32 @@ MainWindow::MainWindow(
     connect(inference_service_, &InferenceService::runtimeSnapshotChanged, this,
             [this](const RuntimeSnapshot &snapshot) {
                 const bool ready =
-                    snapshot.lifecycle == RuntimeLifecycleState::Ready;
+                    snapshot.lifecycle == qtrans::core::LifecycleState::Ready;
                 model_loaded_ = ready;
                 if (ready) {
                     loaded_model_id_ =
                         qtrans::app::from_utf8(snapshot.loaded_model_id);
                 } else if (snapshot.lifecycle ==
-                               RuntimeLifecycleState::Unloaded ||
-                           snapshot.lifecycle == RuntimeLifecycleState::Stopped) {
+                               qtrans::core::LifecycleState::Unloaded ||
+                           snapshot.lifecycle ==
+                               qtrans::core::LifecycleState::Stopped) {
                     loaded_model_id_.clear();
                 }
                 backend_label_ =
                     qtrans::app::from_utf8(snapshot.backend_label);
-                unloading_ = snapshot.lifecycle ==
-                             RuntimeLifecycleState::Unloading;
-                busy_ = snapshot.lifecycle == RuntimeLifecycleState::Loading ||
+                busy_ = snapshot.lifecycle ==
+                            qtrans::core::LifecycleState::Loading ||
                         snapshot.lifecycle ==
-                            RuntimeLifecycleState::Unloading ||
+                            qtrans::core::LifecycleState::Unloading ||
                         snapshot.lifecycle ==
-                            RuntimeLifecycleState::ShuttingDown;
+                            qtrans::core::LifecycleState::ShuttingDown;
                 refreshModelPage();
                 projectShellState();
             });
-    connect(inference_service_, &InferenceService::modelLoadFinished, this, &MainWindow::onModelLoadFinished);
-    connect(inference_service_, &InferenceService::modelUnloadFinished, this, &MainWindow::onModelUnloadFinished);
     connect(inference_service_, &InferenceService::translationStarted, this, &MainWindow::onTranslationStarted);
     connect(inference_service_, &InferenceService::translationReset, this, &MainWindow::onTranslationReset);
     connect(inference_service_, &InferenceService::translationDelta, this, &MainWindow::onTranslationDelta);
     connect(inference_service_, &InferenceService::translationFinished, this, &MainWindow::onTranslationFinished);
-    connect(download_service_, &DownloadService::downloadStarted, this, &MainWindow::onDownloadStarted);
-    connect(download_service_, &DownloadService::downloadProgress, this, &MainWindow::onDownloadProgress);
-    connect(download_service_, &DownloadService::downloadFinished, this, &MainWindow::onDownloadFinished);
 
     // ── Batch page wiring (batch controller lives on worker thread;
     //     use queued invocations for UI→worker calls) ─────────────────────
@@ -226,7 +263,7 @@ MainWindow::MainWindow(
     // is driven exclusively by the complete queue snapshot — no per-entry
     // blocking round trips on the UI thread.
     connect(batch_controller_, &BatchController::queueSnapshot,
-            this, [this](const QVariantList &entries) {
+            this, [this](const QVector<BatchEntryView> &entries) {
                 batch_page_->setEntries(entries);
             });
     connect(batch_controller_, &BatchController::batchStateChanged,
@@ -395,20 +432,21 @@ void MainWindow::switchPage(PageId page) {
 }
 
 void MainWindow::refreshModelPage() {
-    model_page_->setRuntimeCapabilities(RuntimeCapabilities::instance());
+    model_page_->setRuntimeCapabilities(runtime_caps_);
     model_page_->setSettings(paths_, settings_);
     model_page_->setModelLoaded(model_loaded_);
     model_page_->setLoadedModelId(loaded_model_id_);
-    model_page_->setLoadingModelId(loading_model_id_);
-    model_page_->setUnloading(unloading_);
-    model_page_->setDownloadingModelId(active_download_model_id_);
-    if (active_download_id_.is_valid()) {
-        model_page_->setDownloadProgress(last_download_done_, last_download_total_);
+    model_page_->setLoadingModelId(model_flow_->loadingModelId());
+    model_page_->setUnloading(model_flow_->unloading());
+    model_page_->setDownloadingModelId(model_flow_->activeDownloadModelId());
+    if (model_flow_->activeDownloadId().is_valid()) {
+        model_page_->setDownloadProgress(model_flow_->lastDownloadDone(),
+                                         model_flow_->lastDownloadTotal());
     }
 }
 
 void MainWindow::initializeInferenceBackend() {
-    inference_service_->initializeBackend();
+    runtime_caps_.refresh(inference_service_->initializeBackend());
 }
 
 void MainWindow::applySettingsFromPage() {
@@ -580,9 +618,7 @@ void MainWindow::onUnloadModelFromPage() {
         return;
     }
 
-    unloading_ = true;
-    model_page_->setUnloading(true);
-    inference_service_->unloadModel();
+    model_flow_->beginUnload();
 }
 
 void MainWindow::onDeleteModel() {
@@ -647,23 +683,17 @@ void MainWindow::performStartupCheck() {
 
 void MainWindow::hideModal() {
     // Whatever modal is up, it is no longer the model-flow download panel.
-    model_flow_modal_active_ = false;
+    model_flow_->noteModalHidden();
     modal_->hideModal();
 }
 
 void MainWindow::showDownloadDialog() {
     download_panel_ = new DownloadProgressPanel();
     connect(download_panel_, &DownloadProgressPanel::cancelRequested, this, [this]() {
-        awaiting_download_load_ = false;
-        hideModal();
-        if (active_download_id_.is_valid()) {
-            download_service_->cancel(active_download_id_);
-        }
+        model_flow_->cancelFromDialog();
     });
-    // Remember that the visible modal belongs to the model flow so a load
-    // result only ever closes/downloads for this dialog, never an unrelated
-    // modal (alert, batch language picker, ...).
-    model_flow_modal_active_ = true;
+    // The modal-belongs-to-the-model-flow flag is set by ModelFlow before it
+    // emits showDownloadDialog.
     modal_->setContent(download_panel_, QSize(460, 260));
     modal_->showModal();
 }
@@ -677,32 +707,14 @@ void MainWindow::showAlertDialog(const QString &title, const QString &message) {
 }
 
 void MainWindow::startDownloadAndLoad() {
-    awaiting_download_load_ = true;
-    showDownloadDialog();
-    const DownloadId id = download_service_->startDownload();
-    // The reserved id (accepted or promptly-rejected) is bound to the model
-    // whose file this request writes before this slot returns, so the
-    // download is active from reservation time and no second request can
-    // race the queued downloadStarted event.
-    if (id.is_valid()) {
-        bindActiveDownload(id, qtrans::app::from_utf8(settings_.model_id));
-    }
-}
-
-void MainWindow::bindActiveDownload(DownloadId id, const QString &model_id) {
-    active_download_id_ = id;
-    active_download_model_id_ = model_id;
-    download_active_ = true;
-    model_page_->setDownloadingModelId(model_id);
-    refreshModelAvailability();
-    projectShellState();
+    // Settings were already synced by the last syncSettingsToServices; the
+    // banner download targets the configured model.
+    model_flow_->beginDownloadThenLoad(qtrans::app::from_utf8(settings_.model_id));
 }
 
 void MainWindow::startLoadModel() {
     syncSettingsToServices();
-    loading_model_id_ = qtrans::app::from_utf8(settings_.model_id);
-    model_page_->setLoadingModelId(loading_model_id_);
-    inference_service_->loadModel();
+    model_flow_->beginLoad(qtrans::app::from_utf8(settings_.model_id));
 }
 
 void MainWindow::onDownloadModelFromPage(const QString &model_id) {
@@ -711,7 +723,7 @@ void MainWindow::onDownloadModelFromPage(const QString &model_id) {
     // modal — ordinary progress stays in the page). Only one download can
     // ever be accepted; the synchronous binding below makes the window
     // between reservation and downloadStarted impossible to race.
-    if (download_active_) {
+    if (model_flow_->downloadActive()) {
         return;
     }
     settings_.setSelectedModelId(qtrans::app::to_utf8(model_id));
@@ -723,11 +735,7 @@ void MainWindow::onDownloadModelFromPage(const QString &model_id) {
     projectShellState();
     dismissed_banner_model_id_.clear();
 
-    awaiting_download_load_ = true;
-    const DownloadId id = download_service_->startDownload();
-    if (id.is_valid()) {
-        bindActiveDownload(id, model_id);
-    }
+    model_flow_->beginPageDownloadThenLoad(model_id);
 }
 
 void MainWindow::onTranslateRequested(
@@ -849,10 +857,10 @@ void MainWindow::onModelLoadFinished(
     bool success,
     const QString &error_message,
     const QString &backend_label) {
+    Q_UNUSED(error_message);
     model_loaded_ = success;
     loaded_model_id_ = success ? qtrans::app::from_utf8(settings_.model_id) : QString{};
     load_failed_ = !success;
-    loading_model_id_.clear();
     // The backend usage is projected by the bottom status bar (single
     // truthful source: the load result); the Translate page never shows it.
     backend_label_ = success ? backend_label : QString{};
@@ -864,27 +872,16 @@ void MainWindow::onModelLoadFinished(
     projectShellState();
 
     if (success) {
-        // Close only the modal this window opened for the model flow (the
-        // download progress panel). An unrelated modal — alert, batch
-        // language picker — must stay up, and the user's current page is
-        // preserved: no navigation is forced here.
-        if (model_flow_modal_active_) {
-            hideModal();
-        }
+        // The modal decision is owned by ModelFlow; the window only updated
+        // the shell projection above.
         return;
     }
 
     // The load the user asked for failed: a previously dismissed banner for
     // this model no longer applies, so the banner reopens the appropriate
-    // action (download or load) on top of the error alert.
+    // action (download or load) on top of the error alert ModelFlow raises.
     dismissed_banner_model_id_.clear();
     refreshModelAvailability();
-
-    QString message = error_message.trimmed();
-    if (message.isEmpty()) {
-        message = QStringLiteral("Failed to load the model.");
-    }
-    showAlertDialog(QStringLiteral("Failed to Load Model"), message);
 }
 
 void MainWindow::onModelUnloadFinished(bool success, const QString &error_message) {
@@ -900,8 +897,6 @@ void MainWindow::onModelUnloadFinished(bool success, const QString &error_messag
         model_page_->setModelLoaded(false);
         model_page_->setLoadedModelId({});
     }
-    unloading_ = false;
-    model_page_->setUnloading(false);
     projectShellState();
     refreshModelAvailability();
 
@@ -913,70 +908,6 @@ void MainWindow::onModelUnloadFinished(bool success, const QString &error_messag
         qtrans::log::get(qtrans::log::Component::App)
             ->error("model unload failed: {}", qtrans::app::to_utf8(message));
     }
-}
-
-void MainWindow::onDownloadStarted(DownloadId id) {
-    // The reserved id was bound synchronously when the request was made
-    // (bindActiveDownload), so this event only confirms it. A mismatched id
-    // belongs to a stale or superseded lifecycle and must never displace the
-    // correlated model binding.
-    if (!active_download_id_.is_valid() || id != active_download_id_) {
-        return;
-    }
-    refreshModelAvailability();
-    projectShellState();
-}
-
-void MainWindow::onDownloadProgress(
-    DownloadId id,
-    qint64 downloaded,
-    qint64 total,
-    double speed_bps,
-    double eta_seconds) {
-    if (!active_download_id_.is_valid() || id != active_download_id_) {
-        return;
-    }
-    last_download_done_ = downloaded;
-    last_download_total_ = total;
-    model_page_->setDownloadProgress(downloaded, total);
-    status_bar_->setDownloadProgress(downloaded, total, speed_bps, eta_seconds);
-    if (download_panel_ != nullptr) {
-        download_panel_->setProgress(downloaded, total, speed_bps, eta_seconds);
-    }
-}
-
-void MainWindow::onDownloadFinished(const DownloadResult &result) {
-    // Ignore completions from earlier/consecutive downloads.
-    if (!active_download_id_.is_valid() || result.id != active_download_id_) {
-        return;
-    }
-    download_active_ = false;
-    active_download_id_ = DownloadId{};
-    active_download_model_id_.clear();
-    last_download_done_ = 0;
-    last_download_total_ = 0;
-    model_page_->setDownloadingModelId({});
-    model_page_->setDownloadProgress(0, 0);
-    status_bar_->setDownloadProgress(-1, -1, 0.0, 0.0);
-    if (result.state != DownloadState::Completed) {
-        awaiting_download_load_ = false;
-        if (download_panel_ != nullptr) {
-            download_panel_->setFailure();
-        }
-        refreshModelAvailability();
-        projectShellState();
-        return;
-    }
-
-    if (awaiting_download_load_) {
-        awaiting_download_load_ = false;
-        if (download_panel_ != nullptr) {
-            download_panel_->setLoading();
-        }
-        startLoadModel();
-    }
-    refreshModelAvailability();
-    projectShellState();
 }
 
 // ── Shell state projection ────────────────────────────────────────────────
@@ -1013,7 +944,7 @@ void MainWindow::projectShellState() {
     ShellStatusBar::Activity activity = ShellStatusBar::Activity::Idle;
     QString text = QStringLiteral("No model loaded");
 
-    if (download_active_) {
+    if (model_flow_->downloadActive()) {
         activity = ShellStatusBar::Activity::Downloading;
         text = QStringLiteral("Downloading model");
     } else if (busy_) {
@@ -1060,7 +991,7 @@ void MainWindow::refreshModelAvailability() {
     const bool dismissed_this_episode =
         dismissed_banner_model_id_ == configured_id &&
         dismissed_banner_file_missing_ == !file_exists;
-    if (busy_ || download_active_ || configured_is_loaded || dismissed_this_episode) {
+    if (busy_ || model_flow_->downloadActive() || configured_is_loaded || dismissed_this_episode) {
         model_banner_->hide();
         return;
     }

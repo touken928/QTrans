@@ -1,5 +1,8 @@
 #pragma once
 
+#include "qtrans/backend.h"
+#include "qtrans/lifecycle.h"
+
 #include <cstdint>
 #include <cstddef>
 #include <chrono>
@@ -14,54 +17,6 @@
 #include <vector>
 
 namespace qtrans::core {
-
-enum class Backend {
-    Automatic,
-    Cpu,
-    Metal,
-    Vulkan,
-};
-
-enum class DiagnosticLevel {
-    Trace,
-    Debug,
-    Info,
-    Warn,
-    Error,
-};
-
-using DiagnosticSink =
-    std::function<void(DiagnosticLevel, std::string_view, std::string_view)>;
-using TraceSink = std::function<void(std::string_view, std::string_view)>;
-
-struct BackendDiagnostic {
-    Backend backend = Backend::Cpu;
-    std::string code;
-    std::string message;
-    bool user_actionable = false;
-};
-
-struct BackendCapabilities {
-    bool metal_available = false;
-    bool vulkan_available = false;
-    std::vector<BackendDiagnostic> diagnostics;
-};
-
-struct BackendState {
-    bool initialized = false;
-    Backend selected = Backend::Cpu;
-    BackendCapabilities capabilities;
-    std::string label = "CPU";
-};
-
-struct BackendInitializationOptions {
-    DiagnosticSink diagnostic_sink;
-    TraceSink trace_sink;
-};
-
-void configure_backend(const BackendInitializationOptions &options);
-BackendState initialize_backend(Backend backend = Backend::Automatic);
-BackendState backend_state();
 
 enum class OverflowPolicy {
     Split,
@@ -219,14 +174,6 @@ struct InvocationRequest {
     std::optional<std::chrono::steady_clock::time_point> deadline;
     std::string client_request_id;
 };
-
-enum class LifecycleState { Unloaded,
-                            Loading,
-                            Ready,
-                            Unloading,
-                            Draining,
-                            ShuttingDown,
-                            Stopped };
 
 struct LifecycleSnapshot {
     LifecycleState state = LifecycleState::Unloaded;

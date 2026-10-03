@@ -1,5 +1,5 @@
 #include "ui/shared/panels/download_progress_panel.h"
-#include "ui/shared/theme/theme.h"
+#include "shared/theme/theme.h"
 
 #include <QHBoxLayout>
 #include <QLabel>

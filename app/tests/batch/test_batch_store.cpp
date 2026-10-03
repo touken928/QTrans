@@ -1,4 +1,4 @@
-#include "domain/batch/batch_store.h"
+#include "batch/batch_store.h"
 
 #include <cstddef>
 #include <filesystem>
@@ -17,7 +17,7 @@
 #endif
 
 // Test-only failure-injection seam implemented in
-// src/domain/batch/batch_store.cpp (no header, to keep the production
+// src/batch/batch_store.cpp (no header, to keep the production
 // API surface unchanged). The setters are inert in production; tests toggle
 // them to force each I/O step of the atomic write to fail deterministically.
 namespace batch_store_test {

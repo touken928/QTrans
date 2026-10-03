@@ -1,13 +1,14 @@
-#include "platform/single_instance/single_instance.h"
+#include "instance/single_instance.h"
 #include "shared/string_bridge.h"
-#include "application/batch_controller.h"
-#include "application/download_service.h"
-#include "application/inference_service.h"
-#include "application/local_api_service.h"
+#include "batch/batch_controller.h"
+#include "download/download_service.h"
+#include "translate/inference_service.h"
+#include "translate/local_api_service.h"
+#include "worker_host.h"
 #include "ui/shell/mainwindow.h"
 #include "logging/config.h"
 #include "logging/init.h"
-#include "domain/storage/app_paths.h"
+#include "paths/app_paths.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -55,19 +56,13 @@ int main(int argc, char *argv[]) {
     worker_thread.start();
     worker_context->moveToThread(&worker_thread);
 
-    InferenceService *inference_service = nullptr;
-    DownloadService *download_service = nullptr;
-    BatchController *batch_controller = nullptr;
-    QMetaObject::invokeMethod(worker_context, [&] {
-        inference_service = new InferenceService;
-        download_service = new DownloadService;
-        batch_controller = new BatchController(
-            inference_service,
-            paths.batch_queue_file,
-            paths.batch_output_dir); }, Qt::BlockingQueuedConnection);
+    WorkerHost *worker_host = nullptr;
+    QMetaObject::invokeMethod(worker_context, [&] { worker_host = new WorkerHost(paths.batch_queue_file, paths.batch_output_dir); }, Qt::BlockingQueuedConnection);
 
-    MainWindow window(inference_service, download_service, batch_controller,
-                      new LocalApiService(inference_service), &worker_thread, paths);
+    MainWindow window(worker_host->inference(), worker_host->download(),
+                      worker_host->batch(),
+                      new LocalApiService(worker_host->inference()->apiChat()),
+                      &worker_thread, paths);
     QObject::connect(&app, &QGuiApplication::applicationStateChanged, &window,
                      [&window](Qt::ApplicationState state) {
                          if (state == Qt::ApplicationActive && !window.isVisible()) {
@@ -85,17 +80,13 @@ int main(int argc, char *argv[]) {
     local_api_service->stop();
 
     // Shut down the services on their owning worker thread before quitting.
-    QMetaObject::invokeMethod(download_service, &DownloadService::shutdown,
-                              Qt::BlockingQueuedConnection);
-    QMetaObject::invokeMethod(inference_service, &InferenceService::shutdown,
+    // WorkerHost orders DownloadService::shutdown() (joins the download worker)
+    // before InferenceService::shutdown().
+    QMetaObject::invokeMethod(worker_host, &WorkerHost::shutdown,
                               Qt::BlockingQueuedConnection);
     QMetaObject::invokeMethod(worker_context, [&] {
-        delete batch_controller;
-        batch_controller = nullptr;
-        delete inference_service;
-        inference_service = nullptr;
-        delete download_service;
-        download_service = nullptr;
+        delete worker_host;
+        worker_host = nullptr;
         worker_context->moveToThread(QCoreApplication::instance()->thread()); }, Qt::BlockingQueuedConnection);
     worker_thread.quit();
     worker_thread.wait();

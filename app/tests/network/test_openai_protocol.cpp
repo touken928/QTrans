@@ -1,4 +1,4 @@
-#include "application/api/openai_protocol.h"
+#include "translate/openai_protocol.h"
 
 #include <gtest/gtest.h>
 

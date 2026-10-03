@@ -1,10 +1,26 @@
 #include "ui/pages/batch/batch_queue_model.h"
-#include "ui/shared/theme/theme.h"
-#include "domain/batch/batch_enums.h"
+#include "shared/theme/theme.h"
+#include "batch/batch_enums.h"
 
 #include <QColor>
 #include <QSet>
 #include <QSortFilterProxyModel>
+
+namespace {
+
+// Field-wise equality for the in-place update check; BatchEntryView carries
+// no operator== of its own.
+bool sameEntry(const BatchEntryView &lhs, const BatchEntryView &rhs) {
+    return lhs.id == rhs.id && lhs.file == rhs.file &&
+           lhs.file_path == rhs.file_path && lhs.source == rhs.source &&
+           lhs.target == rhs.target && lhs.state == rhs.state &&
+           lhs.segments_done == rhs.segments_done &&
+           lhs.segments_total == rhs.segments_total &&
+           lhs.completed == rhs.completed && lhs.saved == rhs.saved &&
+           lhs.save_path == rhs.save_path;
+}
+
+}  // namespace
 
 // =============================================================================
 // BatchQueueModel
@@ -26,39 +42,37 @@ QVariant BatchQueueModel::data(const QModelIndex &index, int role) const {
     if (!index.isValid() || index.row() < 0 || index.row() >= rows_.size()) {
         return {};
     }
-    const Row &row = rows_[index.row()];
+    const BatchEntryView &entry = rows_[index.row()].entry;
 
     if (role == RoleEntryId) {
-        return row.id;
+        return entry.id;
     }
 
-    const QVariantMap &m = row.data;
     switch (index.column()) {
         case ColumnFile:
             if (role == Qt::DisplayRole) {
-                return m.value(QStringLiteral("file"));
+                return entry.file;
             }
             if (role == Qt::ToolTipRole || role == Qt::AccessibleTextRole) {
-                return m.value(QStringLiteral("file_path"));
+                return entry.file_path;
             }
             break;
         case ColumnSource:
             if (role == Qt::DisplayRole || role == Qt::ToolTipRole) {
-                return m.value(QStringLiteral("source"));
+                return entry.source;
             }
             break;
         case ColumnTarget:
             if (role == Qt::DisplayRole || role == Qt::ToolTipRole) {
-                return m.value(QStringLiteral("target"));
+                return entry.target;
             }
             break;
         case ColumnState: {
-            const int state = m.value(QStringLiteral("state")).toInt();
             if (role == RoleState) {
-                return state;
+                return entry.state;
             }
             if (role == Qt::DisplayRole || role == Qt::ToolTipRole) {
-                switch (static_cast<BatchEntryState>(state)) {
+                switch (static_cast<BatchEntryState>(entry.state)) {
                     case BatchEntryState::Queued:
                         return QStringLiteral("Queued");
                     case BatchEntryState::Processing:
@@ -73,7 +87,7 @@ QVariant BatchQueueModel::data(const QModelIndex &index, int role) const {
                 return QStringLiteral("Unknown");
             }
             if (role == Qt::ForegroundRole) {
-                switch (static_cast<BatchEntryState>(state)) {
+                switch (static_cast<BatchEntryState>(entry.state)) {
                     case BatchEntryState::Completed:
                         return QColor(Theme::Color::success);
                     case BatchEntryState::Failed:
@@ -87,19 +101,19 @@ QVariant BatchQueueModel::data(const QModelIndex &index, int role) const {
             break;
         }
         case ColumnProgress: {
-            const int done = m.value(QStringLiteral("segments_done")).toInt();
-            const int total = m.value(QStringLiteral("segments_total")).toInt();
             if (role == RoleProgress) {
-                return done;
+                return entry.segments_done;
             }
             if (role == RoleTotal) {
-                return total;
+                return entry.segments_total;
             }
             if (role == Qt::DisplayRole || role == Qt::ToolTipRole) {
-                if (total <= 0) {
+                if (entry.segments_total <= 0) {
                     return QStringLiteral("\u2014");
                 }
-                return QStringLiteral("%1 / %2").arg(done).arg(total);
+                return QStringLiteral("%1 / %2")
+                    .arg(entry.segments_done)
+                    .arg(entry.segments_total);
             }
             break;
         }
@@ -108,22 +122,22 @@ QVariant BatchQueueModel::data(const QModelIndex &index, int role) const {
     }
 
     if (role == RoleState) {
-        return m.value(QStringLiteral("state"));
+        return entry.state;
     }
     if (role == RoleProgress) {
-        return m.value(QStringLiteral("segments_done"));
+        return entry.segments_done;
     }
     if (role == RoleTotal) {
-        return m.value(QStringLiteral("segments_total"));
+        return entry.segments_total;
     }
     if (role == RoleFilePath) {
-        return m.value(QStringLiteral("file_path"));
+        return entry.file_path;
     }
     if (role == RoleSavePath) {
-        return m.value(QStringLiteral("save_path"));
+        return entry.save_path;
     }
     if (role == RoleSaved) {
-        return m.value(QStringLiteral("saved"));
+        return entry.saved;
     }
     return {};
 }
@@ -149,25 +163,24 @@ QVariant BatchQueueModel::headerData(int section, Qt::Orientation orientation,
     }
 }
 
-void BatchQueueModel::applySnapshot(const QVariantList &entries) {
+void BatchQueueModel::applySnapshot(const QVector<BatchEntryView> &entries) {
     // Incoming entries arrive in durable queue order; dedupe defensively.
-    QVector<QVariantMap> incoming;
+    QVector<BatchEntryView> incoming;
     incoming.reserve(entries.size());
     QSet<QString> incoming_ids;
-    for (const QVariant &value : entries) {
-        const QVariantMap map = value.toMap();
-        const QString id = map.value(QStringLiteral("id")).toString();
+    for (const BatchEntryView &value : entries) {
+        const QString id = value.id;
         if (id.isEmpty() || incoming_ids.contains(id)) {
             continue;
         }
         incoming_ids.insert(id);
-        incoming.append(map);
+        incoming.append(value);
     }
 
     // 1. Drop rows whose id no longer exists (remove from the end so earlier
     //    indexes stay valid).
     for (int row = rows_.size() - 1; row >= 0; --row) {
-        if (!incoming_ids.contains(rows_[row].id)) {
+        if (!incoming_ids.contains(rows_[row].entry.id)) {
             removeRowAt(row);
         }
     }
@@ -177,18 +190,18 @@ void BatchQueueModel::applySnapshot(const QVariantList &entries) {
     //    incoming entry; existing rows keep their relative order, so the
     //    anchor always advances monotonically.
     int anchor = 0;
-    for (const QVariantMap &map : incoming) {
-        const QString id = map.value(QStringLiteral("id")).toString();
+    for (const BatchEntryView &value : incoming) {
+        const QString id = value.id;
         const int existing = rowIndexOfId(id);
         if (existing >= 0) {
-            if (rows_[existing].data != map) {
-                rows_[existing].data = map;
+            if (!sameEntry(rows_[existing].entry, value)) {
+                rows_[existing].entry = value;
                 emit dataChanged(index(existing, 0),
                                  index(existing, ColumnCount - 1));
             }
             anchor = existing + 1;
         } else {
-            insertRowAt(anchor, map);
+            insertRowAt(anchor, value);
             ++anchor;
         }
     }
@@ -199,14 +212,14 @@ QStringList BatchQueueModel::entryIds() const {
     QStringList ids;
     ids.reserve(rows_.size());
     for (const Row &row : rows_) {
-        ids.append(row.id);
+        ids.append(row.entry.id);
     }
     return ids;
 }
 
-QVariantMap BatchQueueModel::entryData(const QString &entry_id) const {
+BatchEntryView BatchQueueModel::entryData(const QString &entry_id) const {
     const int row = rowIndexOfId(entry_id);
-    return row >= 0 ? rows_[row].data : QVariantMap{};
+    return row >= 0 ? rows_[row].entry : BatchEntryView{};
 }
 
 int BatchQueueModel::rowIndexOfId(const QString &entry_id) const {
@@ -223,12 +236,11 @@ void BatchQueueModel::removeRowAt(int row) {
     rebuildIdIndex();
 }
 
-void BatchQueueModel::insertRowAt(int row, const QVariantMap &data) {
+void BatchQueueModel::insertRowAt(int row, const BatchEntryView &entry) {
     beginInsertRows(QModelIndex(), row, row);
-    Row entry;
-    entry.id = data.value(QStringLiteral("id")).toString();
-    entry.data = data;
-    rows_.insert(row, entry);
+    Row row_entry;
+    row_entry.entry = entry;
+    rows_.insert(row, row_entry);
     endInsertRows();
     rebuildIdIndex();
 }
@@ -237,7 +249,7 @@ void BatchQueueModel::rebuildIdIndex() {
     id_index_.clear();
     id_index_.reserve(rows_.size());
     for (int i = 0; i < rows_.size(); ++i) {
-        id_index_.insert(rows_[i].id, i);
+        id_index_.insert(rows_[i].entry.id, i);
     }
 }
 

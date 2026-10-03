@@ -1,4 +1,4 @@
-#include "domain/storage/app_paths.h"
+#include "paths/app_paths.h"
 #include "../test_environment.h"
 
 #include <filesystem>
