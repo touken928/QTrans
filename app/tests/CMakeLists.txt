@@ -1,51 +1,73 @@
 find_package(GTest CONFIG REQUIRED)
 include(GoogleTest)
+include(${PROJECT_SOURCE_DIR}/src/sources.cmake)
 
-add_executable(qtrans_tests_core
-    core/test_core_api.cpp
-    core/test_model_host.cpp
-    core/test_sentence_splitter.cpp
+function(qtrans_configure_test_warnings target)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4)
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+endfunction()
+
+function(qtrans_configure_runtime_test target)
+    target_link_libraries(${target}
+        PRIVATE
+            llama-cpp::llama
+            simdutf::simdutf
+            spdlog::spdlog
+            sentbreak::sentbreak
+            GTest::gtest
+            GTest::gtest_main
+    )
+    target_include_directories(${target} PRIVATE ${QTRANS_RUNTIME_INCLUDE_DIRS})
+    qtrans_apply_project_definitions(${target})
+    qtrans_configure_test_warnings(${target})
+endfunction()
+
+function(qtrans_configure_app_test target)
+    target_link_libraries(${target}
+        PRIVATE
+            llama-cpp::llama
+            simdutf::simdutf
+            spdlog::spdlog
+            sentbreak::sentbreak
+            CURL::libcurl
+            Qt6::Core
+            Qt6::Network
+            GTest::gtest
+            GTest::gtest_main
+    )
+    target_include_directories(${target}
+        PRIVATE
+            ${QTRANS_APP_INCLUDE_DIRS}
+            ${QTRANS_RUNTIME_INCLUDE_DIRS}
+    )
+    target_compile_definitions(${target} PRIVATE QTRANS_BUILD_TESTS)
+    qtrans_apply_project_definitions(${target})
+    qtrans_configure_test_warnings(${target})
+endfunction()
+
+add_executable(qtrans_tests_runtime
+    runtime/test_core_api.cpp
+    runtime/test_model_host.cpp
+    runtime/test_sentence_splitter.cpp
+    ${QTRANS_RUNTIME_SOURCES}
 )
-target_link_libraries(qtrans_tests_core
-    PRIVATE
-        qtrans_core
-        GTest::gtest
-        GTest::gtest_main
-)
-if(MSVC)
-    target_compile_options(qtrans_tests_core PRIVATE /W4)
-else()
-    target_compile_options(qtrans_tests_core PRIVATE -Wall -Wextra -Wpedantic)
-endif()
-target_include_directories(
-    qtrans_tests_core
-    PRIVATE
-        ${PROJECT_SOURCE_DIR}/src/core/internal
-        ${PROJECT_SOURCE_DIR}/src/core/internal/host
-)
-gtest_discover_tests(qtrans_tests_core
+qtrans_configure_runtime_test(qtrans_tests_runtime)
+gtest_discover_tests(qtrans_tests_runtime
     PROPERTIES
-        LABELS "dir:core"
+        LABELS "dir:runtime"
 )
 
-add_executable(qtrans_tests_core_internal
-    core/test_local_runtime_lifecycle.cpp
+add_executable(qtrans_tests_runtime_internal
+    runtime/test_local_runtime_lifecycle.cpp
+    ${QTRANS_RUNTIME_SOURCES}
 )
-target_link_libraries(qtrans_tests_core_internal
-    PRIVATE
-        qtrans_core
-        GTest::gtest
-        GTest::gtest_main
-)
-if(MSVC)
-    target_compile_options(qtrans_tests_core_internal PRIVATE /W4)
-else()
-    target_compile_options(qtrans_tests_core_internal PRIVATE -Wall -Wextra -Wpedantic)
-endif()
-target_include_directories(qtrans_tests_core_internal PRIVATE ${PROJECT_SOURCE_DIR}/src/core/internal)
-gtest_discover_tests(qtrans_tests_core_internal
+qtrans_configure_runtime_test(qtrans_tests_runtime_internal)
+gtest_discover_tests(qtrans_tests_runtime_internal
     PROPERTIES
-        LABELS "dir:core"
+        LABELS "dir:runtime"
 )
 
 set(QTRANS_TEST_DIRS
@@ -65,24 +87,12 @@ foreach(test_dir IN LISTS QTRANS_TEST_DIRS)
         continue()
     endif()
 
-    add_executable(qtrans_tests_${test_dir} ${_sources})
-    target_link_libraries(
-        qtrans_tests_${test_dir}
-        PRIVATE
-            qtrans_desktop
-            GTest::gtest
-            GTest::gtest_main
+    add_executable(qtrans_tests_${test_dir}
+        ${_sources}
+        ${QTRANS_RUNTIME_SOURCES}
+        ${QTRANS_APP_SUPPORT_SOURCES}
     )
-
-    if(MSVC)
-        target_compile_options(qtrans_tests_${test_dir} PRIVATE /W4)
-    else()
-        target_compile_options(qtrans_tests_${test_dir} PRIVATE -Wall -Wextra -Wpedantic)
-    endif()
-
-    if(test_dir STREQUAL "services")
-        target_include_directories(qtrans_tests_${test_dir} PRIVATE ${PROJECT_SOURCE_DIR}/src/core/internal/host)
-    endif()
+    qtrans_configure_app_test(qtrans_tests_${test_dir})
 
     gtest_discover_tests(qtrans_tests_${test_dir}
         PROPERTIES
@@ -90,27 +100,22 @@ foreach(test_dir IN LISTS QTRANS_TEST_DIRS)
     )
 endforeach()
 
-# The batch queue table model lives in the executable target (not the
-# desktop library), so its unit tests compile the model sources directly
-# against the Qt widget-free core/gui modules.
+# The batch queue table model lives in the executable sources, so its unit
+# tests compile that model directly against the widget-free Qt modules.
 add_executable(qtrans_tests_batchmodel
     batchmodel/test_batch_queue_model.cpp
-    ${PROJECT_SOURCE_DIR}/src/desktop/ui/pages/batch/batch_queue_model.cpp
+    ${QTRANS_SRC_DIR}/ui/pages/batch/batch_queue_model.cpp
+    ${QTRANS_SRC_DIR}/ui/pages/batch/batch_queue_model.h
 )
-target_link_libraries(
-    qtrans_tests_batchmodel
+target_link_libraries(qtrans_tests_batchmodel
     PRIVATE
         Qt6::Core
         Qt6::Gui
         GTest::gtest
         GTest::gtest_main
 )
-if(MSVC)
-    target_compile_options(qtrans_tests_batchmodel PRIVATE /W4)
-else()
-    target_compile_options(qtrans_tests_batchmodel PRIVATE -Wall -Wextra -Wpedantic)
-endif()
-target_include_directories(qtrans_tests_batchmodel PRIVATE ${PROJECT_SOURCE_DIR}/src/desktop)
+target_include_directories(qtrans_tests_batchmodel PRIVATE ${QTRANS_APP_INCLUDE_DIRS})
+qtrans_configure_test_warnings(qtrans_tests_batchmodel)
 gtest_discover_tests(qtrans_tests_batchmodel
     PROPERTIES
         LABELS "dir:batchmodel"

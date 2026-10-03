@@ -1,6 +1,6 @@
-#include "domain/logging/component.h"
-#include "domain/logging/init.h"
-#include "domain/logging/logger.h"
+#include "logging/component.h"
+#include "logging/init.h"
+#include "logging/logger.h"
 
 #include <gtest/gtest.h>
 
