@@ -1,6 +1,6 @@
 #pragma once
 
-#include "domain/inference/inference_types.h"
+#include "translate/inference_types.h"
 
 #include <QWidget>
 

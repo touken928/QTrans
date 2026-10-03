@@ -99,11 +99,13 @@ See the [中文说明](docs/README_zh.md) for project usage and development note
 ## Project Layout
 
 - `app/` - main Conan consumer and CMake project; the formal build target is `QTrans`
-- `app/src/runtime/` - local model runtime: lifecycle, scheduling, backends, and chunking
-- `app/src/application/` - worker-thread services for inference, download, batch, and the local API
-- `app/src/domain/` - files, queues, downloads, settings, storage, and the model catalog
-- `app/src/platform/` - hotkeys, clipboard capture, and single-instance integration
-- `app/src/ui/` - Qt Widgets shell, pages, and popup
+- `app/src/runtime/` - runs the model
+- `app/src/translate/` - one translation: jobs, `InferenceService`, local API
+- `app/src/download/` - model files: catalog, curl, checksum, which backend
+- `app/src/batch/` - file queue
+- `app/src/popup/` - word selection: hotkeys, clipboard, popup session
+- `app/src/ui/` - windows: main window, pages
+- `app/src/settings/`, `app/src/paths/`, `app/src/logging/` - leaves
 - `app/tests/` - unit tests; they compile the shared source lists directly
 - `libs/` - repository-owned Conan packages declared explicitly in `conanws.yml`
 

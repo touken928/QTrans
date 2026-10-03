@@ -1,11 +1,11 @@
 #include "ui/pages/models/model_page.h"
 #include "ui/pages/models/model_row.h"
-#include "ui/shared/theme/theme.h"
+#include "shared/theme/theme.h"
 #include "shared/string_bridge.h"
-#include "domain/inference/inference_resolver.h"
-#include "domain/model-catalog/model_catalog.h"
-#include "domain/inference/runtime_capabilities.h"
-#include "domain/download/download.h"
+#include "download/inference_resolver.h"
+#include "download/model_catalog.h"
+#include "download/runtime_capabilities.h"
+#include "download/download.h"
 
 #include <QFileDialog>
 #include <QFrame>

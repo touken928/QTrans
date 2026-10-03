@@ -1,5 +1,5 @@
 #include "ui/shell/shell_status_bar.h"
-#include "ui/shared/theme/theme.h"
+#include "shared/theme/theme.h"
 
 #include <QFontMetrics>
 #include <QHBoxLayout>

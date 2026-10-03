@@ -1,5 +1,5 @@
 #include "ui/pages/models/model_row.h"
-#include "ui/shared/theme/theme.h"
+#include "shared/theme/theme.h"
 
 #include <QHBoxLayout>
 #include <QLabel>

@@ -1,6 +1,6 @@
-#include "domain/model-catalog/model_catalog.h"
-#include "domain/inference/platform_profile.h"
-#include "domain/inference/runtime_capabilities.h"
+#include "download/model_catalog.h"
+#include "download/platform_profile.h"
+#include "download/runtime_capabilities.h"
 
 #include <gtest/gtest.h>
 

@@ -1,9 +1,11 @@
 #pragma once
 
+#include "batch/batch_entry_view.h"
+
+#include <QVector>
 #include <QWidget>
 
 #include <QStringList>
-#include <QVariantList>
 
 class BatchQueueModel;
 class BatchQueueSortProxy;
@@ -31,7 +33,7 @@ public:
     explicit BatchPage(QWidget *parent = nullptr);
 
     // Drive the table from a complete durable-queue snapshot (UI thread).
-    void setEntries(const QVariantList &entries);
+    void setEntries(const QVector<BatchEntryView> &entries);
     void setRunning(bool running);
     void setPaused(bool paused);
     void setStatusText(const QString &text);

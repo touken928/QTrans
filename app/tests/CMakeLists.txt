@@ -20,7 +20,11 @@ function(qtrans_configure_runtime_test target)
             GTest::gtest
             GTest::gtest_main
     )
-    target_include_directories(${target} PRIVATE ${QTRANS_RUNTIME_INCLUDE_DIRS})
+    target_include_directories(${target}
+        PRIVATE
+            ${QTRANS_RUNTIME_INCLUDE_DIRS}
+            ${QTRANS_RUNTIME_INTERNAL_INCLUDE_DIRS}
+    )
     qtrans_link_llama_openmp(${target})
     qtrans_apply_project_definitions(${target})
     qtrans_configure_test_warnings(${target})
@@ -101,6 +105,18 @@ foreach(test_dir IN LISTS QTRANS_TEST_DIRS)
             LABELS "dir:${test_dir}"
     )
 endforeach()
+
+# Test hook: services tests include model_host_test_access.h; production
+# targets must not have the runtime internal include dirs. The shell's
+# ModelFlow is compiled directly into the services tests because it is a UI
+# source (it must not pull widget headers into the link).
+if(TARGET qtrans_tests_services)
+    target_include_directories(qtrans_tests_services PRIVATE ${QTRANS_RUNTIME_INTERNAL_INCLUDE_DIRS})
+    target_sources(qtrans_tests_services PRIVATE
+        ${QTRANS_SRC_DIR}/ui/shell/model_flow.cpp
+        ${QTRANS_SRC_DIR}/ui/shell/model_flow.h
+    )
+endif()
 
 # The batch queue table model lives in the executable sources, so its unit
 # tests compile that model directly against the widget-free Qt modules.

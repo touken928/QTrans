@@ -1,10 +1,10 @@
 #include "ui/pages/batch/batch_page.h"
 #include "ui/pages/batch/batch_queue_model.h"
 #include "ui/pages/batch/batch_table_view.h"
-#include "ui/shared/theme/theme.h"
+#include "shared/theme/theme.h"
 #include "ui/shared/widget_utils.h"
-#include "domain/batch/batch_enums.h"
-#include "domain/model-catalog/language_list.h"
+#include "batch/batch_enums.h"
+#include "download/language_list.h"
 #include "shared/string_bridge.h"
 
 #include <QComboBox>
@@ -306,7 +306,7 @@ BatchPage::BatchPage(QWidget *parent)
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
-void BatchPage::setEntries(const QVariantList &entries) {
+void BatchPage::setEntries(const QVector<BatchEntryView> &entries) {
     model_->applySnapshot(entries);
     updateSummary();
     updateEmptyState();
@@ -416,12 +416,11 @@ void BatchPage::showContextMenu(const QPoint &pos) {
     bool any_failed = false;
     bool any_saved = false;
     for (const QString &id : ids) {
-        const QVariantMap data = model_->entryData(id);
-        const int state = data.value(QStringLiteral("state")).toInt();
-        if (state == static_cast<int>(BatchEntryState::Failed)) {
+        const BatchEntryView data = model_->entryData(id);
+        if (data.state == static_cast<int>(BatchEntryState::Failed)) {
             any_failed = true;
         }
-        if (data.value(QStringLiteral("saved")).toBool()) {
+        if (data.saved) {
             any_saved = true;
         }
     }
@@ -473,8 +472,7 @@ void BatchPage::openSelectedSources() {
     if (ids.size() != 1) {
         return;
     }
-    const QString path =
-        model_->entryData(ids.first()).value(QStringLiteral("file_path")).toString();
+    const QString path = model_->entryData(ids.first()).file_path;
     if (!path.isEmpty()) {
         QDesktopServices::openUrl(QUrl::fromLocalFile(path));
     }
@@ -484,8 +482,8 @@ void BatchPage::openSelectedOutputs() {
     // Same eligibility as the context menu: any selected entry whose saved
     // output exists; the containing folder is revealed.
     for (const QString &id : selectedIds()) {
-        const QVariantMap data = model_->entryData(id);
-        const QString path = data.value(QStringLiteral("save_path")).toString();
+        const BatchEntryView data = model_->entryData(id);
+        const QString path = data.save_path;
         if (!path.isEmpty()) {
             QDesktopServices::openUrl(
                 QUrl::fromLocalFile(QFileInfo(path).absolutePath()));
@@ -534,15 +532,14 @@ void BatchPage::updateActions() {
     bool any_saved = false;
     bool any_processing = false;
     for (const QString &id : ids) {
-        const QVariantMap data = model_->entryData(id);
-        const int state = data.value(QStringLiteral("state")).toInt();
-        if (state == static_cast<int>(BatchEntryState::Failed)) {
+        const BatchEntryView data = model_->entryData(id);
+        if (data.state == static_cast<int>(BatchEntryState::Failed)) {
             any_failed = true;
         }
-        if (state == static_cast<int>(BatchEntryState::Processing)) {
+        if (data.state == static_cast<int>(BatchEntryState::Processing)) {
             any_processing = true;
         }
-        if (data.value(QStringLiteral("saved")).toBool()) {
+        if (data.saved) {
             any_saved = true;
         }
     }
@@ -573,9 +570,8 @@ void BatchPage::updateSummary() {
     int segments_done = 0;
     int segments_total = 0;
     for (const QString &id : ids) {
-        const QVariantMap data = model_->entryData(id);
-        const int state = data.value(QStringLiteral("state")).toInt();
-        switch (static_cast<BatchEntryState>(state)) {
+        const BatchEntryView data = model_->entryData(id);
+        switch (static_cast<BatchEntryState>(data.state)) {
             case BatchEntryState::Completed:
                 ++completed;
                 break;
@@ -588,8 +584,8 @@ void BatchPage::updateSummary() {
             default:
                 break;
         }
-        segments_done += data.value(QStringLiteral("segments_done")).toInt();
-        segments_total += data.value(QStringLiteral("segments_total")).toInt();
+        segments_done += data.segments_done;
+        segments_total += data.segments_total;
     }
 
     if (ids.isEmpty()) {

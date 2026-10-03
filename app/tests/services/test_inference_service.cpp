@@ -1,6 +1,5 @@
-#include "application/inference_service.h"
-#include "application/batch_controller.h"
-#include "domain/inference/runtime_capabilities.h"
+#include "translate/inference_service.h"
+#include "batch/batch_controller.h"
 #include "model_host_test_access.h"
 
 #include <gtest/gtest.h>
@@ -34,6 +33,15 @@ void process_until(QCoreApplication &application, const std::function<bool()> &c
 // Standard queue file name inside a scratch batch directory.
 std::filesystem::path queue_file(const std::filesystem::path &dir) {
     return dir / "queue.bq";
+}
+
+// Find a projected entry by id in a queueSnapshot payload.
+const BatchEntryView *find_view(const QVector<BatchEntryView> &snapshot,
+                                const QString &id) {
+    for (const auto &view : snapshot) {
+        if (view.id == id) return &view;
+    }
+    return nullptr;
 }
 
 NativeTranslationRequest native_request() {
@@ -110,7 +118,7 @@ TEST(InferenceService, MapsLoadAndTranslationThroughModelHost) {
     EXPECT_TRUE(translated);
     EXPECT_EQ(service.jobState(id), TranslationState::Completed);
     const RuntimeSnapshot snapshot = service.runtimeSnapshot();
-    EXPECT_EQ(snapshot.lifecycle, RuntimeLifecycleState::Ready);
+    EXPECT_EQ(snapshot.lifecycle, qtrans::core::LifecycleState::Ready);
     EXPECT_EQ(snapshot.loaded_model_id, "demo");
     EXPECT_EQ(snapshot.active_translation_jobs, 0U);
     service.shutdown();
@@ -323,8 +331,8 @@ TEST(InferenceService, BackendInitializationRefreshesCapabilities) {
     char *argv[] = {name, nullptr};
     QCoreApplication application(argc, argv);
     InferenceService service;
-    service.initializeBackend();
-    EXPECT_FALSE(RuntimeCapabilities::instance().environment().label.empty());
+    const qtrans::core::BackendState state = service.initializeBackend();
+    EXPECT_FALSE(state.label.empty());
     service.shutdown();
 }
 
@@ -476,23 +484,20 @@ TEST(InferenceService, RemovingActiveBatchEntryAdvancesQueue) {
         service->setModelConfig(QStringLiteral("demo"), QString());
         batch = new BatchController(service, (dir / "queue.bq").string(), dir); }, Qt::BlockingQueuedConnection);
 
-    QString id_a;
-    QString id_b;
+    QString removal_id;
+    QVector<BatchEntryView> snapshot;
     bool loaded = false;
     bool finished = false;
     bool removed = false;
     bool last_running = true;
     QObject::connect(service, &InferenceService::modelLoadFinished, &application,
                      [&](bool success, const QString &, const QString &) { loaded = success; });
-    QObject::connect(batch, &BatchController::entryAdded, &application,
-                     [&](const QString &id, const QString &, const QString &) {
-                         if (id_a.isEmpty())
-                             id_a = id;
-                         else
-                             id_b = id;
+    QObject::connect(batch, &BatchController::queueSnapshot, &application,
+                     [&](const QVector<BatchEntryView> &entries) {
+                         snapshot = entries;
+                         if (!removal_id.isEmpty() && !find_view(snapshot, removal_id))
+                             removed = true;
                      });
-    QObject::connect(batch, &BatchController::entryRemoved, &application,
-                     [&](const QString &id) { if (id == id_a) removed = true; });
     QObject::connect(batch, &BatchController::batchStateChanged, &application,
                      [&](bool running, bool) { last_running = running; });
     QObject::connect(batch, &BatchController::batchFinished, &application, [&] { finished = true; });
@@ -512,10 +517,11 @@ TEST(InferenceService, RemovingActiveBatchEntryAdvancesQueue) {
     bool removal_requested = false;
     QObject::connect(service, &InferenceService::translationStarted, &application,
                      [&](TranslationJobId) {
-                         if (removal_requested) return;
+                         if (removal_requested || snapshot.isEmpty()) return;
                          removal_requested = true;
+                         removal_id = snapshot.front().id;
                          QMetaObject::invokeMethod(batch, "removeEntry", Qt::QueuedConnection,
-                                                   Q_ARG(QString, id_a));
+                                                   Q_ARG(QString, removal_id));
                      });
     QMetaObject::invokeMethod(batch, "start", Qt::QueuedConnection);
     process_until(application, [&] { return finished; });
@@ -523,9 +529,8 @@ TEST(InferenceService, RemovingActiveBatchEntryAdvancesQueue) {
     EXPECT_TRUE(removed);
     // First entry was aborted mid-run (call 1); second entry ran to completion.
     EXPECT_EQ(calls.load(), 2);
-    EXPECT_EQ(batch->entryIds().size(), 1);
-    EXPECT_EQ(batch->entryState(id_a), -1);
-    EXPECT_EQ(batch->entryState(id_b), static_cast<int>(BatchEntryState::Completed));
+    ASSERT_EQ(snapshot.size(), 1);
+    EXPECT_EQ(snapshot.front().state, static_cast<int>(BatchEntryState::Completed));
     EXPECT_FALSE(last_running);
     EXPECT_TRUE(std::filesystem::exists(dir / "b_translated.txt"));
     EXPECT_FALSE(std::filesystem::exists(dir / "a_translated.txt"));
@@ -588,20 +593,15 @@ TEST(InferenceService, RemovingActiveBatchEntryWaitsForOldJobTerminal) {
         service->setModelConfig(QStringLiteral("demo"), QString());
         batch = new BatchController(service, (dir / "queue.bq").string(), dir); }, Qt::BlockingQueuedConnection);
 
-    QString id_a;
-    QString id_b;
+    QString removal_id;
+    QVector<BatchEntryView> snapshot;
     bool loaded = false;
     bool finished = false;
     bool removal_requested = false;
     QObject::connect(service, &InferenceService::modelLoadFinished, &application,
                      [&](bool success, const QString &, const QString &) { loaded = success; });
-    QObject::connect(batch, &BatchController::entryAdded, &application,
-                     [&](const QString &id, const QString &, const QString &) {
-                         if (id_a.isEmpty())
-                             id_a = id;
-                         else
-                             id_b = id;
-                     });
+    QObject::connect(batch, &BatchController::queueSnapshot, &application,
+                     [&](const QVector<BatchEntryView> &entries) { snapshot = entries; });
     QObject::connect(batch, &BatchController::batchFinished, &application, [&] { finished = true; });
     service->loadModel();
     process_until(application, [&] { return loaded; });
@@ -617,29 +617,32 @@ TEST(InferenceService, RemovingActiveBatchEntryWaitsForOldJobTerminal) {
                               Q_ARG(QString, QStringLiteral("English")));
     QObject::connect(service, &InferenceService::translationStarted, &application,
                      [&](TranslationJobId) {
-                         if (removal_requested) return;
+                         if (removal_requested || snapshot.isEmpty()) return;
                          removal_requested = true;
+                         removal_id = snapshot.front().id;
                          QMetaObject::invokeMethod(batch, "removeEntry", Qt::QueuedConnection,
-                                                   Q_ARG(QString, id_a));
+                                                   Q_ARG(QString, removal_id));
                      });
     QMetaObject::invokeMethod(batch, "start", Qt::QueuedConnection);
 
-    // Wait until removeEntry was processed (entry A is gone from the store).
+    // Wait until removeEntry was processed (entry A is gone from the snapshot).
     process_until(application, [&] {
-        return !id_a.isEmpty() && batch->entryState(id_a) == -1;
+        return !removal_id.isEmpty() && find_view(snapshot, removal_id) == nullptr;
     });
 
     // The old job is still blocked on the gate, so its terminal event has not
     // been observed yet: the next entry must not have been submitted.
-    EXPECT_EQ(batch->entryState(id_b), static_cast<int>(BatchEntryState::Queued));
+    ASSERT_EQ(snapshot.size(), 1);
+    EXPECT_EQ(snapshot.front().state, static_cast<int>(BatchEntryState::Queued));
 
     // Release the old job; its terminal is consumed and only then does the
     // queue advance to entry B.
     release_first = true;
-    process_until(application, [&] { return finished; });
+    process_until(application, [&] {
+        return finished && snapshot.size() == 1 &&
+               snapshot.front().state == static_cast<int>(BatchEntryState::Completed);
+    });
     EXPECT_EQ(calls.load(), 2);
-    EXPECT_EQ(batch->entryState(id_a), -1);
-    EXPECT_EQ(batch->entryState(id_b), static_cast<int>(BatchEntryState::Completed));
     EXPECT_TRUE(std::filesystem::exists(dir / "b_translated.txt"));
     EXPECT_FALSE(std::filesystem::exists(dir / "a_translated.txt"));
 
@@ -697,8 +700,8 @@ TEST(InferenceService, RemovingActiveBatchEntryWhilePausedResumesQueue) {
         service->setModelConfig(QStringLiteral("demo"), QString());
         batch = new BatchController(service, (dir / "queue.bq").string(), dir); }, Qt::BlockingQueuedConnection);
 
-    QString id_a;
-    QString id_b;
+    QString removal_id;
+    QVector<BatchEntryView> snapshot;
     bool loaded = false;
     bool started = false;
     bool paused_seen = false;
@@ -706,15 +709,20 @@ TEST(InferenceService, RemovingActiveBatchEntryWhilePausedResumesQueue) {
     bool last_running = true;
     QObject::connect(service, &InferenceService::modelLoadFinished, &application,
                      [&](bool success, const QString &, const QString &) { loaded = success; });
-    QObject::connect(batch, &BatchController::entryAdded, &application,
-                     [&](const QString &id, const QString &, const QString &) {
-                         if (id_a.isEmpty())
-                             id_a = id;
-                         else
-                             id_b = id;
-                     });
+    QObject::connect(batch, &BatchController::queueSnapshot, &application,
+                     [&](const QVector<BatchEntryView> &entries) { snapshot = entries; });
     QObject::connect(service, &InferenceService::translationStarted, &application,
-                     [&](TranslationJobId) { started = true; });
+                     [&](TranslationJobId) {
+                         started = true;
+                         if (removal_id.isEmpty()) {
+                             for (const auto &view : snapshot) {
+                                 if (view.state == static_cast<int>(BatchEntryState::Processing)) {
+                                     removal_id = view.id;
+                                     break;
+                                 }
+                             }
+                         }
+                     });
     QObject::connect(batch, &BatchController::batchStateChanged, &application,
                      [&](bool running, bool paused) {
                          last_running = running;
@@ -741,17 +749,18 @@ TEST(InferenceService, RemovingActiveBatchEntryWhilePausedResumesQueue) {
     QMetaObject::invokeMethod(batch, "pause", Qt::QueuedConnection);
     process_until(application, [&] { return paused_seen; });
     QMetaObject::invokeMethod(batch, "removeEntry", Qt::QueuedConnection,
-                              Q_ARG(QString, id_a));
+                              Q_ARG(QString, removal_id));
     process_until(application, [&] {
-        return !id_a.isEmpty() && batch->entryState(id_a) == -1;
+        return !removal_id.isEmpty() && find_view(snapshot, removal_id) == nullptr;
     });
     EXPECT_FALSE(finished);
     QMetaObject::invokeMethod(batch, "resume", Qt::QueuedConnection);
-    process_until(application, [&] { return finished; });
+    process_until(application, [&] {
+        return finished && snapshot.size() == 1 &&
+               snapshot.front().state == static_cast<int>(BatchEntryState::Completed);
+    });
 
     EXPECT_EQ(calls.load(), 2);
-    EXPECT_EQ(batch->entryState(id_a), -1);
-    EXPECT_EQ(batch->entryState(id_b), static_cast<int>(BatchEntryState::Completed));
     EXPECT_FALSE(last_running);
     EXPECT_TRUE(std::filesystem::exists(dir / "b_translated.txt"));
     EXPECT_FALSE(std::filesystem::exists(dir / "a_translated.txt"));
@@ -795,11 +804,18 @@ TEST(InferenceService, CorruptStoreIsQuarantinedAtStartup) {
         service->setModelConfig(QStringLiteral("demo"), QString());
         batch = new BatchController(service, (dir / "queue.bq").string(), dir); }, Qt::BlockingQueuedConnection);
 
+    QVector<BatchEntryView> snapshot;
+    bool snapshot_seen = false;
     int errors = 0;
     bool loaded = false;
     bool last_running = true;
     QObject::connect(service, &InferenceService::modelLoadFinished, &application,
                      [&](bool success, const QString &, const QString &) { loaded = success; });
+    QObject::connect(batch, &BatchController::queueSnapshot, &application,
+                     [&](const QVector<BatchEntryView> &entries) {
+                         snapshot = entries;
+                         snapshot_seen = true;
+                     });
     QObject::connect(batch, &BatchController::errorOccurred, &application,
                      [&](const QString &) { ++errors; });
     QObject::connect(batch, &BatchController::batchStateChanged, &application,
@@ -808,20 +824,11 @@ TEST(InferenceService, CorruptStoreIsQuarantinedAtStartup) {
     process_until(application, [&] { return loaded; });
     ASSERT_TRUE(loaded);
 
-    // Query boundaries must swallow the store exception and return defaults.
-    QStringList ids;
-    QMetaObject::invokeMethod(batch, "entryIds", Qt::BlockingQueuedConnection,
-                              Q_RETURN_ARG(QStringList, ids));
-    EXPECT_TRUE(ids.isEmpty());
-    int state = -2;
-    QMetaObject::invokeMethod(batch, "entryState", Qt::BlockingQueuedConnection,
-                              Q_RETURN_ARG(int, state),
-                              Q_ARG(QString, QStringLiteral("corrupt")));
-    EXPECT_EQ(state, -1);
-
-    // loadPersistedEntries surfaces the failure via errorOccurred.
+    // loadPersistedEntries surfaces the failure via errorOccurred after
+    // quarantining the corrupt queue, then projects the now-empty queue.
     QMetaObject::invokeMethod(batch, "loadPersistedEntries", Qt::QueuedConnection);
-    process_until(application, [&] { return errors >= 1; });
+    process_until(application, [&] { return errors >= 1 && snapshot_seen; });
+    EXPECT_TRUE(snapshot.isEmpty());
 
     EXPECT_FALSE(std::filesystem::exists(dir / "queue.bq"));
     bool found_quarantine = false;
@@ -894,18 +901,20 @@ TEST(InferenceService, FailedSegmentNeverCompletesEntryOrWritesOutput) {
 
     QString id_a;
     QString id_b;
+    QVector<BatchEntryView> snapshot;
     int errors = 0;
     bool loaded = false;
     bool finished = false;
     bool last_running = true;
     QObject::connect(service, &InferenceService::modelLoadFinished, &application,
                      [&](bool success, const QString &, const QString &) { loaded = success; });
-    QObject::connect(batch, &BatchController::entryAdded, &application,
-                     [&](const QString &id, const QString &, const QString &) {
-                         if (id_a.isEmpty())
-                             id_a = id;
-                         else
-                             id_b = id;
+    QObject::connect(batch, &BatchController::queueSnapshot, &application,
+                     [&](const QVector<BatchEntryView> &entries) {
+                         snapshot = entries;
+                         if (entries.size() >= 1 && id_a.isEmpty())
+                             id_a = entries.at(0).id;
+                         if (entries.size() >= 2 && id_b.isEmpty())
+                             id_b = entries.at(1).id;
                      });
     QObject::connect(batch, &BatchController::batchStateChanged, &application,
                      [&](bool running, bool) { last_running = running; });
@@ -928,9 +937,17 @@ TEST(InferenceService, FailedSegmentNeverCompletesEntryOrWritesOutput) {
 
     // First run: the second segment of entry A fails, so A must land in Failed,
     // the batch stops, and no output file is written for either entry.
-    process_until(application, [&] { return errors >= 1; });
-    EXPECT_EQ(batch->entryState(id_a), static_cast<int>(BatchEntryState::Failed));
-    EXPECT_EQ(batch->entryState(id_b), static_cast<int>(BatchEntryState::Queued));
+    process_until(application, [&] {
+        const auto *a = find_view(snapshot, id_a);
+        return a && a->state == static_cast<int>(BatchEntryState::Failed) && !last_running;
+    });
+    const auto *a_view = find_view(snapshot, id_a);
+    const auto *b_view = find_view(snapshot, id_b);
+    ASSERT_NE(a_view, nullptr);
+    ASSERT_NE(b_view, nullptr);
+    EXPECT_EQ(a_view->state, static_cast<int>(BatchEntryState::Failed));
+    EXPECT_EQ(b_view->state, static_cast<int>(BatchEntryState::Queued));
+    EXPECT_GE(errors, 1);
     EXPECT_FALSE(last_running);
     EXPECT_FALSE(std::filesystem::exists(dir / "segments_translated.txt"));
     EXPECT_FALSE(std::filesystem::exists(dir / "b_translated.txt"));
@@ -938,9 +955,16 @@ TEST(InferenceService, FailedSegmentNeverCompletesEntryOrWritesOutput) {
     // Restart: entry A's remaining Pending segments must not execute because a
     // segment already failed; the queue skips A and completes entry B instead.
     QMetaObject::invokeMethod(batch, "start", Qt::QueuedConnection);
-    process_until(application, [&] { return finished; });
-    EXPECT_EQ(batch->entryState(id_a), static_cast<int>(BatchEntryState::Failed));
-    EXPECT_EQ(batch->entryState(id_b), static_cast<int>(BatchEntryState::Completed));
+    process_until(application, [&] {
+        const auto *b = find_view(snapshot, id_b);
+        return finished && b && b->state == static_cast<int>(BatchEntryState::Completed);
+    });
+    const auto *a_final = find_view(snapshot, id_a);
+    const auto *b_final = find_view(snapshot, id_b);
+    ASSERT_NE(a_final, nullptr);
+    ASSERT_NE(b_final, nullptr);
+    EXPECT_EQ(a_final->state, static_cast<int>(BatchEntryState::Failed));
+    EXPECT_EQ(b_final->state, static_cast<int>(BatchEntryState::Completed));
     EXPECT_EQ(calls.load(), 3);
     EXPECT_FALSE(std::filesystem::exists(dir / "segments_translated.txt"));
     EXPECT_TRUE(std::filesystem::exists(dir / "b_translated.txt"));
@@ -981,15 +1005,15 @@ TEST(InferenceService, OutputFailureNeverPublishesCompletedOrSaved) {
     InferenceService service;
     service.setModelConfig(QStringLiteral("demo"), QString());
     BatchController batch(&service, dir / "queue.bq", output_blocker);
+    QVector<BatchEntryView> snapshot;
     bool loaded = false;
-    int saved = 0;
     int errors = 0;
     QObject::connect(&service, &InferenceService::modelLoadFinished, &application,
                      [&](bool success, const QString &, const QString &) {
                          loaded = success;
                      });
-    QObject::connect(&batch, &BatchController::entrySaved, &application,
-                     [&](const QString &, const QString &) { ++saved; });
+    QObject::connect(&batch, &BatchController::queueSnapshot, &application,
+                     [&](const QVector<BatchEntryView> &entries) { snapshot = entries; });
     QObject::connect(&batch, &BatchController::errorOccurred, &application,
                      [&](const QString &) { ++errors; });
     service.loadModel();
@@ -998,14 +1022,20 @@ TEST(InferenceService, OutputFailureNeverPublishesCompletedOrSaved) {
 
     batch.addFile(QString::fromStdString(input.u8string()), QStringLiteral("Auto"),
                   QStringLiteral("Chinese"));
-    const QString id = batch.entryIds().value(0);
+    ASSERT_EQ(snapshot.size(), 1);
+    const QString id = snapshot.front().id;
     ASSERT_FALSE(id.isEmpty());
     batch.start();
     process_until(application, [&] {
-        return batch.entryState(id) == static_cast<int>(BatchEntryState::Failed);
+        const auto *view = find_view(snapshot, id);
+        return view && view->state == static_cast<int>(BatchEntryState::Failed);
     });
-    EXPECT_EQ(batch.entryState(id), static_cast<int>(BatchEntryState::Failed));
-    EXPECT_EQ(saved, 0);
+    const auto *view = find_view(snapshot, id);
+    ASSERT_NE(view, nullptr);
+    EXPECT_EQ(view->state, static_cast<int>(BatchEntryState::Failed));
+    EXPECT_FALSE(view->completed);
+    EXPECT_FALSE(view->saved);
+    EXPECT_TRUE(view->save_path.isEmpty());
     EXPECT_GE(errors, 1);
     service.shutdown();
     std::filesystem::remove_all(dir);
@@ -1118,25 +1148,24 @@ TEST(InferenceService, BatchControllerRestoresPersistedQueueAsSnapshot) {
         service = new InferenceService;
         batch = new BatchController(service, queue_file(dir).string(), dir); }, Qt::BlockingQueuedConnection);
 
-    QVariantList snapshot;
+    QVector<BatchEntryView> snapshot;
     QObject::connect(batch, &BatchController::queueSnapshot, &application,
-                     [&](const QVariantList &entries) { snapshot = entries; });
+                     [&](const QVector<BatchEntryView> &entries) { snapshot = entries; });
     QMetaObject::invokeMethod(batch, "loadPersistedEntries", Qt::QueuedConnection);
     process_until(application, [&] { return snapshot.size() == 1; });
 
     ASSERT_EQ(snapshot.size(), 1);
-    const QVariantMap first = snapshot.front().toMap();
-    EXPECT_EQ(first.value("id").toString(), QStringLiteral("persisted-1"));
-    EXPECT_EQ(first.value("file").toString(), QStringLiteral("persisted.txt"));
-    EXPECT_EQ(first.value("file_path").toString(),
+    const BatchEntryView first = snapshot.front();
+    EXPECT_EQ(first.id, QStringLiteral("persisted-1"));
+    EXPECT_EQ(first.file, QStringLiteral("persisted.txt"));
+    EXPECT_EQ(first.file_path,
               QString::fromStdString((dir / "persisted.txt").string()));
-    EXPECT_EQ(first.value("source").toString(), QStringLiteral("Auto"));
-    EXPECT_EQ(first.value("target").toString(), QStringLiteral("English"));
-    EXPECT_EQ(first.value("state").toInt(),
-              static_cast<int>(BatchEntryState::Queued));
-    EXPECT_EQ(first.value("segments_done").toInt(), 0);
-    EXPECT_EQ(first.value("segments_total").toInt(), 1);
-    EXPECT_FALSE(first.value("saved").toBool());
+    EXPECT_EQ(first.source, QStringLiteral("Auto"));
+    EXPECT_EQ(first.target, QStringLiteral("English"));
+    EXPECT_EQ(first.state, static_cast<int>(BatchEntryState::Queued));
+    EXPECT_EQ(first.segments_done, 0);
+    EXPECT_EQ(first.segments_total, 1);
+    EXPECT_FALSE(first.saved);
 
     QMetaObject::invokeMethod(service, &InferenceService::shutdown, Qt::BlockingQueuedConnection);
     QMetaObject::invokeMethod(context, [&] {
@@ -1175,9 +1204,9 @@ TEST(InferenceService, BatchControllerEmitsSnapshotForMutations) {
         service = new InferenceService;
         batch = new BatchController(service, (dir / "queue.bq").string(), dir); }, Qt::BlockingQueuedConnection);
 
-    QVariantList snapshot;
+    QVector<BatchEntryView> snapshot;
     QObject::connect(batch, &BatchController::queueSnapshot, &application,
-                     [&](const QVariantList &entries) { snapshot = entries; });
+                     [&](const QVector<BatchEntryView> &entries) { snapshot = entries; });
 
     // Add: one complete snapshot with the new entry.
     QMetaObject::invokeMethod(batch, "addFile", Qt::QueuedConnection,
@@ -1186,15 +1215,12 @@ TEST(InferenceService, BatchControllerEmitsSnapshotForMutations) {
                               Q_ARG(QString, QStringLiteral("English")));
     process_until(application, [&] { return snapshot.size() == 1; });
     ASSERT_EQ(snapshot.size(), 1);
-    const QString id = snapshot.front().toMap().value("id").toString();
+    const QString id = snapshot.front().id;
     EXPECT_FALSE(id.isEmpty());
-    EXPECT_EQ(snapshot.front().toMap().value("file").toString(),
-              QStringLiteral("input.txt"));
-    EXPECT_EQ(snapshot.front().toMap().value("source").toString(),
-              QStringLiteral("Auto"));
-    EXPECT_EQ(snapshot.front().toMap().value("target").toString(),
-              QStringLiteral("English"));
-    EXPECT_EQ(snapshot.front().toMap().value("state").toInt(),
+    EXPECT_EQ(snapshot.front().file, QStringLiteral("input.txt"));
+    EXPECT_EQ(snapshot.front().source, QStringLiteral("Auto"));
+    EXPECT_EQ(snapshot.front().target, QStringLiteral("English"));
+    EXPECT_EQ(snapshot.front().state,
               static_cast<int>(BatchEntryState::Queued));
 
     // Remove: the snapshot empties again.
@@ -1271,35 +1297,43 @@ TEST(InferenceService, BatchControllerRetryResetsFailedEntryOnly) {
         service = new InferenceService;
         batch = new BatchController(service, queue_file(dir).string(), dir); }, Qt::BlockingQueuedConnection);
 
-    QVariantList snapshot;
+    QVector<BatchEntryView> snapshot;
     int retry_errors = 0;
     QObject::connect(batch, &BatchController::queueSnapshot, &application,
-                     [&](const QVariantList &entries) { snapshot = entries; });
+                     [&](const QVector<BatchEntryView> &entries) { snapshot = entries; });
     QObject::connect(batch, &BatchController::errorOccurred, &application,
                      [&](const QString &) { ++retry_errors; });
+
+    // Seed the projection from the persisted queue.
+    QMetaObject::invokeMethod(batch, "loadPersistedEntries", Qt::QueuedConnection);
+    process_until(application, [&] { return snapshot.size() == 2; });
+    ASSERT_EQ(snapshot.size(), 2);
+    const auto *completed_view = find_view(snapshot, QStringLiteral("completed-1"));
+    ASSERT_NE(completed_view, nullptr);
+    EXPECT_EQ(completed_view->state, static_cast<int>(BatchEntryState::Completed));
 
     // Retrying a completed entry is rejected and leaves it untouched.
     QMetaObject::invokeMethod(batch, "retryEntry", Qt::QueuedConnection,
                               Q_ARG(QString, QStringLiteral("completed-1")));
     process_until(application, [&] { return retry_errors == 1; });
-    EXPECT_EQ(batch->entryState(QStringLiteral("completed-1")),
-              static_cast<int>(BatchEntryState::Completed));
+    completed_view = find_view(snapshot, QStringLiteral("completed-1"));
+    ASSERT_NE(completed_view, nullptr);
+    EXPECT_EQ(completed_view->state, static_cast<int>(BatchEntryState::Completed));
 
     // Retrying the failed entry resets it: state back to Queued, failed
     // segments Pending again, completed work preserved.
     QMetaObject::invokeMethod(batch, "retryEntry", Qt::QueuedConnection,
                               Q_ARG(QString, QStringLiteral("failed-1")));
     process_until(application, [&] {
-        return !snapshot.isEmpty() &&
-               snapshot.front().toMap().value("id").toString() == QStringLiteral("failed-1") &&
-               snapshot.front().toMap().value("state").toInt() ==
-                   static_cast<int>(BatchEntryState::Queued);
+        const auto *failed = find_view(snapshot, QStringLiteral("failed-1"));
+        return failed && failed->state == static_cast<int>(BatchEntryState::Queued);
     });
-    EXPECT_EQ(batch->entryState(QStringLiteral("failed-1")),
-              static_cast<int>(BatchEntryState::Queued));
+    const auto *reset_view = find_view(snapshot, QStringLiteral("failed-1"));
+    ASSERT_NE(reset_view, nullptr);
+    EXPECT_EQ(reset_view->state, static_cast<int>(BatchEntryState::Queued));
     // Completed segment progress is preserved in the projection.
-    EXPECT_EQ(snapshot.front().toMap().value("segments_done").toInt(), 1);
-    EXPECT_EQ(snapshot.front().toMap().value("segments_total").toInt(), 2);
+    EXPECT_EQ(reset_view->segments_done, 1);
+    EXPECT_EQ(reset_view->segments_total, 2);
 
     const auto persisted = BatchStore(queue_file(dir)).load();
     ASSERT_EQ(persisted.size(), 2u);
@@ -1379,22 +1413,22 @@ TEST(InferenceService, BatchControllerRecoveryNormalizesProcessingAndRepairsDupl
         service = new InferenceService;
         batch = new BatchController(service, queue_file(dir).string(), dir); }, Qt::BlockingQueuedConnection);
 
-    QVariantList snapshot;
+    QVector<BatchEntryView> snapshot;
     QObject::connect(batch, &BatchController::queueSnapshot, &application,
-                     [&](const QVariantList &entries) { snapshot = entries; });
+                     [&](const QVector<BatchEntryView> &entries) { snapshot = entries; });
     QMetaObject::invokeMethod(batch, "loadPersistedEntries", Qt::QueuedConnection);
     process_until(application, [&] { return snapshot.size() == 3; });
 
     ASSERT_EQ(snapshot.size(), 3);
     // The interrupted entry normalized back to Queued with its checkpoint.
-    const QVariantMap first = snapshot.at(0).toMap();
-    EXPECT_EQ(first.value("id").toString(), QStringLiteral("interrupted-1"));
-    EXPECT_EQ(first.value("state").toInt(), static_cast<int>(BatchEntryState::Queued));
-    EXPECT_EQ(first.value("segments_done").toInt(), 1);
-    EXPECT_EQ(first.value("segments_total").toInt(), 2);
+    const BatchEntryView first = snapshot.at(0);
+    EXPECT_EQ(first.id, QStringLiteral("interrupted-1"));
+    EXPECT_EQ(first.state, static_cast<int>(BatchEntryState::Queued));
+    EXPECT_EQ(first.segments_done, 1);
+    EXPECT_EQ(first.segments_total, 2);
     // The duplicate ids were repaired: every projected id is unique.
-    const QString id_b = snapshot.at(1).toMap().value("id").toString();
-    const QString id_c = snapshot.at(2).toMap().value("id").toString();
+    const QString id_b = snapshot.at(1).id;
+    const QString id_c = snapshot.at(2).id;
     EXPECT_FALSE(id_b.isEmpty());
     EXPECT_FALSE(id_c.isEmpty());
     EXPECT_NE(id_b, id_c);
@@ -1450,9 +1484,9 @@ TEST(InferenceService, BatchControllerIdsDoNotCollideForSameStem) {
         service = new InferenceService;
         batch = new BatchController(service, (dir / "queue.bq").string(), dir); }, Qt::BlockingQueuedConnection);
 
-    QVariantList snapshot;
+    QVector<BatchEntryView> snapshot;
     QObject::connect(batch, &BatchController::queueSnapshot, &application,
-                     [&](const QVariantList &entries) { snapshot = entries; });
+                     [&](const QVector<BatchEntryView> &entries) { snapshot = entries; });
 
     QMetaObject::invokeMethod(batch, "addFile", Qt::QueuedConnection,
                               Q_ARG(QString, QString::fromStdString((dir_a / "report.txt").string())),
@@ -1465,8 +1499,8 @@ TEST(InferenceService, BatchControllerIdsDoNotCollideForSameStem) {
     process_until(application, [&] { return snapshot.size() == 2; });
 
     ASSERT_EQ(snapshot.size(), 2);
-    const QString first_id = snapshot.at(0).toMap().value("id").toString();
-    const QString second_id = snapshot.at(1).toMap().value("id").toString();
+    const QString first_id = snapshot.at(0).id;
+    const QString second_id = snapshot.at(1).id;
     EXPECT_FALSE(first_id.isEmpty());
     EXPECT_FALSE(second_id.isEmpty());
     EXPECT_NE(first_id, second_id) << "same-stem enqueues must never share an id";

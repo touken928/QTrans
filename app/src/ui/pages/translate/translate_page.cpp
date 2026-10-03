@@ -1,10 +1,10 @@
 #include "ui/pages/translate/translate_page.h"
-#include "ui/shared/theme/theme.h"
+#include "shared/theme/theme.h"
 #include "shared/string_bridge.h"
 #include "ui/shared/widget_utils.h"
 #include "logging/component.h"
 #include "logging/logger.h"
-#include "domain/model-catalog/language_list.h"
+#include "download/language_list.h"
 
 #include <QApplication>
 #include <QCheckBox>

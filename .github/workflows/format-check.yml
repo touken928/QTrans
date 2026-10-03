@@ -39,3 +39,14 @@ jobs:
           if [ "$found" -eq 0 ]; then
             echo "No source files under app/src to check."
           fi
+
+  include-boundaries:
+    name: Include boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check include boundaries
+        run: scripts/check_include_boundaries.sh

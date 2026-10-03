@@ -59,16 +59,17 @@ add_executable(QTrans
     ${QTRANS_RUNTIME_SOURCES}
     ${QTRANS_APP_SUPPORT_SOURCES}
     ${QTRANS_UI_SOURCES}
-    ${QTRANS_PLATFORM_SOURCES}
+    ${QTRANS_POPUP_SOURCES}
+    ${QTRANS_INSTANCE_SOURCES}
 )
 
 if(WIN32)
-    target_sources(QTrans PRIVATE ${QTRANS_PLATFORM_SOURCES_WIN})
+    target_sources(QTrans PRIVATE ${QTRANS_POPUP_SOURCES_WIN} ${QTRANS_INSTANCE_SOURCES_WIN})
     set_target_properties(QTrans PROPERTIES WIN32_EXECUTABLE TRUE)
     set(_QTRANS_PLUGIN_TARGET Qt6::QWindowsIntegrationPlugin)
     set(_QTRANS_PLUGIN_CLASS QWindowsIntegrationPlugin)
 elseif(APPLE)
-    target_sources(QTrans PRIVATE ${QTRANS_PLATFORM_SOURCES_MAC})
+    target_sources(QTrans PRIVATE ${QTRANS_POPUP_SOURCES_MAC} ${QTRANS_INSTANCE_SOURCES_MAC})
     target_link_libraries(QTrans PRIVATE
         "-framework AppKit"
         "-framework ApplicationServices"

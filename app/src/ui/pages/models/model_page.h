@@ -1,7 +1,7 @@
 #pragma once
 
-#include "domain/storage/app_paths.h"
-#include "domain/settings/settings.h"
+#include "paths/app_paths.h"
+#include "settings/settings.h"
 
 #include <QHash>
 #include <QString>

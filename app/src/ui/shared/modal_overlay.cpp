@@ -1,6 +1,6 @@
 #include "ui/shared/modal_overlay.h"
-#include "ui/shared/theme/theme.h"
-#include "ui/shared/theme/app_theme.h"
+#include "shared/theme/theme.h"
+#include "shared/theme/app_theme.h"
 
 #include <QEvent>
 #include <QFrame>

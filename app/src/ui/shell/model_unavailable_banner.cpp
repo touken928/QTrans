@@ -1,5 +1,5 @@
 #include "ui/shell/model_unavailable_banner.h"
-#include "ui/shared/theme/theme.h"
+#include "shared/theme/theme.h"
 
 #include <QHBoxLayout>
 #include <QLabel>
