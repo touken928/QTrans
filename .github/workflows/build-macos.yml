@@ -51,8 +51,8 @@ jobs:
         id: restore-release-binary
         uses: actions/cache/restore@v4
         with:
-          path: ${{ env.BUILD_DIR }}/src/desktop/QTrans
-          key: release-binary-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.CMAKE_PRESET }}-${{ github.sha }}
+          path: ${{ env.BUILD_DIR }}/QTrans
+          key: release-binary-v3-${{ runner.os }}-${{ runner.arch }}-${{ env.CMAKE_PRESET }}-${{ github.sha }}
 
       - name: Install build tools
         if: ${{ !inputs.package || steps.restore-release-binary.outputs.cache-hit != 'true' }}
@@ -85,8 +85,8 @@ jobs:
         if: ${{ inputs.package && steps.restore-release-binary.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
-          path: ${{ env.BUILD_DIR }}/src/desktop/QTrans
-          key: release-binary-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.CMAKE_PRESET }}-${{ github.sha }}
+          path: ${{ env.BUILD_DIR }}/QTrans
+          key: release-binary-v3-${{ runner.os }}-${{ runner.arch }}-${{ env.CMAKE_PRESET }}-${{ github.sha }}
 
       - name: Run tests
         if: ${{ !inputs.package }}
@@ -96,7 +96,7 @@ jobs:
         if: ${{ inputs.package }}
         run: |
           version="${GITHUB_REF_NAME#v}"
-          binary="${BUILD_DIR}/src/desktop/QTrans"
+          binary="${BUILD_DIR}/QTrans"
           output="dist/QTrans-${version}-${DIST_SUFFIX}"
 
           mkdir -p dist

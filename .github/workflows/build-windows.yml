@@ -51,8 +51,8 @@ jobs:
         id: restore-release-binary
         uses: actions/cache/restore@v4
         with:
-          path: ${{ env.BUILD_DIR }}\src\desktop\QTrans.exe
-          key: release-binary-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.CMAKE_PRESET }}-${{ github.sha }}
+          path: ${{ env.BUILD_DIR }}\QTrans.exe
+          key: release-binary-v3-${{ runner.os }}-${{ runner.arch }}-${{ env.CMAKE_PRESET }}-${{ github.sha }}
 
       - name: Enable MSVC SDK environment
         uses: ilammy/msvc-dev-cmd@v1
@@ -70,6 +70,7 @@ jobs:
           profile: ${{ env.CONAN_PROFILE }}
           lockfile: ${{ env.CONAN_LOCKFILE }}
           output-folder: ${{ env.CONAN_OUTPUT_FOLDER }}
+          build-pattern: llama-cpp*
 
       - name: Configure tests
         if: ${{ !inputs.package }}
@@ -92,8 +93,8 @@ jobs:
         if: ${{ inputs.package && steps.restore-release-binary.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
-          path: ${{ env.BUILD_DIR }}\src\desktop\QTrans.exe
-          key: release-binary-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.CMAKE_PRESET }}-${{ github.sha }}
+          path: ${{ env.BUILD_DIR }}\QTrans.exe
+          key: release-binary-v3-${{ runner.os }}-${{ runner.arch }}-${{ env.CMAKE_PRESET }}-${{ github.sha }}
 
       - name: Run tests
         if: ${{ !inputs.package }}
@@ -104,7 +105,7 @@ jobs:
         shell: pwsh
         run: |
           $version = $env:GITHUB_REF_NAME -replace '^v', ''
-          $binary = "$env:BUILD_DIR/src/desktop/QTrans.exe"
+          $binary = "$env:BUILD_DIR/QTrans.exe"
           $stage = "dist/QTrans-$version-$env:DIST_SUFFIX"
           $zip = "$stage.zip"
           $imports = (dumpbin /dependents $binary) |

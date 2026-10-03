@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../app/src/desktop/resources/logo.png" width="250" alt="QTrans">
+  <img src="../app/src/resources/logo.png" width="250" alt="QTrans">
 </p>
 
 <p align="center">
@@ -60,7 +60,7 @@ conan install app --profile:host conan/profiles/macos-arm64-release --profile:bu
   --output-folder build/arm64-osx-release/conan --build missing
 cmake -S app --preset arm64-osx-release
 cmake --build build/arm64-osx-release
-# 产物：build/arm64-osx-release/src/desktop/QTrans
+# 产物：build/arm64-osx-release/QTrans
 
 # Windows clang-cl x64（Release，MSVC ABI，Vulkan GPU，静态 CRT/依赖）
 set CONAN_WORKSPACE_ENABLE=will_break_next
@@ -73,7 +73,7 @@ conan install app --profile:host conan/profiles/windows-x64-clangcl-release --pr
 conan build libs/sentbreak --profile:host conan/profiles/windows-x64-clangcl-release --profile:build default
 cmake -S app --preset x64-clangcl-static-release
 cmake --build build/x64-clangcl-static-release
-# 产物：build/x64-clangcl-static-release/src/desktop/QTrans.exe
+# 产物：build/x64-clangcl-static-release/QTrans.exe
 
 ```
 

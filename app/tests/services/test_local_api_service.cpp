@@ -7,8 +7,8 @@
 // for the ordering tests, a "demo" model is loaded through the test hooks so
 // the ready-state validation paths are exercised without any download.
 
-#include "app/inference_service.h"
-#include "app/local_api_service.h"
+#include "application/inference_service.h"
+#include "application/local_api_service.h"
 #include "model_host_test_access.h"
 
 #include <gtest/gtest.h>

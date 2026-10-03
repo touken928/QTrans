@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="app/src/desktop/resources/logo.png" width="250" alt="QTrans">
+  <img src="app/src/resources/logo.png" width="250" alt="QTrans">
 </p>
 
 <p align="center">
@@ -98,10 +98,13 @@ See the [中文说明](docs/README_zh.md) for project usage and development note
 
 ## Project Layout
 
-- `app/` - main Conan consumer and CMake project
-- `app/src/core/` - reusable translation runtime, backends, and remote/local runtime integration
-- `app/src/desktop/` - Qt Widgets application, desktop domain logic, and worker-thread glue
-- `app/tests/` - application and core unit tests
+- `app/` - main Conan consumer and CMake project; the formal build target is `QTrans`
+- `app/src/runtime/` - local model runtime: lifecycle, scheduling, backends, and chunking
+- `app/src/application/` - worker-thread services for inference, download, batch, and the local API
+- `app/src/domain/` - files, queues, downloads, settings, storage, and the model catalog
+- `app/src/platform/` - hotkeys, clipboard capture, and single-instance integration
+- `app/src/ui/` - Qt Widgets shell, pages, and popup
+- `app/tests/` - unit tests; they compile the shared source lists directly
 - `libs/` - repository-owned Conan packages declared explicitly in `conanws.yml`
 
 ## License

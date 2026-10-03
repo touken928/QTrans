@@ -1,5 +1,5 @@
-#include "app/inference_service.h"
-#include "app/batch_controller.h"
+#include "application/inference_service.h"
+#include "application/batch_controller.h"
 #include "domain/inference/runtime_capabilities.h"
 #include "model_host_test_access.h"
 
