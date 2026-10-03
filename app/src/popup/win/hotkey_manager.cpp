@@ -52,7 +52,7 @@ bool HotkeyManager::registerHotkey(int id, Qt::KeyboardModifiers modifiers, Qt::
     qtrans::log::get(qtrans::log::Component::WordSelect)
         ->debug("registered hotkey id={} vk=0x{:x} mod=0x{:x}", id, vk, mod);
 
-    HotkeyBinding binding{};
+    Impl::HotkeyBinding binding{};
     binding.id = id;
     binding.nativeMod = mod;
     binding.nativeKey = vk;
